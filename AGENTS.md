@@ -123,31 +123,37 @@ Every engineer and agent must enforce these server-side invariants:
 4. **PostgreSQL is Source of Truth:** Redis is a temporary cache/lock store. PostgreSQL state is always authoritative.
 5. **Transactional Outbox Pattern:** No raw `db commit → Kafka publish` dual writes. All domain events must be committed to `outbox_events` in the same transaction.
 6. **Idempotency Keys:** Mandatory on `POST /api/reservations` and `POST /api/payments`.
-7. **Zero Hardcoded Secrets:** Secrets must be injected via environment variables (`${DB_PASSWORD}`).
+7. **Environment Variable Configuration (`.env`):** Every microservice and the frontend must maintain a `.env.example` template with dummy defaults. Real `.env` files are local-only, strictly `.gitignore`d, and never committed. In Staging/Production, variables are injected via GCP Secret Manager and GitHub Environments.
 8. **Server-Side Authorization:** Never rely solely on frontend route guards. All endpoints must validate JWT roles server-side.
 
 ---
 
-## 6. Git Branching Strategy & Commit Conventions
+## 6. Git Branching Strategy & Multi-Cloud CI/CD
 
 ### 6.1 Branch Naming Conventions
-- **`main`** — Protected production branch. Always deployable and green.
-- **`feat/<phase-or-task-id>-<description>`** — Feature branches (e.g. `feat/phase-00-foundation`, `feat/001-common-domain`, `feat/004-seat-hold-scheduler`).
+- **`develop`** — Default integration and Staging branch. All feature PRs target `develop`. Auto-deploys to GCP Staging.
+- **`main`** — Protected Production branch. Deploys to GCP Production only via approved release PRs from `develop` or release tags (`v*.*.*`).
+- **`feat/<phase-or-task-id>-<description>`** — Feature branches created from `develop` (e.g. `feat/phase-00-foundation`, `feat/001-common-domain`).
 - **`fix/<issue-name>`** — Bug fixes (e.g. `fix/seat-hold-deadlock`, `fix/jwt-claim-parsing`).
 - **`docs/<topic>`** — Documentation, architecture, ADRs (e.g. `docs/initial-architecture-specs`).
 - **`refactor/<scope>`** — Code refactoring without behavioral changes.
 - **`test/<scope>`** — Adding or modifying test suites.
 
-### 6.2 GitHub Workflow
-1. Create a dedicated branch from `main`: `git checkout -b feat/<task-id>-<description>`
-2. Execute tasks following the respective AGENTS rules.
-3. Commit with Conventional Commits:
+### 6.2 GitHub Workflow & Environments
+1. **Branch Checkout:** Create a dedicated branch from `develop`:
+   ```bash
+   git checkout -b feat/<task-id>-<description> develop
+   ```
+2. **Local Environment:** Copy `.env.example` to `.env` in the target service directory if not already created.
+3. **Execute & Test:** Follow the task specification and pass local unit/slice tests.
+4. **Commit with Conventional Commits:**
    - `feat(<scope>): add reservation hold scheduler`
    - `fix(<scope>): resolve optimistic locking retry in payment processing`
    - `test(<scope>): add concurrency test for seat hold race condition`
    - `docs(<scope>): update ADR-002 with outbox polling benchmarks`
-4. Open a Pull Request into `main` with summary of changes and verification evidence.
-5. Merge into `main` (Squash & Merge or Rebase Merge).
+5. **Pull Request to `develop`:** Open PR targeting `develop`. GitHub Actions runs `ci-pr-check.yml`.
+6. **Staging Deploy:** Merging into `develop` triggers `cd-staging.yml` (GCP Staging + Azure Entra Sandbox).
+7. **Production Release:** Open release PR from `develop` into `main`. Merging triggers `cd-production.yml` (GCP Production + Azure Entra Prod).
 
 ---
 
@@ -157,6 +163,8 @@ A task is considered **DONE** only when:
 - [ ] Code strictly satisfies the task specification without extra unrequested features.
 - [ ] Compiles cleanly with zero compiler warnings or lint errors.
 - [ ] All unit and integration tests pass locally.
+- [ ] Local `.env.example` updated if new environment variables were introduced.
 - [ ] Database migrations are backwards-compatible and indexed.
 - [ ] Relevant documentation/ADR updated if an architectural decision was modified.
 - [ ] Task file moved from active phase to `.ai/tasks/completed/`.
+

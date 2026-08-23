@@ -47,6 +47,8 @@ frontend/
 ├── package.json
 ├── tsconfig.json
 ├── angular.json
+├── .env.example                       # Version-controlled template (API URL, Entra client ID)
+├── .env                               # Local environment overrides (strictly .gitignored)
 └── src/
     ├── app/
     │   ├── core/                  # Core singletons, auth interceptor, error handling

@@ -24,21 +24,23 @@ The Builder/Implementer role receives a single task specification (`.ai/tasks/ph
 ## 2. Step-by-Step Execution Sequence
 
 ```
-1. Checkout a dedicated feature branch from main:
-   git checkout -b feat/<task-id>-<description>
+1. Checkout a dedicated feature branch from develop:
+   git checkout -b feat/<task-id>-<description> develop
 2. Ingest the assigned task file from .ai/tasks/phase-X/XXX-task.md.
-3. Verify dependent classes in backend/common/ (e.g. ApiErrorResponse, EventEnvelope).
-4. Write files one by one in the order specified in Section 5 of the task.
-5. Add comprehensive unit tests and integration tests covering:
+3. Ensure the local .env file exists in the target service (copy from .env.example).
+4. Verify dependent classes in backend/common/ (e.g. ApiErrorResponse, EventEnvelope).
+5. Write files one by one in the order specified in Section 5 of the task.
+6. Add comprehensive unit tests and integration tests covering:
    - Happy path
    - Business invariant violations (e.g. limit exceeded)
    - Edge cases (null inputs, optimistic locking conflicts)
-6. Run the Verification Command provided in the task file:
+7. Run the Verification Command provided in the task file:
    - Backend: mvn clean test -Dtest=...
    - Frontend: npm test -- --watch=false
-7. If all tests pass:
+8. If all tests pass:
+   - Update .env.example if new environment variables were introduced.
    - Mark task checklist items as [x].
    - Move task file to .ai/tasks/completed/.
    - Commit changes: git commit -m "feat(<scope>): <description>"
-   - Push and open PR if working with CI: git push origin feat/<task-id>-<description>
+   - Push and open PR targeting develop: git push origin feat/<task-id>-<description>
 ```

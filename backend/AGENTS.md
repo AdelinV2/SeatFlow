@@ -90,6 +90,8 @@ Every business microservice must follow this exact package layout:
 <service-name>/
 ├── pom.xml
 ├── Dockerfile
+├── .env.example                       # Version-controlled template (dummy defaults)
+├── .env                               # Local only (strictly .gitignored)
 └── src/
     ├── main/
     │   ├── java/com/seatflow/<service>/
