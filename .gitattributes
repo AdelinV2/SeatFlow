@@ -1,0 +1,13 @@
+# Force LF line endings for scripts executed by Unix/POSIX tools inside
+# containers. A CRLF in a psql metacommand such as \gexec (used by the
+# Postgres init script) would break parsing, so SQL must stay LF.
+*.sql text eol=lf
+*.sh  text eol=lf
+
+# Docker Compose / YAML are tolerant of CRLF, but keep them normalized too.
+docker-compose.yml text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# JSON dashboards stay LF.
+*.json text eol=lf

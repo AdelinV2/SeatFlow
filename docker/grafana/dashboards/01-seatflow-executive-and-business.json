@@ -1,0 +1,67 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Reservations Created",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(seatflow_reservations_created_total)", "legendFormat": "reservations" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Reservation Conflicts (double-booking)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        { "expr": "sum(seatflow_reservations_conflicts_total)", "legendFormat": "conflicts" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Payments Completed",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        { "expr": "sum(seatflow_payments_completed_total)", "legendFormat": "payments" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tickets Issued (rate)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_tickets_issued_total[5m]))", "legendFormat": "tickets/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Revenue (successful payments)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(seatflow_payments_amount_total)", "legendFormat": "revenue" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Seat Hold Expirations",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_reservations_expired_total[5m]))", "legendFormat": "expired/s" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["seatflow", "business"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "SeatFlow Executive & Business KPIs",
+  "uid": "seatflow-exec-01",
+  "version": 1
+}

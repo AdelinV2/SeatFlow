@@ -1,0 +1,58 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Request Rate (RED: Rate) per service",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\".+\"}[5m]))", "legendFormat": "{{application}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Rate (RED: Errors)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\".+\",status=~\"5..\"}[5m]))", "legendFormat": "{{application}} 5xx" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95 (RED: Duration)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\".+\"}[5m])))", "legendFormat": "{{application}} p95" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p99 (RED: Duration)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\".+\"}[5m])))", "legendFormat": "{{application}} p99" }
+      ]
+    },
+    {
+      "type": "heatmap",
+      "title": "JVM Heap Usage",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "{{application}} {{id}}" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["seatflow", "sre", "red"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "SeatFlow Microservices SRE & RED Health",
+  "uid": "seatflow-sre-02",
+  "version": 1
+}
