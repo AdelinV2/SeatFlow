@@ -1,0 +1,16 @@
+# GCP Cloud Run / GKE (Staging & Production).
+# Strict self-preservation, JSON logs, actuator details hidden.
+eureka:
+  instance:
+    hostname: ${EUREKA_HOSTNAME:eureka-server}
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://eureka-server:8761/eureka/}
+  server:
+    enable-self-preservation: true
+    eviction-interval-timer-in-ms: 30000
+
+management:
+  endpoint:
+    health:
+      show-details: never
