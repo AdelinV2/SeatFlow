@@ -16,6 +16,10 @@
     <name>SeatFlow Microservices</name>
     <description>Aggregator and parent POM for business microservice modules</description>
 
-    <!-- Microservice modules are added here as they are created
-         (e.g. eureka-server, api-gateway, user-service, ...). -->
+    <modules>
+        <module>eureka-server</module>
+    </modules>
+
+    <!-- Additional microservice modules are added here as they are created
+         (e.g. api-gateway, user-service, ...). -->
 </project>

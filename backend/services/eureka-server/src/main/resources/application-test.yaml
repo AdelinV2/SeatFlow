@@ -1,0 +1,9 @@
+# Maven build / CI pipeline execution.
+# Binds to a random port to avoid collisions; discovery tuning relaxed.
+server:
+  port: 0
+
+eureka:
+  server:
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
