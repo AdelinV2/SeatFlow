@@ -61,6 +61,27 @@ STRIPE_WEBHOOK_SECRET=whsec_placeholder_secret
 - **Zero `.env` files in Cloud containers:** Containers receive environment variables injected at runtime from **GCP Secret Manager** and **GCP Cloud Run / GKE environment specs**.
 - **GitHub Actions Secrets:** Injected via GitHub Repository Environments (`staging` vs `production`).
 
+### 1.3 Spring Boot Profiles Architecture (`application-{profile}.yaml`)
+
+SeatFlow uses a **4-profile configuration architecture** to separate local host execution, Docker Compose, production cloud, and automated tests cleanly:
+
+```text
+src/main/resources/
+├── application.yaml          # Base defaults (OpenAPI, Jackson ISO-8601, Actuator health endpoints)
+├── application-local.yaml     # Profile: "local" (IDE runs on host, connects to localhost:5432/9092/8761)
+├── application-docker.yaml    # Profile: "docker" (Docker Compose containers, connects to service hostnames)
+├── application-prod.yaml      # Profile: "prod" (GCP Cloud Run, Cloud SQL socket factory, JSON ECS logs)
+└── application-test.yaml      # Profile: "test" (Testcontainers dynamic JDBC/Kafka URLs, silent logging)
+```
+
+#### Profile Selection Matrix:
+| Profile | Trigger / Activation | Key Characteristics |
+|---|---|---|
+| **`local`** | `SPRING_PROFILES_ACTIVE=local` (Default in `.env`) | Connects to `localhost:5432` / `localhost:9092`. ANSI color console logging. Hot-reload friendly. |
+| **`docker`** | `SPRING_PROFILES_ACTIVE=docker` (Set in `docker-compose.yml`) | Connects to container DNS: `postgres:5432`, `kafka:9092`, `eureka-server:8761`. |
+| **`prod`** | `SPRING_PROFILES_ACTIVE=prod` (Injected in Cloud Run) | Structured JSON logging (ECS/Logstash). GCP Secret Manager resolution. Strict HikariCP pool sizing (`maximumPoolSize: 10`, `minimumIdle: 2`). Strict HTTPS/CORS. |
+| **`test`** | `@ActiveProfiles("test")` / `mvn test` | Dynamic container port binding via Testcontainers `@DynamicPropertySource`. Disabled Eureka registration. |
+
 ---
 
 ## 2. Local Development Environment (Docker Compose)

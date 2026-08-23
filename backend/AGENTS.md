@@ -119,10 +119,13 @@ Every business microservice must follow this exact package layout:
     │   │   │   └── event/         # Local event records (implementing DomainEvent)
     │   │   └── client/            # RestClient / FeignClient for internal REST calls
     │   └── resources/
-    │       ├── application.yaml          # Base config (zero secrets)
-    │       ├── application-dev.yaml      # Development overrides (local Postgres/Kafka)
-    │       ├── application-test.yaml     # Test overrides (Testcontainers dynamic properties)
-    │       └── db/migration/             # Flyway migrations: V1__description.sql
+    │       ├── application.yaml          # Base configuration (common defaults, Jackson, OpenAPI, Actuator)
+    │       ├── application-local.yaml     # Local IDE execution (connects to localhost:5432, ANSI console logs)
+    │       ├── application-docker.yaml    # Docker Compose execution (connects to container hostnames: postgres, kafka)
+    │       ├── application-prod.yaml      # GCP Cloud Run / GKE execution (GCP Secret Manager, Cloud SQL, JSON logs)
+    │       ├── application-test.yaml      # Test execution profile (Testcontainers dynamic properties)
+    │       ├── logback-spring.xml         # Logstash JSON logging encoder + masking rules
+    │       └── db/migration/             # Flyway SQL migrations: V1__description.sql
     └── test/
         └── java/com/seatflow/<service>/
             ├── service/           # Unit tests with Mockito
@@ -131,6 +134,17 @@ Every business microservice must follow this exact package layout:
             ├── messaging/         # Kafka consumer/producer tests
             └── integration/       # End-to-end service tests with Testcontainers
 ```
+
+### 4.1 Spring Profiles & Runtime Environment Matrix
+
+Every microservice resolves its active profile via the `SPRING_PROFILES_ACTIVE` environment variable:
+
+| Profile (`SPRING_PROFILES_ACTIVE`) | Target Environment | Host Resolution (`DB_HOST`, `KAFKA_HOST`) | Logging Format | Security & Actuator |
+|---|---|---|---|---|
+| **`local`** (Default) | Standalone local IDE (IntelliJ / VS Code) | `localhost:5432`, `localhost:9092`, `localhost:6379` | ANSI Color Console | CORS allows `http://localhost:4200`, Actuator open |
+| **`docker`** | Docker Compose Stack (`docker-compose up`) | `postgres:5432`, `kafka:9092`, `redis:6379`, `eureka-server:8761` | ANSI Color Console | CORS allows `http://localhost:4200`, Actuator open |
+| **`prod`** | GCP Cloud Run / GKE (Staging & Production) | Cloud SQL Socket Factory / GCP Managed Services | Structured JSON (Logstash/ECS) | Strict CORS (`https://seatflow.app`), Actuator secured |
+| **`test`** | Maven Build (`mvn test`) / CI Pipeline | Managed dynamically by Testcontainers | Minimal / Silent | In-memory / Mocked OAuth2 |
 
 **Service-specific modules:**
 ```
