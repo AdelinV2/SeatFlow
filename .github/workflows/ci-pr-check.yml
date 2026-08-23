@@ -1,0 +1,47 @@
+name: CI - PR Verification
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-pr-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-pr-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  backend-build:
+    name: Backend CI (Java 21 / Maven)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21 (Eclipse Temurin)
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Validate Maven Wrapper / Root POM
+        run: |
+          mvn -f backend/pom.xml validate
+
+      - name: Build and Test Backend Modules
+        run: |
+          mvn -f backend/pom.xml clean verify -B --no-transfer-progress
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-reports
+          path: 'backend/**/target/surefire-reports/'
+          if-no-files-found: ignore
