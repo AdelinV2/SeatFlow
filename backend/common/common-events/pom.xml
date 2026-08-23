@@ -12,7 +12,27 @@
     </parent>
 
     <artifactId>common-events</artifactId>
-    <packaging>jar</packaging>
-    <name>SeatFlow Common Events</name>
-    <description>EventEnvelope&lt;T&gt;, DomainEvent contract, EventHeaders, EventTopics (scaffold)</description>
+    <name>SeatFlow :: Common Events</name>
+    <description>Universal event envelope, header contracts, and topic definitions</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
