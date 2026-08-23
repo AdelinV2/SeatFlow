@@ -40,7 +40,29 @@ Always check `frontend/package.json` for exact dependency versions. If you are u
 
 ---
 
-## 3. Directory Layout
+## 3. Frontend Implementation Workflow
+
+Follow this strict sequence for every frontend task without skipping steps:
+
+```
+0. Mandatory Branch Checkout:
+   git checkout -b feat/<task-id>-<description> develop
+1. Read assigned task file from .ai/tasks/phase-09-frontend-portal/ or specific phase.
+2. Ensure local .env file exists in frontend/ (copy from .env.example).
+3. Implement in this exact sequence:
+   a. TypeScript Interfaces/Models (src/app/models/)
+   b. Services & State Stores (src/app/services/)
+   c. Shared UI Components/Pipes/Directives (src/app/shared/)
+   d. Feature Components with Signals & OnPush (src/app/features/)
+   e. Route definitions & guards (src/app/app.routes.ts)
+   f. Component & Service Unit Tests (src/app/.../*.spec.ts)
+4. Run verification command:
+   npm test -- --watch=false --browsers=ChromeHeadless
+```
+
+---
+
+## 4. Directory Layout
 
 ```
 frontend/
@@ -85,9 +107,9 @@ frontend/
 
 ---
 
-## 4. Layer-by-Layer Standards & Patterns
+## 5. Layer-by-Layer Standards & Patterns
 
-### 4.1 Interactive Seat Map Component Pattern
+### 5.1 Interactive Seat Map Component Pattern
 
 ```typescript
 import { Component, ChangeDetectionStrategy, inject, signal, computed, input, output } from '@angular/core';

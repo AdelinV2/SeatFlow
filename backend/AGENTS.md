@@ -56,20 +56,23 @@ Write modern, clean, expressive Java 21:
 
 ---
 
-## 3. 7-Step Implementation Sequence
+## 3. Implementation Sequence & Workflow
 
 Follow this strict sequence for every backend task without skipping steps:
 
 ```
+0. Mandatory Branch Checkout:
+   git checkout -b feat/<task-id>-<description> develop
 1. Read the assigned task file from .ai/tasks/phase-X/XXX-task.md.
 2. Identify target microservice and check shared abstractions in backend/common/:
    - common-domain (Base exceptions, ErrorCode, ApiErrorResponse, PagedResult)
    - common-events (EventEnvelope<T>, DomainEvent, EventHeaders, EventTopics)
-   - common-observability (GlobalExceptionHandler, CorrelationIdFilter)
+   - common-observability (GlobalExceptionHandler, CorrelationIdFilter, MdcLoggingFilter)
    - common-security (JwtRoleConverter, SecurityRoles, UserContext)
-3. Implement in this exact sequence:
+3. Ensure local .env file exists in the service directory (copy from .env.example).
+4. Implement in this exact sequence:
    a. Flyway migration (resources/db/migration/)
-   b. Entity (model/entity/)
+   b. Entity & Enums (model/entity/, model/enums/)
    c. Repository (repository/)
    d. Request/Response Records (web/dto/request/, web/dto/response/)
    e. Mapper (mapper/)
@@ -77,7 +80,7 @@ Follow this strict sequence for every backend task without skipping steps:
    g. Service implementation (service/impl/)
    h. Controller (web/controller/)
    i. Tests
-4. Run verification command specified in the task file (e.g. mvn test).
+5. Run verification command specified in the task file (e.g. mvn test).
 ```
 
 ---
@@ -470,7 +473,99 @@ public void handlePaymentCompleted(EventEnvelope<PaymentCompletedEvent> envelope
 
 ---
 
-## 8. Resilience & Security
+## 8. Enterprise Structured Logging & Prometheus Metrics
+
+Logging in SeatFlow must be **production-grade, structured, and auditable**. Every log message must provide actionable operational context for Prometheus, Grafana, and Google Cloud Logging.
+
+### 8.1 Structured Contextual Logging Standards
+
+> **Rule:** Never write plain, uncontextualized logs like `log.info("User created with id " + id)` or `log.info("Seats held")`. Always log structured business events with all domain identifiers.
+
+#### A. Structured Key-Value Business Logging Examples:
+```java
+// ✅ Production-Grade Business State Transition Log (INFO)
+log.info("Seat hold acquired successfully. eventId={}, reservationId={}, userId={}, seatsCount={}, seatIds={}, totalAmount={}, expiresAt={}, durationMs={}",
+        event.getId(), reservation.getId(), userId, seats.size(), seatIds, reservation.getTotalAmount(), reservation.getExpiresAt(), durationMs);
+
+// ✅ Production-Grade Recoverable Conflict Log (WARN)
+log.warn("Seat hold collision detected. eventId={}, requestedSeatIds={}, conflictingSeatIds={}, userId={}, clientIp={}",
+        eventId, requestedSeatIds, conflictingSeatIds, userId, clientIp);
+
+// ✅ Production-Grade Kafka Event Consumer Log (INFO)
+log.info("Processing Kafka event. topic={}, eventType={}, eventId={}, aggregateId={}, correlationId={}, partition={}, offset={}",
+        topic, envelope.eventType(), envelope.eventId(), envelope.aggregateId(), envelope.correlationId(), partition, offset);
+
+// ✅ Production-Grade Webhook Verification Log (INFO / WARN)
+log.warn("Stripe webhook duplicate event ignored. stripeEventId={}, paymentIntentId={}, status=ALREADY_PROCESSED",
+        stripeEventId, paymentIntentId);
+
+// ✅ Production-Grade Infrastructure / Database Failure Log (ERROR)
+log.error("Failed to commit transactional outbox event. aggregateId={}, eventType={}, retryCount={}, durationMs={}",
+        event.getAggregateId(), event.getEventType(), event.getRetryCount(), durationMs, exception);
+```
+
+#### B. Log Level Discipline:
+| Level | When to Use | Example |
+|---|---|---|
+| **`DEBUG`** | Fine-grained developer information, internal SQL parameters, intermediate algorithm steps. | `log.debug("Evaluating pricing tier for section={}, seat={}", sectionId, seatId);` |
+| **`INFO`** | Authoritative business lifecycle events, state changes, external integration milestones. | `log.info("Reservation confirmed. reservationId={}, paymentId={}", resId, payId);` |
+| **`WARN`** | Recoverable business conflicts, expected race conditions, expired token lookups, duplicate webhooks. | `log.warn("Attempt to reserve already held seat. seatId={}, heldUntil={}", seatId, exp);` |
+| **`ERROR`** | Unhandled exceptions, infrastructure failures, database deadlocks, Kafka publishing drops (always include exception). | `log.error("Outbox publishing failed for eventId={}", id, ex);` |
+
+#### C. MDC (Mapped Diagnostic Context) Attributes:
+Auto-injected into SLF4J MDC by `common-observability` and propagated across Kafka headers:
+- `traceId` / `spanId` — W3C Distributed trace identifier.
+- `correlationId` — End-to-end request identifier across microservices.
+- `userId` — Authenticated user UUID extracted from JWT.
+- `serviceName` — Name of the active microservice (e.g. `reservation-service`).
+- `httpMethod` & `uri` — Active HTTP route (e.g. `POST /api/reservations`).
+- `clientIp` — Remote client IP address.
+
+### 8.2 Prometheus & Micrometer Metrics Instrumentation
+
+Instrument key domain operations with dimensional tags:
+
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ReservationServiceImpl implements ReservationService {
+
+    private final MeterRegistry meterRegistry;
+    private final ReservationRepository reservationRepository;
+
+    @Override
+    @Transactional
+    public ReservationResponse holdSeats(CreateReservationRequest request, String userId) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            // Business Logic ...
+            
+            // Record Success Metric with Dimensional Tags
+            meterRegistry.counter("seatflow.reservations.created.total",
+                    "eventId", request.eventId().toString(),
+                    "seatsCount", String.valueOf(request.seatIds().size()),
+                    "status", "SUCCESS"
+            ).increment();
+
+            return response;
+        } catch (ConflictException ex) {
+            meterRegistry.counter("seatflow.reservations.conflicts.total",
+                    "eventId", request.eventId().toString(),
+                    "reason", ex.getErrorCode().name()
+            ).increment();
+            throw ex;
+        } finally {
+            sample.stop(meterRegistry.timer("seatflow.reservations.hold.duration",
+                    "eventId", request.eventId().toString()));
+        }
+    }
+}
+```
+
+---
+
+## 9. Resilience & Security
 
 ### 8.1 Resilience4j
 Configure circuit breakers and retries for synchronous inter-service communication:
@@ -484,7 +579,7 @@ resilience4j:
         waitDurationInOpenState: 10000ms
 ```
 
-### 8.2 Security & User Extraction
+### 9.2 Security & User Extraction
 Extract claims cleanly via `UserContext`:
 ```java
 String userId = UserContext.getCurrentUserId()
@@ -494,9 +589,9 @@ boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
 
 ---
 
-## 9. Testing Standards & Testcontainers
+## 10. Testing Standards & Testcontainers
 
-### 9.1 Repository Slice Testing (`@DataJpaTest`)
+### 10.1 Repository Slice Testing (`@DataJpaTest`)
 ```java
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -515,25 +610,54 @@ class ReservationRepositoryTest {
 }
 ```
 
-### 9.2 High-Concurrency Stress Testing (CountDownLatch)
-Mandatory for testing seat hold race conditions:
+### 10.2 Service Slice Unit Testing (`@ExtendWith(MockitoExtension.class)`)
+```java
+@ExtendWith(MockitoExtension.class)
+class ReservationServiceImplTest {
 
+    @InjectMocks
+    private ReservationServiceImpl reservationService;
+
+    @Mock
+    private ReservationRepository reservationRepository;
+
+    @Test
+    void shouldRejectReservationWhenMaxSeatsExceeded() {
+        CreateReservationRequest request = new CreateReservationRequest(
+                UUID.randomUUID(),
+                List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                        UUID.randomUUID(), UUID.randomUUID()), // 11 seats
+                "idemp-key-1"
+        );
+
+        assertThatThrownBy(() -> reservationService.holdSeats(request, "user-123"))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("Maximum 10 seats allowed per reservation");
+    }
+}
+```
+
+### 10.3 Concurrency Test for Double-Booking Prevention
 ```java
 @Test
-void shouldPreventDoubleBookingUnderConcurrentLoad() throws InterruptedException {
-    UUID seatId = UUID.randomUUID();
-    int threads = 50;
-    CountDownLatch latch = new CountDownLatch(1);
-    AtomicInteger successCount = new AtomicInteger(0);
-    AtomicInteger conflictCount = new AtomicInteger(0);
-
+void shouldPreventConcurrentDoubleBooking() throws InterruptedException {
+    int threads = 10;
     ExecutorService executor = Executors.newFixedThreadPool(threads);
+    CountDownLatch latch = new CountDownLatch(1);
+    AtomicInteger successCount = new AtomicInteger();
+    AtomicInteger conflictCount = new AtomicInteger();
+
+    UUID eventId = UUID.randomUUID();
+    UUID seatId = UUID.randomUUID();
+
     for (int i = 0; i < threads; i++) {
-        String userId = "user-" + i;
+        final String userId = "user-" + i;
         executor.submit(() -> {
             try {
                 latch.await();
-                reservationService.createReservation(new CreateReservationRequest(eventId, List.of(seatId), "idem-" + userId), userId);
+                reservationService.holdSeats(new CreateReservationRequest(eventId, List.of(seatId), UUID.randomUUID().toString()), userId);
                 successCount.incrementAndGet();
             } catch (ConflictException e) {
                 conflictCount.incrementAndGet();
@@ -554,7 +678,7 @@ void shouldPreventDoubleBookingUnderConcurrentLoad() throws InterruptedException
 
 ---
 
-## 10. Backend Completion Checklist
+## 11. Backend Completion Checklist
 
 A backend task is complete only when all items are verified:
 

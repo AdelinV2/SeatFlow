@@ -99,29 +99,138 @@ docker/
 
 ---
 
-## 3. Observability & Monitoring
+## 3. Observability, Logging & Monitoring Architecture
+
+SeatFlow implements full **Three-Pillar Observability** (Logs, Metrics, Traces) aligned with OpenTelemetry and Cloud-Native standards:
 
 ```text
-Microservices (Micrometer + OpenTelemetry Agent)
-    │
-    ├── Traces (W3C TraceContext / OTLP) ─────────► OpenTelemetry Collector ──► Tempo / GCP Cloud Trace
-    ├── Metrics (Prometheus Actuator Endpoints) ──► Prometheus ──────────────► Grafana Dashboards
-    └── Logs (Structured JSON + MDC) ────────────► OpenTelemetry Collector ──► GCP Cloud Logging
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MICROSERVICES (Spring Boot 4.1.x + Micrometer + OpenTelemetry Agent)        │
+│                                                                             │
+│  1. Logs (JSON + MDC)        2. Metrics (Micrometer)   3. Traces (W3C OTLP) │
+└─────────────┬──────────────────────────┬──────────────────────────┬─────────┘
+              │                          │                          │
+              ▼                          ▼                          ▼
+┌──────────────────────────┐ ┌──────────────────────────┐ ┌───────────────────┐
+│ OpenTelemetry Collector  │ │ Prometheus Server (9090) │ │ Grafana Tempo     │
+│ (Port 4317 gRPC / 4318)  │ │ (Pulls /actuator/prom)   │ │ (Port 3200)       │
+└─────────────┬────────────┘ └───────────┬──────────────┘ └─────────┬─────────┘
+              │                          │                          │
+              ▼                          ▼                          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ GRAFANA DASHBOARDS (Port 3000) & GCP CLOUD LOGGING / CLOUD TRACE            │
+│ • Executive Business KPI Dashboard    • SRE & RED Method Service Health     │
+│ • Kafka Outbox & Consumer Lag Board   • Trace-to-Log Drill-down Correlation │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.1 Structured Logging Standards
-- Format: JSON via `logstash-logback-encoder`.
-- MDC Context: Every log entry includes `traceId`, `correlationId`, `serviceName`, `userId`, `reservationId`.
-- Sensitive Data Masking: Payment card numbers, Stripe secrets, and JWT tokens are masked automatically.
+---
 
-### 3.2 Key Business Metrics
-- `seatflow.reservations.created.total{eventId, status}` — Counter of hold creations.
-- `seatflow.reservations.conflicts.total{eventId}` — Counter of hold double-booking rejections.
-- `seatflow.reservations.expired.total{eventId}` — Counter of holds released by sweeper.
-- `seatflow.payments.processed.total{status, currency}` — Counter of payment intents finalized.
-- `seatflow.tickets.issued.total{eventId}` — Counter of generated digital tickets.
+### 3.1 Enterprise Production-Grade JSON Logging Standards
+
+> **Rule:** Plain strings (e.g. `log.info("User created")` or `log.info("Seat booked")`) are strictly forbidden. All logs must be structured JSON entries containing rich domain metadata, correlation context, and operational attributes.
+
+#### A. Production Log JSON Schema (Logstash / ECS Compliant)
+```json
+{
+  "@timestamp": "2026-08-23T17:45:12.304Z",
+  "log.level": "INFO",
+  "service.name": "reservation-service",
+  "service.environment": "staging",
+  "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span.id": "00f067aa0ba902b7",
+  "correlation.id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "user.id": "123e4567-e89b-12d3-a456-426614174000",
+  "http.method": "POST",
+  "http.uri": "/api/reservations",
+  "http.client_ip": "198.51.100.42",
+  "logger.name": "com.seatflow.reservation.service.impl.ReservationServiceImpl",
+  "thread.name": "http-nio-8084-exec-3",
+  "message": "Seat hold acquired successfully. eventId=223e4567-e89b-12d3-a456-426614174000, reservationId=334e5678-e89b-12d3-a456-426614174111, seatsCount=2, totalAmount=120.00, expiresAt=2026-08-23T18:00:12Z, durationMs=42",
+  "context": {
+    "eventId": "223e4567-e89b-12d3-a456-426614174000",
+    "reservationId": "334e5678-e89b-12d3-a456-426614174111",
+    "seatIds": ["s-101", "s-102"],
+    "totalAmount": 120.00,
+    "currency": "EUR",
+    "expiresAt": "2026-08-23T18:00:12Z",
+    "durationMs": 42
+  }
+}
+```
+
+#### B. Standardized Event Logging Taxonomy
+
+| Domain Event / Lifecycle | Level | Mandatory Context Keys | Example Output Pattern |
+|---|---|---|---|
+| **Seat Hold Request (Success)** | `INFO` | `eventId`, `reservationId`, `userId`, `seatsCount`, `seatIds`, `totalAmount`, `expiresAt`, `durationMs` | `Seat hold acquired successfully. eventId=..., reservationId=..., seatsCount=2, totalAmount=120.00, expiresAt=..., durationMs=42` |
+| **Seat Hold Collision (Conflict)** | `WARN` | `eventId`, `requestedSeatIds`, `conflictingSeatIds`, `userId`, `clientIp` | `Seat hold collision detected. eventId=..., requestedSeatIds=[s-1, s-2], conflictingSeatIds=[s-1], userId=...` |
+| **Seat Hold Expired (Sweeper)** | `INFO` | `reservationId`, `eventId`, `seatIds`, `heldDurationMinutes`, `releasedSeatsCount` | `Expired seat hold released by sweeper. reservationId=..., eventId=..., seatIds=[...], heldDurationMinutes=15.02` |
+| **Payment Finalized (Stripe)** | `INFO` | `paymentId`, `reservationId`, `userId`, `amount`, `currency`, `stripePaymentIntentId`, `durationMs` | `Payment processed successfully. paymentId=..., reservationId=..., amount=120.00 EUR, stripePaymentIntentId=pi_3N...` |
+| **Duplicate Webhook Skipped** | `WARN` | `stripeEventId`, `paymentIntentId`, `reason` | `Stripe webhook duplicate event ignored. stripeEventId=evt_123, status=ALREADY_PROCESSED` |
+| **Ticket QR Issued** | `INFO` | `ticketId`, `reservationId`, `eventId`, `seatId`, `ticketNumber`, `durationMs` | `Digital ticket and QR code issued. ticketId=..., reservationId=..., seatId=..., ticketNumber=SF-2026-98124` |
+| **Kafka Outbox Commit** | `DEBUG` | `aggregateId`, `eventType`, `outboxId` | `Transactional outbox event committed. aggregateId=..., eventType=ReservationHeld, outboxId=...` |
+| **Kafka Outbox Publish Failed** | `ERROR` | `outboxId`, `eventType`, `retryCount`, `error` | `Failed to publish outbox event to Kafka. outboxId=..., eventType=..., retryCount=3, error=TimeoutException` |
+
+#### C. Sensitive Data Masking (PCI-DSS & GDPR Rule)
+The logging encoder automatically replaces sensitive patterns:
+- Credit Card numbers (`\b(?:\d[ -]*?){13,16}\b`) -> `****-****-****-XXXX`
+- Stripe secret keys (`sk_live_...`, `whsec_...`) -> `[MASKED_STRIPE_SECRET]`
+- JWT Authorization headers -> `Bearer eyJ...[MASKED]`
+- Passwords and verification tokens -> `[MASKED]`
 
 ---
+
+### 3.2 Prometheus & Micrometer Metrics Taxonomy
+
+Metrics are collected using the **RED Method (Rate, Errors, Duration)** plus high-value **Business KPIs**:
+
+#### A. SRE / Infrastructure Metrics (RED Method)
+- `http.server.requests.seconds` (Timer): Dimensions `method`, `uri`, `status`, `exception`. Measures request rate, error rate (4xx/5xx), and p50/p95/p99 response latency.
+- `jvm.memory.used` / `jvm.memory.max` (Gauge): Heap and non-heap memory utilization.
+- `hikaricp.connections.active` / `hikaricp.connections.pending` (Gauge): Database connection pool saturation and wait queues.
+- `resilience4j.circuitbreaker.state` (Gauge): Current state (`0=CLOSED`, `1=OPEN`, `2=HALF_OPEN`).
+
+#### B. Business KPI Metrics
+- `seatflow.reservations.created.total` (Counter): Tags `eventId`, `seatsCount`, `status`.
+- `seatflow.reservations.conflicts.total` (Counter): Tags `eventId`, `reason` (e.g. `ALREADY_HELD`, `LIMIT_EXCEEDED`).
+- `seatflow.reservations.hold.duration.seconds` (Timer): Latency of seat hold acquisition.
+- `seatflow.reservations.expired.total` (Counter): Tags `eventId`. Sweeper releases.
+- `seatflow.payments.processed.total` (Counter): Tags `status` (`SUCCESS`, `FAILED`), `currency`, `paymentMethod`.
+- `seatflow.tickets.issued.total` (Counter): Tags `eventId`. Total tickets minted.
+- `seatflow.websocket.active.connections` (Gauge): Tags `eventId`. Number of active WebSocket browsers per event.
+- `seatflow.outbox.publish.latency.seconds` (Timer): Time between outbox DB commit and successful Kafka delivery.
+- `seatflow.outbox.retry.count.total` (Counter): Tags `eventType`. Failed outbox publish retries.
+
+---
+
+### 3.3 Pre-Provisioned Grafana Dashboards
+
+The `docker/grafana/dashboards/` directory contains 4 production dashboards:
+
+1. **Dashboard 1 — SeatFlow Executive & Business Operations:**
+   - Real-time Active Seat Holds gauge.
+   - Total Gross Ticket Sales (EUR) counter & daily revenue chart.
+   - Checkout Conversion Funnel (`Hold Initiated` -> `Payment Completed` -> `Ticket Downloaded`).
+   - Seat Hold Expiration Rate (% of holds abandoned vs completed).
+
+2. **Dashboard 2 — Microservices SRE & RED Health:**
+   - Overall Platform Requests per Second (RPS) by Service.
+   - HTTP 5xx Error Rate Heatmap (alerts when 5xx > 1% for 2 consecutive minutes).
+   - End-to-End P95 & P99 API Latency Panels (Gateway, Reservation, Payment, Ticket).
+   - HikariCP Connection Pool Saturation & JVM Garbage Collection Pauses.
+
+3. **Dashboard 3 — Event-Driven Kafka & Outbox Pipeline:**
+   - Pending Outbox Queue Depth across all databases (alerts when pending rows > 100 for 1 minute).
+   - Outbox Delivery Latency (p99 time to Kafka).
+   - Kafka Consumer Lag per Consumer Group (`ticket-service`, `notification-service`, `realtime-service`).
+   - Dead Letter Queue (DLQ) Event Rate.
+
+4. **Dashboard 4 — Security, Auth & Cloud Armor Audit:**
+   - Failed Authentication Attempts (`401 Unauthorized` / invalid JWTs).
+   - Stripe Webhook Signature Verification Failures.
+   - Rate Limiting / Cloud Armor Blocked Requests by Client IP.
+   - Trace-to-Log Drill-down: Click any trace ID to open matching SLF4J structured logs.
 
 ## 4. Multi-Cloud CI/CD Architecture (GitHub Actions)
 
