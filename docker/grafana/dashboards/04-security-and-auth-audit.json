@@ -1,0 +1,58 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Unauthorized Requests (401)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_auth_unauthorized_total[5m]))", "legendFormat": "401/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Forbidden Requests (403)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_auth_forbidden_total[5m]))", "legendFormat": "403/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JWT Validation Failures",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_auth_jwt_invalid_total[5m]))", "legendFormat": "invalid/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Idempotency Key Replays",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_idempotency_replay_total[5m]))", "legendFormat": "replays/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Privileged (ADMIN) Actions",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_auth_admin_action_total[5m]))", "legendFormat": "admin actions/s" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["seatflow", "security", "auth"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "SeatFlow Security & Auth Audit",
+  "uid": "seatflow-security-04",
+  "version": 1
+}

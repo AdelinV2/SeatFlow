@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: 'SeatFlow Dashboards'
+    orgId: 1
+    folder: 'SeatFlow Production'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
