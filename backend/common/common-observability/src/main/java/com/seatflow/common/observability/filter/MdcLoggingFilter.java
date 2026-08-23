@@ -17,7 +17,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.UUID;
 
-@Order(Ordered.HIGHEST_PRECEDENCE)
+/**
+ * Runs after the Spring Security filter chain (which establishes the authenticated principal)
+ * so the {@code userId} MDC field can be populated. The correlation id and other request context
+ * are still set before the downstream controller executes.
+ */
+@Order(Ordered.LOWEST_PRECEDENCE - 1)
 public class MdcLoggingFilter extends OncePerRequestFilter {
 
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
