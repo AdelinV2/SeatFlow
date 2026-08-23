@@ -33,6 +33,7 @@
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <springdoc-openapi.version>3.0.0</springdoc-openapi.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <micrometer-registry-prometheus.version>1.17.0</micrometer-registry-prometheus.version>
         <testcontainers.version>1.20.4</testcontainers.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
@@ -82,10 +83,11 @@
                 <version>${logstash-logback-encoder.version}</version>
             </dependency>
 
-            <!-- Prometheus metrics (version managed by Spring Boot BOM) -->
+            <!-- Prometheus metrics (pinned to Spring Boot's managed Micrometer version) -->
             <dependency>
                 <groupId>io.micrometer</groupId>
                 <artifactId>micrometer-registry-prometheus</artifactId>
+                <version>${micrometer-registry-prometheus.version}</version>
             </dependency>
 
             <!-- springdoc OpenAPI -->
