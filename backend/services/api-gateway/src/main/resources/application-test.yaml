@@ -1,0 +1,12 @@
+# Maven build / CI pipeline execution.
+# Random port; Eureka client disabled so the context loads without a registry.
+server:
+  port: 0
+
+eureka:
+  client:
+    enabled: false
+
+seatflow:
+  cors:
+    allowed-origins: http://localhost:4200

@@ -1,0 +1,14 @@
+# GCP Cloud Run / GKE (Staging & Production)
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+
+seatflow:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:https://seatflow.app}
+
+management:
+  endpoint:
+    health:
+      show-details: never
