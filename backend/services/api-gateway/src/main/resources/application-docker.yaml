@@ -1,0 +1,9 @@
+# Docker Compose stack execution (Eureka reachable at service name)
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+
+seatflow:
+  cors:
+    allowed-origins: http://localhost:4200
