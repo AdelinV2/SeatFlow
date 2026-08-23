@@ -1,0 +1,67 @@
+package com.seatflow.common.security.converter;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+
+import java.util.Collection;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class JwtRoleConverterTest {
+
+    private final JwtRoleConverter converter = new JwtRoleConverter();
+
+    private Jwt jwtWithRoles(List<String> roles) {
+        var builder = Jwt.withTokenValue("test-token")
+                .header("alg", "RS256")
+                .subject("test-subject");
+        if (roles != null) {
+            builder = builder.claim("roles", roles);
+        }
+        return builder.build();
+    }
+
+    @Test
+    void shouldDefaultToCustomerRoleWhenNoRolesClaim() {
+        Collection<GrantedAuthority> authorities = converter.convert(jwtWithRoles(null));
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+    }
+
+    @Test
+    void shouldDefaultToCustomerRoleWhenRolesEmpty() {
+        Collection<GrantedAuthority> authorities = converter.convert(jwtWithRoles(List.of()));
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+    }
+
+    @Test
+    void shouldConvertSingleRoleWithPrefix() {
+        Collection<GrantedAuthority> authorities = converter.convert(jwtWithRoles(List.of("ADMIN")));
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_ADMIN"));
+    }
+
+    @Test
+    void shouldConvertMultipleRolesAndNormalizePrefix() {
+        Collection<GrantedAuthority> authorities = converter.convert(
+                jwtWithRoles(List.of("ADMIN", "CUSTOMER", "ROLE_CUSTOMER")));
+
+        assertThat(authorities).containsExactlyInAnyOrder(
+                new SimpleGrantedAuthority("ROLE_ADMIN"),
+                new SimpleGrantedAuthority("ROLE_CUSTOMER"),
+                new SimpleGrantedAuthority("ROLE_CUSTOMER")
+        );
+    }
+
+    @Test
+    void shouldNotDoublePrefixAlreadyPrefixedRoles() {
+        Collection<GrantedAuthority> authorities = converter.convert(jwtWithRoles(List.of("ROLE_ADMIN")));
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        assertThat(authorities).doesNotContain(new SimpleGrantedAuthority("ROLE_ROLE_ADMIN"));
+    }
+}
