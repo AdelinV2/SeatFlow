@@ -12,7 +12,23 @@
     </parent>
 
     <artifactId>common-domain</artifactId>
-    <packaging>jar</packaging>
-    <name>SeatFlow Common Domain</name>
-    <description>Base exceptions, ErrorCode enum, ApiErrorResponse, PagedResult (scaffold)</description>
+    <name>SeatFlow :: Common Domain</name>
+    <description>Shared domain DTOs, ErrorCodes, and Exception hierarchy</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
