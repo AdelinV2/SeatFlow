@@ -1,0 +1,8 @@
+# Local IDE execution (standalone Eureka server on localhost)
+# ANSI color console logs; permissive discovery for development.
+eureka:
+  instance:
+    hostname: localhost
+  server:
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000

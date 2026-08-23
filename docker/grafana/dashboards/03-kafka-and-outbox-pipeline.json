@@ -1,0 +1,58 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Outbox Events Unpublished (backlog)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(seatflow_outbox_pending_total)", "legendFormat": "pending" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox Published Rate",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_outbox_published_total[5m]))", "legendFormat": "published/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Consumer Lag",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum by (consumer_group) (kafka_consumer_fetch_manager_records_lag)", "legendFormat": "{{consumer_group}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Messages In (rate)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(kafka_producer_record_send_total[5m]))", "legendFormat": "records/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox Publish Failures",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(seatflow_outbox_publish_errors_total[5m]))", "legendFormat": "errors/s" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["seatflow", "kafka", "outbox"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "SeatFlow Kafka & Outbox Pipeline",
+  "uid": "seatflow-kafka-03",
+  "version": 1
+}

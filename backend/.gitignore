@@ -1,0 +1,23 @@
+# Backend-specific Git ignore rules
+
+# Local environment secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Build output
+target/
+**/target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Lombok / annotation processing
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db

@@ -174,8 +174,16 @@ Uses Spring Boot `@RestControllerAdvice` to catch:
 - `AccessDeniedException` -> maps to 403 Forbidden.
 - `Exception` (catch-all) -> maps to 500 Internal Server Error with correlationId for log tracing.
 
-### 4.2 Correlation Context & MDC
-`CorrelationIdFilter` intercepts incoming HTTP requests, extracts `X-Correlation-Id` header (or generates a UUID), and sets it into `CorrelationContext` and SLF4J `MDC` (`traceId`, `correlationId`).
+### 4.2 Correlation Context & MDC Logging Filter
+- `CorrelationIdFilter` intercepts incoming HTTP requests, extracts `X-Correlation-Id` header (or generates a UUID), and sets it into `CorrelationContext`.
+- `MdcLoggingFilter` populates SLF4J `MDC` with `traceId`, `spanId`, `correlationId`, `userId`, `serviceName`, `httpMethod`, `uri`, `clientIp`.
+- Propagates trace context across Kafka producer record headers via `EventHeaders`.
+
+### 4.3 Production JSON Logback Configuration
+Provides a standardized `logback-spring.xml` using `logstash-logback-encoder` with:
+- JSON formatting for centralized log aggregators (GCP Cloud Logging, Grafana Loki).
+- Automatic PCI-DSS/GDPR masking for credit cards, passwords, and JWT tokens.
+- Pretty-printed ANSI color console output for local development (`application-dev.yaml`).
 
 ---
 

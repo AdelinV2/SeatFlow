@@ -1,0 +1,11 @@
+# Docker Compose stack execution.
+# Other containers reach Eureka at the service name "eureka-server".
+eureka:
+  instance:
+    hostname: eureka-server
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+  server:
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000

@@ -1,0 +1,9 @@
+# Local IDE execution (gateway + Angular SPA on localhost:4200)
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+seatflow:
+  cors:
+    allowed-origins: http://localhost:4200
