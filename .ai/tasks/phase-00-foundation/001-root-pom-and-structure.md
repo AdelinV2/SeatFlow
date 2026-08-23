@@ -3,20 +3,21 @@
 ## 1. Task Metadata
 - **Target Module:** `backend/pom.xml`, `backend/common/pom.xml`, `backend/services/pom.xml`
 - **Phase:** `Phase 0 - Foundation`
-- **Related Specs:** `.ai/architecture/00-system-overview.md`, `.ai/architecture/01-common-modules.md`, `backend/AGENTS.md`
+- **Related Specs:** `.ai/architecture/00-system-overview.md`, `.ai/architecture/01-common-modules.md`, `.ai/architecture/08-observability-and-deployment.md`, `backend/AGENTS.md`
 - **Related ADRs:** N/A
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---
 
 ## 2. Objective & Invariants
-Establish the backend multi-module build structure and root POM configuration for the entire SeatFlow microservices ecosystem. Ensure all dependencies, Java 21 compiler arguments, annotation processors (Lombok + MapStruct), and Spring Cloud BOMs are declared centrally in dependency management.
+Establish the backend multi-module build structure and root POM configuration for the entire SeatFlow microservices ecosystem. Ensure all dependencies, Java 21 compiler arguments, annotation processors (Lombok + MapStruct), Spring Cloud BOMs, enterprise JSON logging (`logstash-logback-encoder`), and Micrometer Prometheus metrics are declared centrally in dependency management.
 
 ### Critical Invariants to Enforce:
 - [ ] Java 21 baseline with `-parameters` compiler argument enabled for reflection/reflection-free record handling.
 - [ ] Spring Boot 4.1.x and Spring Cloud 2025.1.x (Oakwood) managed through `<dependencyManagement>`.
 - [ ] Lombok 1.18.x and MapStruct 1.6.x configured with proper compiler plugin ordering (`lombok-mapstruct-binding`).
 - [ ] Multi-module hierarchy: Root parent (`backend/pom.xml`) -> `backend/common/pom.xml` (parent for shared modules) and `backend/services/pom.xml` (parent for microservices).
+- [ ] Centralized version management for `logstash-logback-encoder` (8.0+) and `micrometer-registry-prometheus`.
 - [ ] Zero business logic or concrete code in parent POMs.
 
 ---
@@ -48,17 +49,13 @@ The root POM must:
    - `<lombok.version>1.18.36</lombok.version>`
    - `<lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>`
    - `<springdoc-openapi.version>3.0.0</springdoc-openapi.version>`
+   - `<logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>`
    - `<testcontainers.version>1.20.4</testcontainers.version>`
-5. Include Spring Cloud BOM in `<dependencyManagement>`:
-   ```xml
-   <dependency>
-       <groupId>org.springframework.cloud</groupId>
-       <artifactId>spring-cloud-dependencies</artifactId>
-       <version>${spring-cloud.version}</version>
-       <type>pom</type>
-       <scope>import</scope>
-   </dependency>
-   ```
+5. Include BOMs & libraries in `<dependencyManagement>`:
+   - `spring-cloud-dependencies` (Oakwood)
+   - `net.logstash.logback:logstash-logback-encoder`
+   - `io.micrometer:micrometer-registry-prometheus`
+   - `org.mapstruct:mapstruct` & `org.mapstruct:mapstruct-processor`
 6. Configure `maven-compiler-plugin` with:
    - Source/Target: 21
    - `<compilerArgs><arg>-parameters</arg></compilerArgs>`

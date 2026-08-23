@@ -1,24 +1,34 @@
-# TASK-006: Local Infrastructure & Docker Compose Setup (PostgreSQL Multi-DB, Kafka KRaft, Redis)
+# TASK-006: Local Infrastructure & Observability Stack Setup (PostgreSQL, Kafka, Redis, Prometheus, Grafana)
 
 ## 1. Task Metadata
 - **Target Module:** `docker/`, `.env.example`
 - **Phase:** `Phase 0 - Foundation`
-- **Related Specs:** `.ai/architecture/00-system-overview.md`, `.ai/architecture/08-observability-and-deployment.md`
+- **Related Specs:** `.ai/architecture/00-system-overview.md`, `.ai/architecture/08-observability-and-deployment.md`, `backend/AGENTS.md`
 - **Related ADRs:** N/A
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---
 
 ## 2. Objective & Invariants
-Configure the local containerized developer infrastructure using Docker Compose. Provision a multi-database PostgreSQL 16 instance with automated database provisioning for all 7 business microservices, Apache Kafka in KRaft mode (KRaft eliminates ZooKeeper), and Redis 7 for caching and rate limiting.
+Configure the local containerized developer infrastructure using Docker Compose. Provision:
+1. Multi-database PostgreSQL 16 instance with automated initialization for all 7 business services.
+2. Apache Kafka in KRaft mode (KRaft eliminates ZooKeeper) on port `9092`.
+3. Redis 7 for caching and rate limiting on port `6379`.
+4. Prometheus on port `9090` configured to scrape Actuator metrics across all SeatFlow microservices.
+5. Grafana on port `3000` with pre-provisioned Prometheus datasource and 4 core production dashboards (Executive KPIs, Microservices RED/SRE Health, Kafka/Outbox Pipeline, Security & Auth Audit).
 
 ### Critical Invariants to Enforce:
 - [ ] Database-per-service isolation: PostgreSQL must automatically create 7 distinct databases (`seatflow_user`, `seatflow_seatmap`, `seatflow_event`, `seatflow_reservation`, `seatflow_payment`, `seatflow_ticket`, `seatflow_notification`) via an init SQL script mounted in `/docker-entrypoint-initdb.d/`.
-- [ ] Apache Kafka running in standalone KRaft mode on port `9092` with internal and host listener configuration.
-- [ ] Redis running on standard port `6379`.
+- [ ] Apache Kafka in standalone KRaft mode on port `9092` with internal and host listener configuration.
+- [ ] Redis on port `6379`.
+- [ ] Prometheus configuration (`prometheus.yml`) scraping microservices at `/actuator/prometheus`.
+- [ ] Grafana auto-provisioned with 4 dashboards in `docker/grafana/dashboards/`:
+  - `01-seatflow-executive-and-business.json`
+  - `02-microservices-sre-and-red-health.json`
+  - `03-kafka-and-outbox-pipeline.json`
+  - `04-security-and-auth-audit.json`
 - [ ] All containers must define proper `healthcheck` configurations.
-- [ ] Persistent storage volumes declared for PostgreSQL (`pg_data`) and Kafka (`kafka_data`).
-- [ ] Root `.env.example` created with sensible local defaults.
+- [ ] Root `.env.example` updated with Prometheus and Grafana defaults.
 
 ---
 
@@ -27,6 +37,13 @@ List of all files to create or modify:
 
 - `[NEW]` `docker/docker-compose.yml`
 - `[NEW]` `docker/init-db/01-init-multiple-dbs.sql`
+- `[NEW]` `docker/prometheus/prometheus.yml`
+- `[NEW]` `docker/grafana/provisioning/datasources/datasource.yml`
+- `[NEW]` `docker/grafana/provisioning/dashboards/dashboard-provider.yml`
+- `[NEW]` `docker/grafana/dashboards/01-seatflow-executive-and-business.json`
+- `[NEW]` `docker/grafana/dashboards/02-microservices-sre-and-red-health.json`
+- `[NEW]` `docker/grafana/dashboards/03-kafka-and-outbox-pipeline.json`
+- `[NEW]` `docker/grafana/dashboards/04-security-and-auth-audit.json`
 - `[NEW]` `.env.example` (Root project environment template)
 - `[NEW]` `docker/README.md` (Local infrastructure operating guide)
 
@@ -60,7 +77,56 @@ SELECT 'CREATE DATABASE seatflow_notification'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'seatflow_notification')\gexec
 ```
 
-### 4.2 Docker Compose Specification (`docker/docker-compose.yml`)
+### 4.2 Prometheus Scraping Config (`docker/prometheus/prometheus.yml`)
+```yaml
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'seatflow-services'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8080' # Gateway
+          - 'host.docker.internal:8081' # User Service
+          - 'host.docker.internal:8082' # Seat Map Service
+          - 'host.docker.internal:8083' # Event Service
+          - 'host.docker.internal:8084' # Reservation Service
+          - 'host.docker.internal:8085' # Payment Service
+          - 'host.docker.internal:8086' # Ticket Service
+          - 'host.docker.internal:8087' # Realtime Service
+          - 'host.docker.internal:8088' # Notification Service
+```
+
+### 4.3 Grafana Datasource & Provisioning
+`docker/grafana/provisioning/datasources/datasource.yml`:
+```yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+```
+
+`docker/grafana/provisioning/dashboards/dashboard-provider.yml`:
+```yaml
+apiVersion: 1
+providers:
+  - name: 'SeatFlow Dashboards'
+    orgId: 1
+    folder: 'SeatFlow Production'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+```
+
+### 4.4 Docker Compose Specification (`docker/docker-compose.yml`)
 ```yaml
 services:
   postgres:
@@ -124,6 +190,36 @@ services:
       timeout: 10s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: seatflow-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: seatflow-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   pg_data:
     driver: local
@@ -131,9 +227,13 @@ volumes:
     driver: local
   kafka_data:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 ```
 
-### 4.3 Root Environment Template (`.env.example`)
+### 4.5 Root Environment Template (`.env.example`)
 ```properties
 # ==========================================
 # SeatFlow Infrastructure Environment Template
@@ -150,6 +250,12 @@ REDIS_PORT=6379
 # Kafka Configuration
 KAFKA_PORT=9092
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+
+# Observability Configuration
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
 
 # Service Registry & Gateway Ports
 EUREKA_SERVER_PORT=8761
@@ -177,11 +283,17 @@ STRIPE_WEBHOOK_SECRET=whsec_dummy
 ---
 
 ## 5. Step-by-Step Implementation Sequence (For Builder / Implementer)
-1. **Step 1:** Create `docker/init-db/01-init-multiple-dbs.sql` with queries ensuring all 7 service databases are created.
-2. **Step 2:** Create `docker/docker-compose.yml` configuring PostgreSQL 16, Redis 7, and Apache Kafka (KRaft mode).
-3. **Step 3:** Create root `.env.example` documenting all ports, database credentials, and external service placeholders.
-4. **Step 4:** Create `docker/README.md` providing startup, teardown, and database inspection commands.
-5. **Step 5:** Run `docker compose config` to validate compose file structure.
+1. **Step 1:** Create `docker/init-db/01-init-multiple-dbs.sql` ensuring all 7 databases are initialized.
+2. **Step 2:** Create `docker/prometheus/prometheus.yml` configured to scrape Actuator endpoints from host or containers.
+3. **Step 3:** Create Grafana datasource and dashboard provisioning YAMLs in `docker/grafana/provisioning/`.
+4. **Step 4:** Create the 4 dashboard JSON definitions in `docker/grafana/dashboards/`:
+   - `01-seatflow-executive-and-business.json`
+   - `02-microservices-sre-and-red-health.json`
+   - `03-kafka-and-outbox-pipeline.json`
+   - `04-security-and-auth-audit.json`
+5. **Step 5:** Create `docker/docker-compose.yml` linking Postgres, Redis, Kafka, Prometheus, and Grafana.
+6. **Step 6:** Create root `.env.example` and `docker/README.md`.
+7. **Step 7:** Run `docker compose config` to validate compose structure.
 
 ---
 
@@ -192,5 +304,5 @@ docker compose -f docker/docker-compose.yml config
 ```
 - [ ] Docker compose file parses without schema or variable substitution errors.
 - [ ] Init SQL script contains CREATE DATABASE statements for all 7 business services.
-- [ ] Root `.env.example` contains complete configuration reference.
+- [ ] Prometheus configuration and Grafana provisioning definitions are valid.
 - [ ] Task file is moved to `.ai/tasks/completed/`.
