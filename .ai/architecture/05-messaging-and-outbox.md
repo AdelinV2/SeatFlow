@@ -44,7 +44,6 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
 {
   "userId": "323e4567-e89b-12d3-a456-426614174000",
   "email": "customer@seatflow.com",
-  "fullName": "Alex Smith",
   "registeredAt": "2026-08-24T10:00:00Z"
 }
 ```

@@ -115,7 +115,7 @@ public class ResourceServerConfig {
                 // Admin endpoints
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // Authenticated user profile & ticket management
-                .requestMatchers("/api/tickets/my-tickets", "/api/user/profile/**").authenticated()
+                .requestMatchers("/api/tickets/my-tickets", "/api/users/**").authenticated()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2

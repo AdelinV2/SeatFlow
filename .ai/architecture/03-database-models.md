@@ -22,8 +22,6 @@ CREATE TABLE users (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     external_id VARCHAR(255) UNIQUE NOT NULL, -- Subject ID from Entra/OIDC
     email       VARCHAR(255) UNIQUE NOT NULL,
-    first_name  VARCHAR(100),
-    last_name   VARCHAR(100),
     phone       VARCHAR(50),
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
