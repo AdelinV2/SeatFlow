@@ -27,10 +27,10 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_user` (PostgreSQL).
 - **Responsibilities:**
   - JIT (Just-In-Time) user profile synchronization upon first authenticated request.
-  - Customer profile retrieval and updates (name, phone, preferences).
+  - Customer profile retrieval and updates (phone, preferences).
   - Admin view of registered customers.
-  - Historical guest order linking: When a user registers with an email address previously used for guest checkouts, link historical tickets to the registered profile.
-- **Dependencies:** `common-domain`, `common-observability`, `common-security`.
+  - Historical guest order linking: When a user registers with an email address previously used for guest checkouts, link historical tickets to the registered profile via `UserRegisteredEvent`.
+- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Kafka.
 
 ---
 

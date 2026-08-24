@@ -476,32 +476,105 @@ Each service owns its own Flyway migrations under its own `resources/db/migratio
 
 These standards apply to every business microservice. Agents implementing tasks must follow them without deviation.
 
-### Entities — Lombok (explicit, never `@Data`)
+### Entities — Lombok (explicit, never `@Data`) & Schema Integrity
+
+Every JPA entity must declare its table name, explicit unique constraints, and indexes using `@Table` matching the Flyway DDL specifications (see [ADR-002](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md)):
 
 ```java
 @Entity
-@Table(name = "reservations")
+@Table(
+    name = "reservations",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_reservations_idempotency_key", columnNames = {"idempotency_key"})
+    },
+    indexes = {
+        @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
+        @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+        @Index(name = "idx_res_user_status", columnList = "user_id, status"),
+        @Index(name = "idx_res_customer_email", columnList = "customer_email"),
+        @Index(name = "idx_res_created_at", columnList = "created_at")
+    }
+)
+@DynamicUpdate // Generates targeted SQL UPDATEs for modified columns only, reducing lock contention
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@ToString(onlyExplicitlyIncluded = true)
 public class Reservation {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @ToString.Include
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", updatable = false)
+    @ToString.Include
+    private UUID userId; // Nullable for guest checkouts (ADR-001)
+
+    @Column(name = "customer_email", nullable = false, updatable = false)
+    @ToString.Include
+    private String customerEmail;
+
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "event_id", nullable = false, updatable = false)
+    @ToString.Include
+    private UUID eventId;
+
+    @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)
+    @ToString.Include
     private ReservationStatus status;
 
+    @Column(name = "expires_at", nullable = false)
+    @ToString.Include
+    private Instant expiresAt;
+
+    @Column(name = "idempotency_key", nullable = false, unique = true, updatable = false)
+    private String idempotencyKey;
+
+    @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalAmount;
+
+    @Column(name = "seat_count", nullable = false)
+    @Builder.Default
+    private Integer seatCount = 1;
+
     @Version
-    private Long version; // optimistic locking where required
+    @Column(nullable = false)
+    private Long version; // optimistic concurrency control
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+        Reservation that = (Reservation) o;
+        return getId() != null && Objects.equals(getId(), that.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
 ```
 
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA, prevents accidental public no-arg construction.
-- Never use `@Data` on JPA entities (breaks proxy, equals/hashCode).
+- Never use `@Data` or `@EqualsAndHashCode` on JPA entities (breaks Hibernate dynamic proxies and changes hash codes upon persistence).
+- Always implement explicit `equals(Object o)` using `Hibernate.getClass(this) != Hibernate.getClass(o)` with `getId()` comparison, paired with constant `hashCode()` returning `getClass().hashCode()`.
+- Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relations to avoid lazy-loading loops and N+1 logging overhead.
+- Use `@DynamicUpdate` on mutable entities to minimize update lock contention.
+- Map JSONB columns with `@JdbcTypeCode(SqlTypes.JSON)`.
 - Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
 - Use `@Version` where concurrent modification is possible.
 - Use `GenerationType.UUID` for primary keys.
@@ -1207,17 +1280,20 @@ Each event-producing service owns its own outbox table:
 
 ```sql
 CREATE TABLE outbox_events (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id            UUID         NOT NULL DEFAULT gen_random_uuid(),
     aggregate_id  UUID         NOT NULL,
     event_type    VARCHAR(100) NOT NULL,
     payload       JSONB        NOT NULL,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     published_at  TIMESTAMPTZ,
     retry_count   INT          NOT NULL DEFAULT 0,
-    CONSTRAINT max_retries CHECK (retry_count <= 5)
+
+    CONSTRAINT pk_outbox_events PRIMARY KEY (id),
+    CONSTRAINT chk_outbox_retry_count CHECK (retry_count >= 0 AND retry_count <= 5)
 );
 
-CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at ASC) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_aggregate ON outbox_events(aggregate_id, created_at DESC);
 ```
 
 ### Publisher Implementation

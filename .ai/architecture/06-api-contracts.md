@@ -34,8 +34,6 @@ This document defines the complete catalog of REST API endpoints exposed across 
 **Request Body:**
 ```json
 {
-  "firstName": "Alex",
-  "lastName": "Smith",
   "phone": "+1-555-0199"
 }
 ```
@@ -44,8 +42,6 @@ This document defines the complete catalog of REST API endpoints exposed across 
 {
   "id": "123e4567-e89b-12d3-a456-426614174000",
   "email": "alex.smith@example.com",
-  "firstName": "Alex",
-  "lastName": "Smith",
   "phone": "+1-555-0199",
   "createdAt": "2026-08-23T10:00:00Z"
 }
