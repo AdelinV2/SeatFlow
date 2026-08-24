@@ -82,4 +82,4 @@ mvn clean test -Dtest=ExampleServiceTest,ExampleIntegrationTest
 ```
 - [ ] Code compiles without warnings.
 - [ ] All unit and slice tests pass.
-- [ ] Task file is moved to `.ai/tasks/completed/`.
+- [ ] Task file is moved to `.ai/tasks/completed/<phase-name>/`.

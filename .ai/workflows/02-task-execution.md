@@ -40,7 +40,7 @@ The Builder/Implementer role receives a single task specification (`.ai/tasks/ph
 8. If all tests pass:
    - Update .env.example if new environment variables were introduced.
    - Mark task checklist items as [x].
-   - Move task file to .ai/tasks/completed/.
+   - Move task file to .ai/tasks/completed/<phase-name>/.
    - Commit changes: git commit -m "feat(<scope>): <description>"
    - Push and open PR targeting develop: git push origin feat/<task-id>-<description>
 ```

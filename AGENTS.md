@@ -80,7 +80,9 @@ SeatFlow/
 │   │   ├── phase-08-notification-service/ # Notification & email service
 │   │   ├── phase-09-frontend-portal/  # Angular client & admin UI
 │   │   ├── phase-10-devops-observability/ # Docker, monitoring & GCP deployment
-│   │   └── completed/                 # Archived completed tasks
+│   │   └── completed/                 # Archived completed tasks (organized by phase)
+│   │       ├── phase-00-foundation/
+│   │       └── ...
 │   └── workflows/                     # Step-by-step engineering protocols
 │       ├── 01-task-planning.md
 │       ├── 02-task-execution.md
@@ -195,5 +197,5 @@ A task is considered **DONE** only when:
 - [ ] Local `.env.example` updated if new environment variables were introduced.
 - [ ] Database migrations are backwards-compatible and indexed.
 - [ ] Relevant documentation/ADR updated if an architectural decision was modified.
-- [ ] Task file moved from active phase to `.ai/tasks/completed/`.
+- [ ] Task file moved from active phase to `.ai/tasks/completed/<phase-name>/`.
 
