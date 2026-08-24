@@ -10,10 +10,11 @@ All Kafka topics are partitioned and keyed by their primary aggregate identifier
 
 | Topic Name | Producer(s) | Consumer(s) | Key | Purpose |
 |---|---|---|---|---|
+| `seatflow.user.events` | User Service | Ticket, Reservation | `userId` | User registered/first login (auto-claims historical guest tickets) |
 | `seatflow.reservation.events` | Reservation Service | Realtime, Notification | `reservationId` | Reservation held, expired, confirmed, or cancelled |
 | `seatflow.payment.events` | Payment Service | Ticket, Notification, Reservation | `paymentId` | Payment completed, failed, refunded |
 | `seatflow.ticket.events` | Ticket Service | Notification | `ticketId` | Ticket generated and issued |
-| `seatflow.seat.status.events` | (Removed/Deprecated) | | | Replaced by direct subscription to reservation and payment topics |
+| `seatflow.notification.events` | Multiple Services | Notification Service | `notificationId` | Internal notification triggers |
 
 *Note: The Realtime Service subscribes directly to `seatflow.reservation.events` and `seatflow.payment.events` lifecycle topics to broadcast WebSocket seat status updates.*
 
@@ -38,17 +39,31 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
 
 ### 2.2 Domain Event Payload Specifications
 
+#### `UserRegisteredEvent` (eventType: `"UserRegistered"`)
+```json
+{
+  "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "email": "customer@seatflow.com",
+  "fullName": "Alex Smith",
+  "registeredAt": "2026-08-24T10:00:00Z"
+}
+```
+*Note: Consumed by `ticket-service` and `reservation-service` to automatically link historical guest purchases (`WHERE customer_email = :email AND user_id IS NULL`).*
+
 #### `ReservationHeldEvent` (eventType: `"ReservationHeld"`)
 ```json
 {
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "customerName": "Alex Smith",
   "seatIds": ["423e4567-e89b-12d3-a456-426614174000", "523e4567-e89b-12d3-a456-426614174000"],
   "expiresAt": "2026-08-23T14:45:00Z",
   "totalAmount": 150.00
 }
 ```
+*Note: `userId` is `null` when a guest creates the reservation without an account.*
 
 #### `ReservationExpiredEvent` (eventType: `"ReservationExpired"`)
 ```json
@@ -66,12 +81,14 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "paymentId": "723e4567-e89b-12d3-a456-426614174000",
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "amount": 150.00,
   "currency": "USD",
   "stripePaymentId": "pi_3Nsk2e2eZvKYlo2C1gQ"
 }
 ```
+*Note: `userId` is `null` for guest payments.*
 
 #### `TicketIssuedEvent` (eventType: `"TicketIssued"`)
 ```json
@@ -79,12 +96,15 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "ticketId": "823e4567-e89b-12d3-a456-426614174000",
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "attendeeName": "Alex Smith",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "seatId": "423e4567-e89b-12d3-a456-426614174000",
   "ticketCode": "SF-TKT-9876-ABCD",
   "qrCodeData": "SF://TKT/9876-ABCD/SIGNATURE"
 }
 ```
+*Note: `userId` is `null` for guest tickets.*
 
 #### `SeatStatusUpdatedEvent` (eventType: `"SeatStatusUpdated"`)
 ```json
@@ -124,16 +144,80 @@ CREATE INDEX idx_outbox_unpub ON outbox_events(created_at) WHERE published_at IS
 
 ---
 
-## 4. Idempotent Consumer Guidelines
+---
 
-Because Kafka provides **at-least-once** delivery, consumers must be strictly idempotent:
+## 4. Multi-Instance Horizontal Scaling & Consumer Groups
+
+In production deployments where services scale across multiple instances / VMs / containers, Kafka guarantees that **only one instance of a specific microservice processes each event**, while allowing different microservices to receive a copy in parallel:
+
+```text
+                                 TOPIC: seatflow.payment.events
+                               ┌────────────────────────────────┐
+                               │ Partition 0 | Partition 1 | P2 │
+                               └───────┬──────────┬─────────────┘
+                                       │          │
+                 ┌─────────────────────┴──────────┴─────────────────────┐
+                 │                                                      │
+                 ▼                                                      ▼
+  Consumer Group: "ticket-service"                       Consumer Group: "notification-service"
+  (Scale: 3 Instances / Pods)                            (Scale: 2 Instances / Pods)
+  ┌─────────────────────────────────────────┐            ┌───────────────────────────────────────┐
+  │  Instance 1 (VM 1) ──► Processes Msg 1  │            │  Instance 1 (VM A) ──► Processes Msg 1│
+  │  Instance 2 (VM 2) ──► Idle / Msg 2     │            │  Instance 2 (VM B) ──► Idle / Msg 2   │
+  │  Instance 3 (VM 3) ──► Idle / Msg 3     │            └───────────────────────────────────────┘
+  └─────────────────────────────────────────┘
+```
+
+1. **Load Balancing within the same service:** All instances of `ticket-service` configure `groupId = "ticket-service"`. Kafka automatically assigns partitions among instances so that a single event is processed by **exactly one instance**.
+2. **Publish-Subscribe across different services:** Different microservices use distinct group IDs (`ticket-service`, `notification-service`, `reservation-service`). Each service receives its own independent stream copy.
+
+---
+
+## 5. Consuming Multi-Event Topics & Polymorphic Dispatch
+
+Topics organized by aggregate (e.g. `seatflow.user.events`, `seatflow.reservation.events`) carry multiple event types. Downstream consumers selectively process relevant events and silently ignore irrelevant ones using **Spring Kafka Polymorphic `@KafkaHandler`**:
+
+```java
+@Component
+@KafkaListener(topics = EventTopics.USER_EVENTS, groupId = "ticket-service")
+public class UserRegistrationEventListener {
+
+    private final TicketService ticketService;
+
+    // 1. Explicit handler for UserRegistered events
+    @KafkaHandler
+    public void handleUserRegistered(EventEnvelope<UserRegisteredEvent> envelope) {
+        UserRegisteredEvent payload = envelope.payload();
+        ticketService.claimHistoricalGuestTickets(payload.userId(), payload.email());
+    }
+
+    // 2. Default fallback: safely ignores other event types on the same topic (e.g. UserProfileUpdated)
+    @KafkaHandler(isDefault = true)
+    public void handleIgnoredEvents(Object genericEvent) {
+        // No-op: event not relevant to ticket-service
+    }
+}
+```
+
+Alternatively, consumers can route via `switch(envelope.eventType())`:
+```java
+if ("UserRegistered".equals(envelope.eventType())) {
+    // Process registration claiming
+}
+```
+
+---
+
+## 6. Idempotent Consumer Guidelines
+
+Because Kafka provides **at-least-once** delivery (e.g. on network rebalances or retry attempts across instances), all consumer listeners must be strictly idempotent:
 
 ```java
 @KafkaListener(topics = EventTopics.PAYMENT_EVENTS, groupId = "ticket-service")
 public void handlePaymentEvent(EventEnvelope<PaymentCompletedEvent> envelope) {
     UUID paymentId = UUID.fromString(envelope.aggregateId());
 
-    // 1. Idempotency check against domain entity or processed_events table
+    // 1. Idempotency check against database or processed_events ledger
     if (ticketRepository.existsByPaymentId(paymentId)) {
         log.info("Duplicate event ignored: eventId={}, paymentId={}", envelope.eventId(), paymentId);
         return;
@@ -146,7 +230,7 @@ public void handlePaymentEvent(EventEnvelope<PaymentCompletedEvent> envelope) {
 
 ---
 
-## 5. End-to-End Asynchronous Choreography (Checkout Saga Flow)
+## 7. End-to-End Asynchronous Choreography (Checkout Saga Flow)
 
 ```text
 1. SEAT HOLD:
@@ -167,7 +251,12 @@ public void handlePaymentEvent(EventEnvelope<PaymentCompletedEvent> envelope) {
    Kafka [seatflow.ticket.events] (TicketIssuedEvent)
    Notification Service consumes TicketIssuedEvent -> renders Thymeleaf template -> dispatches email to customer
 
-4. HOLD TIMEOUT (EXPIRATION):
+4. USER REGISTRATION (GUEST CLAIMING):
+   User registers/logs in -> User Service commits outbox event -> Kafka [seatflow.user.events] (UserRegisteredEvent)
+   Ticket Service consumes UserRegisteredEvent -> links historical tickets (UPDATE tickets SET user_id=... WHERE customer_email=... AND user_id IS NULL)
+   Reservation Service consumes UserRegisteredEvent -> links historical reservations
+
+5. HOLD TIMEOUT (EXPIRATION):
    Background Sweeper (Reservation Service) finds expired holds via SELECT FOR UPDATE SKIP LOCKED
    Updates status to EXPIRED -> commits outbox event -> Kafka [seatflow.reservation.events] (ReservationExpiredEvent)
    Realtime Service consumes event -> WebSocket STOMP broadcasts AVAILABLE status back to browsers

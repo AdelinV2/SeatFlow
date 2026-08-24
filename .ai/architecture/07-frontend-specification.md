@@ -20,9 +20,10 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 / (Home / Event Catalog)             --> EventListComponent (Featured carousel, category filter, date picker)
 /events/:id                         --> EventDetailComponent (Description, venue info, pricing table, CTA)
 /events/:id/seats                   --> SeatSelectionComponent (Interactive seat map, live WS updates, hold action)
-/checkout/:reservationId            --> CheckoutComponent (Hold timer, order summary, Stripe Elements card form)
+/checkout/:reservationId            --> CheckoutComponent (Hold timer, order summary, guest email/name form or user profile, Stripe Elements card form)
 /order-confirmation/:paymentId      --> OrderConfirmationComponent (Success screen, download tickets, QR codes)
-/profile/tickets                    --> MyTicketsComponent (Active and past digital tickets with QR modal)
+/tickets/guest/:ticketCode          --> GuestTicketComponent (Guest ticket viewer with QR code & PDF download)
+/profile/tickets                    --> MyTicketsComponent (Active and past digital tickets with QR modal for logged-in user)
 /profile/settings                   --> UserSettingsComponent (Profile details, notification preferences)
 /auth/callback                      --> AuthCallbackComponent (OIDC redirect handler)
 /auth/logout                        --> Redirects to Entra logout endpoint
@@ -62,6 +63,9 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 
 ### 3.4 Stripe Test Mode Checkout (`CheckoutComponent`)
 - Embeds Stripe Elements (`CardElement` or `PaymentElement`).
+- Supports **Hybrid Checkout**:
+  - If authenticated: auto-fills customer details and links `userId`.
+  - If guest: renders fields for `customerEmail` (required) and `customerName` (optional).
 - Retrieves `clientSecret` from `POST /api/payments/intent`.
 - Confirms payment client-side with Stripe SDK.
 - Handles 3D Secure simulation and redirects to `/order-confirmation/:paymentId`.

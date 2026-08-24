@@ -101,7 +101,9 @@ CREATE INDEX idx_pricing_event ON event_pricing_tiers(event_id);
 ```sql
 CREATE TABLE reservations (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID         NOT NULL,
+    user_id         UUID,        -- NULL for guest checkouts
+    customer_email  VARCHAR(255) NOT NULL,
+    customer_name   VARCHAR(255),
     event_id        UUID         NOT NULL,
     status          VARCHAR(30)  NOT NULL, -- PENDING, CONFIRMED, CANCELLED, EXPIRED
     expires_at      TIMESTAMPTZ  NOT NULL,
@@ -112,6 +114,7 @@ CREATE TABLE reservations (
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_res_user ON reservations(user_id);
+CREATE INDEX idx_res_customer_email ON reservations(customer_email);
 CREATE INDEX idx_res_event ON reservations(event_id);
 CREATE INDEX idx_res_status ON reservations(status);
 CREATE INDEX idx_res_expires_at ON reservations(expires_at) WHERE status = 'PENDING';
@@ -148,7 +151,8 @@ CREATE INDEX idx_res_outbox_unpub ON outbox_events(created_at) WHERE published_a
 CREATE TABLE payments (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reservation_id     UUID         NOT NULL,
-    user_id            UUID         NOT NULL,
+    user_id            UUID,        -- NULL for guest checkouts
+    customer_email     VARCHAR(255) NOT NULL,
     event_id           UUID         NOT NULL,
     stripe_payment_id  VARCHAR(255) UNIQUE,
     idempotency_key    VARCHAR(255) UNIQUE NOT NULL,
@@ -162,6 +166,7 @@ CREATE TABLE payments (
 );
 CREATE INDEX idx_payments_reservation ON payments(reservation_id);
 CREATE INDEX idx_payments_user ON payments(user_id);
+CREATE INDEX idx_payments_customer_email ON payments(customer_email);
 CREATE INDEX idx_payments_status ON payments(status);
 
 CREATE TABLE outbox_events (
@@ -183,7 +188,9 @@ CREATE TABLE tickets (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reservation_id UUID         NOT NULL,
     payment_id     UUID         NOT NULL,
-    user_id        UUID         NOT NULL,
+    user_id        UUID,        -- NULL for guest checkouts
+    customer_email VARCHAR(255) NOT NULL,
+    attendee_name  VARCHAR(255),
     event_id       UUID         NOT NULL,
     seat_id        UUID         NOT NULL,
     ticket_code    VARCHAR(64)  UNIQUE NOT NULL, -- Cryptographically secure token
@@ -193,6 +200,7 @@ CREATE TABLE tickets (
     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_tickets_user ON tickets(user_id);
+CREATE INDEX idx_tickets_customer_email ON tickets(customer_email);
 CREATE INDEX idx_tickets_event ON tickets(event_id);
 CREATE INDEX idx_tickets_reservation ON tickets(reservation_id);
 CREATE INDEX idx_tickets_code ON tickets(ticket_code);
