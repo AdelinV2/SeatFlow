@@ -29,6 +29,7 @@ This document details the responsibilities, dependencies, internal architecture,
   - JIT (Just-In-Time) user profile synchronization upon first authenticated request.
   - Customer profile retrieval and updates (name, phone, preferences).
   - Admin view of registered customers.
+  - Historical guest order linking: When a user registers with an email address previously used for guest checkouts, link historical tickets to the registered profile.
 - **Dependencies:** `common-domain`, `common-observability`, `common-security`.
 
 ---
@@ -59,6 +60,7 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_reservation` (PostgreSQL).
 - **Responsibilities:**
   - Temporary seat hold creation (15 minutes).
+  - **Hybrid Guest & Authenticated Holds:** Supports authenticated customers (resolving `userId` from token) and guest customers (accepting `customerEmail` and optional `customerName` in payload).
   - Enforce maximum 10 seats per reservation limit.
   - **Authoritative Server-Side Pricing:** The client only sends `eventId` and `seatIds`. `reservation-service` queries `event-service` via internal REST client to fetch official pricing tiers and calculates `total_amount` authoritatively on the server side (never trusts client prices).
   - Concurrency control: Zero double-booking guarantee via DB unique constraints and pessimistic/optimistic locking.
@@ -72,7 +74,7 @@ This document details the responsibilities, dependencies, internal architecture,
 ## 7. Payment Service: `payment-service` (Port 8085)
 - **Database:** `seatflow_payment` (PostgreSQL).
 - **Responsibilities:**
-  - Stripe integration (Payment Intent creation in Test Mode).
+  - Stripe integration (Payment Intent creation in Test Mode for both authenticated and guest reservations).
   - **Cryptographic Webhook Verification:** Verifies incoming `Stripe-Signature` headers against the configured endpoint secret.
   - **Webhook Idempotency:** Validates existing payment status (`if (payment.getStatus() == PaymentStatus.SUCCESS) return;`) to safely ignore duplicate webhook events from Stripe without producing duplicate outbox events.
   - Publishing `PaymentCompleted` or `PaymentFailed` domain events via Transactional Outbox.
@@ -85,11 +87,11 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_ticket` (PostgreSQL).
 - **Responsibilities:**
   - Listens to `PaymentCompleted` Kafka events.
-  - Generates secure digital tickets with cryptographic verification tokens.
+  - Generates secure digital tickets with cryptographic verification tokens (supporting both registered users and guest purchasers).
   - Generates QR codes using **ZXing** containing signed ticket payload.
   - Renders downloadable PDF tickets.
   - Publishing `TicketIssued` domain event via Outbox.
-  - Ticket query endpoints for customer profile ("My Tickets") and admin check-in.
+  - Ticket query endpoints for customer profile ("My Tickets"), secure guest access (`GET /api/tickets/guest/{ticketCode}`), and admin check-in.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, ZXing, OpenPDF.
 
 ---
@@ -108,7 +110,7 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_notification` (PostgreSQL).
 - **Responsibilities:**
   - Listens to Kafka events (`TicketIssued`, `ReservationHeld`, `PaymentFailed`).
-  - Asynchronously generates HTML email confirmations using Thymeleaf templates.
-  - Dispatches emails via SMTP / SendGrid adapter.
+  - Asynchronously generates HTML email confirmations using Thymeleaf templates with attached PDF ticket and secure guest access link.
+  - Dispatches emails via SMTP / SendGrid adapter directly to `customerEmail`.
   - Tracks delivery logs and retry attempts in `notification_logs` table.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, JavaMailSender / SendGrid.

@@ -136,9 +136,9 @@ This document defines the complete catalog of REST API endpoints exposed across 
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/reservations` | Customer | Create 15-min seat hold (Max 10 seats) |
-| `GET` | `/api/reservations/{reservationId}` | Customer / Admin | Get reservation details & hold countdown |
-| `POST` | `/api/reservations/{reservationId}/cancel` | Customer | Cancel active hold |
+| `POST` | `/api/reservations` | Public / Customer | Create 15-min seat hold (Max 10 seats, Guest or Authenticated) |
+| `GET` | `/api/reservations/{reservationId}` | Public / Customer / Admin | Get reservation details & hold countdown |
+| `POST` | `/api/reservations/{reservationId}/cancel` | Public / Customer | Cancel active hold |
 | `GET` | `/api/reservations/events/{eventId}/availability` | Public | Get current seat availability status list |
 
 #### `POST /api/reservations`
@@ -146,6 +146,8 @@ This document defines the complete catalog of REST API endpoints exposed across 
 ```json
 {
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "customerName": "Alex Smith",
   "seatIds": [
     "723e4567-e89b-12d3-a456-426614174000",
     "823e4567-e89b-12d3-a456-426614174000"
@@ -153,11 +155,15 @@ This document defines the complete catalog of REST API endpoints exposed across 
   "idempotencyKey": "hold-req-user123-uuid-001"
 }
 ```
+*Note: `customerEmail` is optional if an authenticated JWT Bearer token is provided, in which case it is extracted from token claims. For unauthenticated guests, `customerEmail` is required.*
+
 **Response Body (201 Created):**
 ```json
 {
   "id": "123e4567-e89b-12d3-a456-426614174000",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "customerName": "Alex Smith",
   "status": "PENDING",
   "expiresAt": "2026-08-23T14:45:00Z",
   "totalAmount": 120.00,
@@ -184,8 +190,8 @@ This document defines the complete catalog of REST API endpoints exposed across 
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/payments/intent` | Customer | Create Stripe PaymentIntent for a reservation |
-| `GET` | `/api/payments/{paymentId}` | Customer | Get payment status |
+| `POST` | `/api/payments/intent` | Public / Customer | Create Stripe PaymentIntent for a reservation |
+| `GET` | `/api/payments/{paymentId}` | Public / Customer | Get payment status |
 | `POST` | `/api/payments/webhook` | Public (Stripe Sig) | Handle Stripe async webhook events |
 
 #### `POST /api/payments/intent`
@@ -214,8 +220,9 @@ This document defines the complete catalog of REST API endpoints exposed across 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/tickets/my-tickets` | Customer | List purchased tickets for authenticated user |
-| `GET` | `/api/tickets/{ticketId}` | Customer | Get ticket detail with QR code data |
-| `GET` | `/api/tickets/{ticketId}/pdf` | Customer | Download rendered PDF ticket |
+| `GET` | `/api/tickets/guest/{ticketCode}` | Public | Get ticket detail by secure ticket code (guest delivery) |
+| `GET` | `/api/tickets/{ticketId}` | Customer | Get ticket detail with QR code data (authenticated user) |
+| `GET` | `/api/tickets/{ticketId}/pdf` | Public / Customer | Download rendered PDF ticket |
 | `POST` | `/api/admin/tickets/validate` | Admin / Scanner | Validate ticket QR code at venue entrance |
 
 #### `POST /api/admin/tickets/validate`

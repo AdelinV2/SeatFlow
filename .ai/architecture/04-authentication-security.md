@@ -74,7 +74,7 @@ public class JwtRoleConverter implements Converter<Jwt, Collection<GrantedAuthor
 ## 3. Server-Side Security & Context Extraction
 
 ### 3.1 Security Filter Chain (`SecurityConfig`)
-Configured identically across all microservices:
+Configured identically across all microservices (or customized per service requirements):
 ```java
 import org.springframework.http.HttpMethod;
 
@@ -96,10 +96,26 @@ public class ResourceServerConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Public catalog & seat availability
                 .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/venues/**").permitAll()
-                .requestMatchers("/api/payments/webhook", "/ws/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/reservations/events/*/availability").permitAll()
+                // Hybrid / Guest Checkout endpoints (support both guest & authenticated tokens)
+                .requestMatchers(HttpMethod.POST, "/api/reservations").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/reservations/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/intent").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/payments/*").permitAll()
+                .requestMatchers("/api/payments/webhook").permitAll()
+                // Guest ticket verification & download
+                .requestMatchers("/api/tickets/guest/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
+                // WebSockets & Docs
+                .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
+                // Admin endpoints
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                // Authenticated user profile & ticket management
+                .requestMatchers("/api/tickets/my-tickets", "/api/user/profile/**").authenticated()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -110,13 +126,20 @@ public class ResourceServerConfig {
 }
 ```
 
-### 3.2 Accessing Authenticated User via `UserContext`
+### 3.2 Accessing Authenticated User vs Guest via `UserContext`
+Endpoints supporting hybrid checkout check whether an authenticated principal is present:
 ```java
-String userId = UserContext.getCurrentUserId()
-        .orElseThrow(() -> new BusinessException("User ID not present in token", ErrorCode.UNAUTHORIZED, 401));
+// Optional user extraction for hybrid endpoints:
+Optional<String> maybeUserId = UserContext.getCurrentUserId();
 
-if (!UserContext.hasRole(SecurityRoles.ROLE_ADMIN) && !userId.equals(requestedResourceUserId)) {
-    throw new BusinessException("Access denied to requested resource", ErrorCode.FORBIDDEN, 403);
+if (maybeUserId.isPresent()) {
+    String userId = maybeUserId.get();
+    // Resolve email and name from JWT or User Profile
+} else {
+    // Guest flow: validate that customerEmail is present and valid
+    if (request.customerEmail() == null || request.customerEmail().isBlank()) {
+        throw new ValidationException("Customer email is required for guest checkout", List.of());
+    }
 }
 ```
 
@@ -124,9 +147,11 @@ if (!UserContext.hasRole(SecurityRoles.ROLE_ADMIN) && !userId.equals(requestedRe
 
 ## 4. Frontend Security & Route Guards
 
-- Angular route guards (`auth.guard.ts`, `admin.guard.ts`) are strictly for UI redirection.
+- Angular route guards (`admin.guard.ts`) protect administrative areas.
+- Public customer routes (`/`, `/events/:id`, `/events/:id/seats`, `/checkout/:reservationId`, `/order-confirmation/:paymentId`, `/tickets/guest/:code`) are open to guests without redirection to login.
+- Profile routes (`/profile/tickets`, `/profile/settings`) use `auth.guard.ts` to redirect unauthenticated visitors to Entra OIDC login.
 - Every API endpoint enforces authorization server-side.
-- Tokens are held in-memory or secure storage and attached via `auth.interceptor.ts`.
+- Tokens are held in-memory or secure storage and attached via `auth.interceptor.ts` whenever an active session exists.
 
 ---
 
@@ -135,3 +160,6 @@ if (!UserContext.hasRole(SecurityRoles.ROLE_ADMIN) && !userId.equals(requestedRe
 1. **Zero Secrets in Git:** Database credentials, Stripe secret keys, and OIDC client secrets are injected exclusively via environment variables (`${DB_PASSWORD}`, `${STRIPE_SECRET_KEY}`).
 2. **Stripe Webhook Signature Verification:** All payment webhooks must verify the `Stripe-Signature` header against the configured webhook secret.
 3. **No Direct Entity Exposure:** Never return JPA entities in REST responses. Always map through MapStruct DTO records.
+4. **API Gateway Rate Limiting for Guest Checkouts:** Public endpoints like `POST /api/reservations` must be rate-limited by client IP in `api-gateway` via Redis to prevent automated seat reservation denial-of-service.
+5. **Secure Guest Ticket Access:** Guest ticket viewing and PDF downloads require validation of the unique, cryptographically secure `ticket_code` (and optional HMAC token) delivered via email to prevent enumeration.
+

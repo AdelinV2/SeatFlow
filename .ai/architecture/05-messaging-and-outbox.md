@@ -10,10 +10,11 @@ All Kafka topics are partitioned and keyed by their primary aggregate identifier
 
 | Topic Name | Producer(s) | Consumer(s) | Key | Purpose |
 |---|---|---|---|---|
+| `seatflow.user.events` | User Service | Ticket, Reservation | `userId` | User registered/first login (auto-claims historical guest tickets) |
 | `seatflow.reservation.events` | Reservation Service | Realtime, Notification | `reservationId` | Reservation held, expired, confirmed, or cancelled |
 | `seatflow.payment.events` | Payment Service | Ticket, Notification, Reservation | `paymentId` | Payment completed, failed, refunded |
 | `seatflow.ticket.events` | Ticket Service | Notification | `ticketId` | Ticket generated and issued |
-| `seatflow.seat.status.events` | (Removed/Deprecated) | | | Replaced by direct subscription to reservation and payment topics |
+| `seatflow.notification.events` | Multiple Services | Notification Service | `notificationId` | Internal notification triggers |
 
 *Note: The Realtime Service subscribes directly to `seatflow.reservation.events` and `seatflow.payment.events` lifecycle topics to broadcast WebSocket seat status updates.*
 
@@ -38,17 +39,31 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
 
 ### 2.2 Domain Event Payload Specifications
 
+#### `UserRegisteredEvent` (eventType: `"UserRegistered"`)
+```json
+{
+  "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "email": "customer@seatflow.com",
+  "fullName": "Alex Smith",
+  "registeredAt": "2026-08-24T10:00:00Z"
+}
+```
+*Note: Consumed by `ticket-service` and `reservation-service` to automatically link historical guest purchases (`WHERE customer_email = :email AND user_id IS NULL`).*
+
 #### `ReservationHeldEvent` (eventType: `"ReservationHeld"`)
 ```json
 {
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "customerName": "Alex Smith",
   "seatIds": ["423e4567-e89b-12d3-a456-426614174000", "523e4567-e89b-12d3-a456-426614174000"],
   "expiresAt": "2026-08-23T14:45:00Z",
   "totalAmount": 150.00
 }
 ```
+*Note: `userId` is `null` when a guest creates the reservation without an account.*
 
 #### `ReservationExpiredEvent` (eventType: `"ReservationExpired"`)
 ```json
@@ -66,12 +81,14 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "paymentId": "723e4567-e89b-12d3-a456-426614174000",
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "amount": 150.00,
   "currency": "USD",
   "stripePaymentId": "pi_3Nsk2e2eZvKYlo2C1gQ"
 }
 ```
+*Note: `userId` is `null` for guest payments.*
 
 #### `TicketIssuedEvent` (eventType: `"TicketIssued"`)
 ```json
@@ -79,12 +96,15 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "ticketId": "823e4567-e89b-12d3-a456-426614174000",
   "reservationId": "123e4567-e89b-12d3-a456-426614174000",
   "userId": "323e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "attendeeName": "Alex Smith",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "seatId": "423e4567-e89b-12d3-a456-426614174000",
   "ticketCode": "SF-TKT-9876-ABCD",
   "qrCodeData": "SF://TKT/9876-ABCD/SIGNATURE"
 }
 ```
+*Note: `userId` is `null` for guest tickets.*
 
 #### `SeatStatusUpdatedEvent` (eventType: `"SeatStatusUpdated"`)
 ```json

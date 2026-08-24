@@ -511,12 +511,18 @@ public class Reservation {
 All request and response DTOs must be **Java Records**, not classes.
 
 ```java
-// Request record
+// Request record (Supports both Guest and Authenticated flows)
 @Schema(description = "Request body for creating a reservation")
 public record CreateReservationRequest(
 
     @Schema(description = "Event ID", example = "123e4567-e89b-12d3-a456-426614174000")
     @NotNull UUID eventId,
+
+    @Schema(description = "Customer email (required for guest checkouts, optional if authenticated)", example = "customer@seatflow.com")
+    @Email String customerEmail,
+
+    @Schema(description = "Customer/Attendee full name", example = "Alex Smith")
+    String customerName,
 
     @Schema(description = "Seat IDs to reserve. Maximum 10.")
     @NotEmpty @Size(max = 10) List<@NotNull UUID> seatIds,
@@ -530,8 +536,12 @@ public record CreateReservationRequest(
 @Schema(description = "Reservation confirmation")
 public record ReservationResponse(
     UUID id,
+    UUID eventId,
+    String customerEmail,
+    String customerName,
     ReservationStatus status,
     Instant expiresAt,
+    BigDecimal totalAmount,
     List<SeatSummary> seats
 ) {}
 ```
@@ -550,22 +560,18 @@ public class ReservationController {
     private final ReservationService reservationService;
 
     @PostMapping
-    @Operation(summary = "Create a seat reservation")
+    @Operation(summary = "Create a seat reservation (Guest or Authenticated)")
     @ApiResponse(responseCode = "201", description = "Created",
         content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
     @ApiResponse(responseCode = "409", description = "Seat not available",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "400", description = "Validation error",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    @ApiResponse(responseCode = "401", description = "Unauthorized",
-        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<ReservationResponse> createReservation(
-            @Valid @RequestBody CreateReservationRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
-        String userId = UserContext.getCurrentUserId()
-                .orElseThrow(() -> new BusinessException("User ID not found in token", ErrorCode.UNAUTHORIZED, 401));
+            @Valid @RequestBody CreateReservationRequest request) {
+        Optional<String> userId = UserContext.getCurrentUserId();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(reservationService.createReservation(request, userId));
+                .body(reservationService.createReservation(request, userId.orElse(null)));
     }
 }
 ```

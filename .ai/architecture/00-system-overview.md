@@ -17,10 +17,11 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 2. View event details (dates, description, venue layout, pricing tiers).
 3. Select up to **10 available seats** concurrently on an interactive seat map.
 4. Place a temporary **15-minute hold** on the selected seats.
-5. Complete payment via Stripe (using Payment Intents and webhooks).
-6. Receive email purchase confirmation and digital tickets with QR codes (ZXing).
-7. View historical orders and upcoming tickets in the user profile area.
-8. Receive real-time seat availability updates via WebSockets without page reloads.
+5. Complete checkout seamlessly as a **Registered User** or as a **Guest** (providing only an email address and name, without creating an account).
+6. Complete payment via Stripe (using Payment Intents and webhooks).
+7. Receive email purchase confirmation and digital tickets with QR codes (ZXing) and secure access link.
+8. View historical orders and upcoming tickets in the user profile area (for registered users) or via secure link (for guests).
+9. Receive real-time seat availability updates via WebSockets without page reloads.
 
 ### 1.2 Administrator Capabilities
 1. Create and manage events, dates, and descriptions.
