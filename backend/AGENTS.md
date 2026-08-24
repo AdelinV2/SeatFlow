@@ -158,13 +158,27 @@ websocket/      → WebSocket STOMP handlers (Realtime Service)
 
 ## 5. Layer-by-Layer Code Standards
 
-### 5.1 JPA Entities
+### 5.1 JPA Entities & Database Schema Standards
 
 Use explicit Lombok annotations — **NEVER `@Data` on entities** (breaks JPA proxies, lazy loading, and `equals`/`hashCode`).
 
+Every JPA entity must declare its table name, explicit unique constraints, and indexes using `@Table` matching the Flyway DDL specifications (see [ADR-002](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md)):
+
 ```java
 @Entity
-@Table(name = "reservations")
+@Table(
+    name = "reservations",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_reservations_idempotency_key", columnNames = {"idempotency_key"})
+    },
+    indexes = {
+        @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
+        @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+        @Index(name = "idx_res_user_status", columnList = "user_id, status"),
+        @Index(name = "idx_res_customer_email", columnList = "customer_email"),
+        @Index(name = "idx_res_created_at", columnList = "created_at")
+    }
+)
 @Getter
 @Setter
 @Builder
@@ -176,43 +190,58 @@ public class Reservation {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id")
+    private UUID userId; // Nullable for guest checkouts (ADR-001)
+
+    @Column(name = "customer_email", nullable = false)
+    private String customerEmail;
+
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "event_id", nullable = false)
     private UUID eventId;
 
-    @Column(nullable = false)
-    private UUID userId;
-
-    @Column(nullable = false)
+    @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)
     private ReservationStatus status;
 
-    @Column(nullable = false)
+    @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
-    @Column(unique = true)
+    @Column(name = "idempotency_key", nullable = false, unique = true)
     private String idempotencyKey;
 
-    @Version
-    private Long version;  // for optimistic locking
+    @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalAmount;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "seat_count", nullable = false)
+    @Builder.Default
+    private Integer seatCount = 1;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;  // for optimistic concurrency control
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(nullable = false)
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = Instant.now();
-        this.updatedAt = Instant.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = Instant.now();
-    }
 }
 ```
+
+#### DDL & Flyway Database Rules (ADR-002)
+- **Primary Keys:** `UUID PRIMARY KEY DEFAULT gen_random_uuid()` named `pk_<table>`.
+- **Foreign Keys:** Named `fk_<table>_<referenced_table>` with explicit `ON DELETE CASCADE` or `ON DELETE RESTRICT`.
+- **Unique Constraints:** Named `uq_<table>_<column(s)>`.
+- **Indexes:** Named `idx_<table>_<column(s)>`.
+- **Partial Indexes:** Mandatory for high-frequency polling/scheduling queries (e.g. `idx_res_pending_expires_at ON reservations(expires_at ASC) WHERE status = 'PENDING'`).
+- **Check Constraints:** Named `chk_<table>_<field_or_rule>` for business invariants (e.g. `chk_res_seat_count CHECK (seat_count >= 1 AND seat_count <= 10)`).
+- **Optimistic Locking:** Mandatory `@Version private Long version;` on all mutable transaction roots (`events`, `reservations`, `payments`, `tickets`, `venues`).
+- **Exception Mapping:** In `common-observability`, database integrity violations (`DataIntegrityViolationException` / PostgreSQL SQLState `23505`, `23503`, `23514`) are automatically mapped to `ConflictException` (`SEAT_ALREADY_RESERVED`, `DUPLICATE_RESOURCE`) or `ValidationException`.
 
 Rules:
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — JPA requires it; never make it public.
@@ -429,16 +458,20 @@ Never publish directly to Kafka within a business transaction (`dual-write hazar
 
 ```sql
 CREATE TABLE outbox_events (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id            UUID         NOT NULL DEFAULT gen_random_uuid(),
     aggregate_id  UUID         NOT NULL,
     event_type    VARCHAR(100) NOT NULL,
     payload       JSONB        NOT NULL,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     published_at  TIMESTAMPTZ,
     retry_count   INT          NOT NULL DEFAULT 0,
-    CONSTRAINT max_retries CHECK (retry_count <= 5)
+
+    CONSTRAINT pk_outbox_events PRIMARY KEY (id),
+    CONSTRAINT chk_outbox_retry_count CHECK (retry_count >= 0 AND retry_count <= 5)
 );
-CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at) WHERE published_at IS NULL;
+
+CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at ASC) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_aggregate ON outbox_events(aggregate_id, created_at DESC);
 ```
 
 Publisher Job:

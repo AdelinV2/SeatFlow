@@ -476,11 +476,25 @@ Each service owns its own Flyway migrations under its own `resources/db/migratio
 
 These standards apply to every business microservice. Agents implementing tasks must follow them without deviation.
 
-### Entities — Lombok (explicit, never `@Data`)
+### Entities — Lombok (explicit, never `@Data`) & Schema Integrity
+
+Every JPA entity must declare its table name, explicit unique constraints, and indexes using `@Table` matching the Flyway DDL specifications (see [ADR-002](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md)):
 
 ```java
 @Entity
-@Table(name = "reservations")
+@Table(
+    name = "reservations",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_reservations_idempotency_key", columnNames = {"idempotency_key"})
+    },
+    indexes = {
+        @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
+        @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+        @Index(name = "idx_res_user_status", columnList = "user_id, status"),
+        @Index(name = "idx_res_customer_email", columnList = "customer_email"),
+        @Index(name = "idx_res_created_at", columnList = "created_at")
+    }
+)
 @Getter
 @Setter
 @Builder
@@ -491,12 +505,40 @@ public class Reservation {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id")
+    private UUID userId; // Nullable for guest checkouts (ADR-001)
+
+    @Column(name = "customer_email", nullable = false)
+    private String customerEmail;
+
+    @Column(name = "event_id", nullable = false)
+    private UUID eventId;
+
+    @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)
     private ReservationStatus status;
 
+    @Column(name = "expires_at", nullable = false)
+    private Instant expiresAt;
+
+    @Column(name = "idempotency_key", nullable = false, unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "seat_count", nullable = false)
+    @Builder.Default
+    private Integer seatCount = 1;
+
     @Version
-    private Long version; // optimistic locking where required
+    @Column(nullable = false)
+    private Long version; // optimistic concurrency control
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 }
 ```
 
@@ -1207,17 +1249,20 @@ Each event-producing service owns its own outbox table:
 
 ```sql
 CREATE TABLE outbox_events (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id            UUID         NOT NULL DEFAULT gen_random_uuid(),
     aggregate_id  UUID         NOT NULL,
     event_type    VARCHAR(100) NOT NULL,
     payload       JSONB        NOT NULL,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     published_at  TIMESTAMPTZ,
     retry_count   INT          NOT NULL DEFAULT 0,
-    CONSTRAINT max_retries CHECK (retry_count <= 5)
+
+    CONSTRAINT pk_outbox_events PRIMARY KEY (id),
+    CONSTRAINT chk_outbox_retry_count CHECK (retry_count >= 0 AND retry_count <= 5)
 );
 
-CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_unpublished ON outbox_events(created_at ASC) WHERE published_at IS NULL;
+CREATE INDEX idx_outbox_aggregate ON outbox_events(aggregate_id, created_at DESC);
 ```
 
 ### Publisher Implementation
