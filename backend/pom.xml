@@ -34,7 +34,7 @@
         <springdoc-openapi.version>3.0.0</springdoc-openapi.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
         <micrometer-registry-prometheus.version>1.17.0</micrometer-registry-prometheus.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+		<testcontainers.version>1.21.4</testcontainers.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>

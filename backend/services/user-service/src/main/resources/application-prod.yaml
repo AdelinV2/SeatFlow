@@ -10,7 +10,7 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
       acks: all
       retries: 3
   security:
