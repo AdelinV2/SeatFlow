@@ -30,7 +30,7 @@ To maintain consistency and simplify database operations, all database objects f
 Every Spring Data JPA entity must adhere to the following production rules:
 1. **Explicit `@Table` Metadata:** Always specify `name`, `uniqueConstraints`, and `indexes` matching the Flyway DDL specifications.
 2. **Dynamic Updates (`@DynamicUpdate`):** Enable on high-write mutable entities (`Reservation`, `Payment`, `Event`) so Hibernate executes minimal SQL `UPDATE` statements containing only dirty columns.
-3. **Hibernate `@Check` Reflection:** Annotate entities with `@Check(constraints = "...")` to mirror schema check constraints.
+3. **Flyway DDL Constraint Ownership:** All database check constraints (`chk_...`), foreign keys, and indexes are defined exclusively in Flyway SQL migrations (`db/migration/V...__...sql`). Never use deprecated vendor annotations like `@org.hibernate.annotations.Check` (deprecated since Hibernate 7). Enforce application-level validation via Jakarta Bean Validation in DTOs.
 4. **Hibernate-Safe `equals()` & `hashCode()` (NEVER `@EqualsAndHashCode` or `@Data`):** Implement explicit `equals()` using `Hibernate.getClass(this) != Hibernate.getClass(o)` with null-safe `getId()` comparison, and `hashCode()` returning `getClass().hashCode()` to avoid breaking Hibernate proxy equality or Set bucket hash stability.
 5. **ToString & Logging Safety (`@ToString`):** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relationship fields (`@ManyToOne`, `@OneToMany`) to prevent triggering lazy-loading and N+1 query loops.
 6. **Native JSONB Mapping:** Map PostgreSQL JSONB columns using `@JdbcTypeCode(SqlTypes.JSON)` (e.g. `payload` in `OutboxEvent`).

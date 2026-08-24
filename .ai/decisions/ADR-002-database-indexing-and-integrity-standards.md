@@ -89,7 +89,7 @@ To ensure application code perfectly mirrors database-level guarantees without p
        }
    )
    ```
-2. **Schema Invariant Reflection (`@Check`):** Reflect database `CHECK` constraints on entities via Hibernate `@Check(constraints = "...")`.
+2. **Flyway DDL Constraint Ownership (No Deprecated Annotations):** All database `CHECK` constraints (`chk_...`), foreign keys, and indexes are defined exclusively in Flyway SQL migrations. Do NOT use deprecated vendor annotations like `@org.hibernate.annotations.Check` (deprecated since Hibernate 7). Enforce application-level validation via Jakarta Bean Validation in DTOs.
 3. **`@DynamicUpdate` for High-Write Aggregates:** Generates targeted SQL `UPDATE` statements containing only dirty columns, reducing row lock contention.
 4. **Hibernate-Safe `equals()` and `hashCode()` (NEVER Lombok `@EqualsAndHashCode` or `@Data` on JPA entities):** Lombok's generated `equals()` uses strict `getClass() != o.getClass()` checks which break when comparing Hibernate dynamic runtime proxies (e.g. lazy-loaded entities). It also accesses private fields directly instead of getters (`getId()`) and produces mutable hash codes that break `HashSet` / `HashMap` contracts upon persistence. Always implement explicit `equals(Object o)` checking `Hibernate.getClass(this) != Hibernate.getClass(o)` with `getId()` comparison, and `hashCode()` returning `getClass().hashCode()`.
 5. **Safe Logging (`@ToString`):** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude entity associations to avoid triggering lazy-loading or N+1 queries during logger calls.

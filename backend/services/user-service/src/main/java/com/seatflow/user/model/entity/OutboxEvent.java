@@ -6,7 +6,6 @@ import org.hibernate.Hibernate;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.Check;
 import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.Objects;
@@ -21,7 +20,6 @@ import java.util.UUID;
         @Index(name = "idx_outbox_published_at", columnList = "published_at")
     }
 )
-@Check(constraints = "retry_count <= 5")
 @Getter
 @Setter
 @Builder

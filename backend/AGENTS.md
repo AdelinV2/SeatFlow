@@ -179,7 +179,6 @@ Every JPA entity must declare its table name, explicit unique constraints, and i
         @Index(name = "idx_res_created_at", columnList = "created_at")
     }
 )
-@Check(constraints = "seat_count >= 1 AND seat_count <= 10")
 @DynamicUpdate // Generates targeted SQL UPDATEs for modified columns only, reducing lock contention
 @Getter
 @Setter
@@ -267,18 +266,19 @@ public class Reservation {
 
 #### Production Entity Standards Checklist:
 1. **Hibernate-Safe `equals()` and `hashCode()` (NEVER Lombok `@EqualsAndHashCode` or `@Data` on JPA entities):**
-   - Lombok generates strict `getClass() != o.getClass()` checks that break with Hibernate dynamic proxies (lazy-loaded associations).
+   - Lombok generates strict `getClass() != o.getClass()` checks that break with Hibernate dynamic runtime proxies (lazy-loaded associations).
    - Lombok accesses fields directly instead of getters (`getId()`), returning uninitialized `null` on proxies.
    - Lombok's ID-based hashCode mutates when transient entities are persisted, corrupting `HashSet` and `HashMap` bucket structures.
    - **Mandatory Pattern:** Always implement explicit `equals(Object o)` with `Hibernate.getClass(this) != Hibernate.getClass(o)` and `getId()` null-safe comparison, paired with `hashCode()` returning `getClass().hashCode()`.
-2. **Logging & ToString Safety:** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude `@OneToMany`/`@ManyToOne` associations to avoid accidental lazy loading or N+1 queries during logger calls.
+2. **Logging & ToString Safety:** Use `@ToString(onlyExplicitlyIncluded = true)` with `@ToString.Include` only on scalar identifiers/fields (never lazy relations) to avoid accidental lazy loading or N+1 queries during logger calls.
 3. **`@DynamicUpdate`:** Enable on high-write / high-concurrency entities (`Reservation`, `Payment`, `Event`) to execute minimal SQL `UPDATE` statements containing only dirty columns.
-4. **JSONB Mapping:** Map PostgreSQL `JSONB` columns (such as `payload` in `OutboxEvent`) using `@JdbcTypeCode(SqlTypes.JSON)`.
-5. **Column Immutability:** Explicitly declare `updatable = false` on immutable identifiers (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`).
-6. **Financial Precision:** Currency amounts must use `BigDecimal` with `@Column(precision = 10, scale = 2)`.
-7. **Constructor Visibility:** Always `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA; never make it public.
-8. **Enum Mapping:** Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
-9. **Primary Key Strategy:** Always `GenerationType.UUID`.
+4. **Flyway DDL Constraint Ownership (No Deprecated Annotations):** All database `CHECK` constraints (`chk_...`), foreign keys, and indexes are defined exclusively in Flyway SQL migrations (`db/migration/V...__...sql`). Never use deprecated vendor annotations like `@org.hibernate.annotations.Check` (deprecated since Hibernate 7). Enforce application-level constraints with Jakarta Bean Validation (`@NotNull`, `@Size`, `@Min`, `@Max`, `@Pattern`) in DTOs.
+5. **JSONB Mapping:** Map PostgreSQL `JSONB` columns (such as `payload` in `OutboxEvent`) using `@JdbcTypeCode(SqlTypes.JSON)`.
+6. **Column Immutability:** Explicitly declare `updatable = false` on immutable identifiers (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`).
+7. **Financial Precision:** Currency amounts must use `BigDecimal` with `@Column(precision = 10, scale = 2)`.
+8. **Constructor Visibility:** Always `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA; never make it public.
+9. **Enum Mapping:** Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
+10. **Primary Key Strategy:** Always `GenerationType.UUID`.
 
 
 ### 5.2 DTOs (Request / Response)

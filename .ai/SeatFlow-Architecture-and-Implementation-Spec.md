@@ -495,19 +495,16 @@ Every JPA entity must declare its table name, explicit unique constraints, and i
         @Index(name = "idx_res_created_at", columnList = "created_at")
     }
 )
-@Check(constraints = "seat_count >= 1 AND seat_count <= 10")
 @DynamicUpdate // Generates targeted SQL UPDATEs for modified columns only, reducing lock contention
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
 public class Reservation {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @EqualsAndHashCode.Include
     @ToString.Include
     private UUID id;
 
