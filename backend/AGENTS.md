@@ -179,37 +179,48 @@ Every JPA entity must declare its table name, explicit unique constraints, and i
         @Index(name = "idx_res_created_at", columnList = "created_at")
     }
 )
+@Check(constraints = "seat_count >= 1 AND seat_count <= 10")
+@DynamicUpdate // Generates targeted SQL UPDATEs for modified columns only, reducing lock contention
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 public class Reservation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
+    @ToString.Include
     private UUID id;
 
-    @Column(name = "user_id")
+    @Column(name = "user_id", updatable = false)
+    @ToString.Include
     private UUID userId; // Nullable for guest checkouts (ADR-001)
 
-    @Column(name = "customer_email", nullable = false)
+    @Column(name = "customer_email", nullable = false, updatable = false)
+    @ToString.Include
     private String customerEmail;
 
     @Column(name = "customer_name")
     private String customerName;
 
-    @Column(name = "event_id", nullable = false)
+    @Column(name = "event_id", nullable = false, updatable = false)
+    @ToString.Include
     private UUID eventId;
 
     @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)
+    @ToString.Include
     private ReservationStatus status;
 
     @Column(name = "expires_at", nullable = false)
+    @ToString.Include
     private Instant expiresAt;
 
-    @Column(name = "idempotency_key", nullable = false, unique = true)
+    @Column(name = "idempotency_key", nullable = false, unique = true, updatable = false)
     private String idempotencyKey;
 
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
@@ -243,12 +254,17 @@ public class Reservation {
 - **Optimistic Locking:** Mandatory `@Version private Long version;` on all mutable transaction roots (`events`, `reservations`, `payments`, `tickets`, `venues`).
 - **Exception Mapping:** In `common-observability`, database integrity violations (`DataIntegrityViolationException` / PostgreSQL SQLState `23505`, `23503`, `23514`) are automatically mapped to `ConflictException` (`SEAT_ALREADY_RESERVED`, `DUPLICATE_RESOURCE`) or `ValidationException`.
 
-Rules:
-- `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — JPA requires it; never make it public.
-- `@Version` — mandatory where optimistic concurrency control is required.
-- `@Column(nullable = false)` — explicitly declare nullability on every column.
-- `@Enumerated(EnumType.STRING)` — always STRING, never ORDINAL.
-- `GenerationType.UUID` — standard primary key strategy across all microservices.
+#### Production Entity Standards Checklist:
+1. **Lombok Equality Safety:** Always `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` exclusively on the `@Id` field. Never use `@Data` or full-field equality (causes `LazyInitializationException` and recursive hashCode loops on entity associations).
+2. **Logging & ToString Safety:** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude `@OneToMany`/`@ManyToOne` associations to avoid accidental lazy loading or N+1 queries during logger calls.
+3. **`@DynamicUpdate`:** Enable on high-write / high-concurrency entities (`Reservation`, `Payment`, `Event`) to execute minimal SQL `UPDATE` statements containing only dirty columns.
+4. **JSONB Mapping:** Map PostgreSQL `JSONB` columns (such as `payload` in `OutboxEvent`) using `@JdbcTypeCode(SqlTypes.JSON)`.
+5. **Column Immutability:** Explicitly declare `updatable = false` on immutable identifiers (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`).
+6. **Financial Precision:** Currency amounts must use `BigDecimal` with `@Column(precision = 10, scale = 2)`.
+7. **Constructor Visibility:** Always `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA; never make it public.
+8. **Enum Mapping:** Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
+9. **Primary Key Strategy:** Always `GenerationType.UUID`.
+
 
 ### 5.2 DTOs (Request / Response)
 
