@@ -31,7 +31,7 @@ Every Spring Data JPA entity must adhere to the following production rules:
 1. **Explicit `@Table` Metadata:** Always specify `name`, `uniqueConstraints`, and `indexes` matching the Flyway DDL specifications.
 2. **Dynamic Updates (`@DynamicUpdate`):** Enable on high-write mutable entities (`Reservation`, `Payment`, `Event`) so Hibernate executes minimal SQL `UPDATE` statements containing only dirty columns.
 3. **Hibernate `@Check` Reflection:** Annotate entities with `@Check(constraints = "...")` to mirror schema check constraints.
-4. **Lombok Equality Safety (`@EqualsAndHashCode`):** Always use `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` exclusively on the `@Id` field. Never use `@Data` or implicit equality.
+4. **Hibernate-Safe `equals()` & `hashCode()` (NEVER `@EqualsAndHashCode` or `@Data`):** Implement explicit `equals()` using `Hibernate.getClass(this) != Hibernate.getClass(o)` with null-safe `getId()` comparison, and `hashCode()` returning `getClass().hashCode()` to avoid breaking Hibernate proxy equality or Set bucket hash stability.
 5. **ToString & Logging Safety (`@ToString`):** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relationship fields (`@ManyToOne`, `@OneToMany`) to prevent triggering lazy-loading and N+1 query loops.
 6. **Native JSONB Mapping:** Map PostgreSQL JSONB columns using `@JdbcTypeCode(SqlTypes.JSON)` (e.g. `payload` in `OutboxEvent`).
 7. **Column Immutability (`updatable = false`):** Mark immutable attributes (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`) with `@Column(..., updatable = false)`.

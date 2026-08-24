@@ -556,12 +556,25 @@ public class Reservation {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+        Reservation that = (Reservation) o;
+        return getId() != null && Objects.equals(getId(), that.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
 ```
 
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA, prevents accidental public no-arg construction.
-- Never use `@Data` on JPA entities (breaks proxy, equals/hashCode).
-- Always use `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` on `@Id` only.
+- Never use `@Data` or `@EqualsAndHashCode` on JPA entities (breaks Hibernate dynamic proxies and changes hash codes upon persistence).
+- Always implement explicit `equals(Object o)` using `Hibernate.getClass(this) != Hibernate.getClass(o)` with `getId()` comparison, paired with constant `hashCode()` returning `getClass().hashCode()`.
 - Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relations to avoid lazy-loading loops and N+1 logging overhead.
 - Use `@DynamicUpdate` on mutable entities to minimize update lock contention.
 - Map JSONB columns with `@JdbcTypeCode(SqlTypes.JSON)`.

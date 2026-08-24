@@ -186,13 +186,11 @@ Every JPA entity must declare its table name, explicit unique constraints, and i
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
 public class Reservation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @EqualsAndHashCode.Include
     @ToString.Include
     private UUID id;
 
@@ -241,6 +239,19 @@ public class Reservation {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
+        Reservation that = (Reservation) o;
+        return getId() != null && Objects.equals(getId(), that.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
 ```
 
@@ -255,7 +266,11 @@ public class Reservation {
 - **Exception Mapping:** In `common-observability`, database integrity violations (`DataIntegrityViolationException` / PostgreSQL SQLState `23505`, `23503`, `23514`) are automatically mapped to `ConflictException` (`SEAT_ALREADY_RESERVED`, `DUPLICATE_RESOURCE`) or `ValidationException`.
 
 #### Production Entity Standards Checklist:
-1. **Lombok Equality Safety:** Always `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` exclusively on the `@Id` field. Never use `@Data` or full-field equality (causes `LazyInitializationException` and recursive hashCode loops on entity associations).
+1. **Hibernate-Safe `equals()` and `hashCode()` (NEVER Lombok `@EqualsAndHashCode` or `@Data` on JPA entities):**
+   - Lombok generates strict `getClass() != o.getClass()` checks that break with Hibernate dynamic proxies (lazy-loaded associations).
+   - Lombok accesses fields directly instead of getters (`getId()`), returning uninitialized `null` on proxies.
+   - Lombok's ID-based hashCode mutates when transient entities are persisted, corrupting `HashSet` and `HashMap` bucket structures.
+   - **Mandatory Pattern:** Always implement explicit `equals(Object o)` with `Hibernate.getClass(this) != Hibernate.getClass(o)` and `getId()` null-safe comparison, paired with `hashCode()` returning `getClass().hashCode()`.
 2. **Logging & ToString Safety:** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude `@OneToMany`/`@ManyToOne` associations to avoid accidental lazy loading or N+1 queries during logger calls.
 3. **`@DynamicUpdate`:** Enable on high-write / high-concurrency entities (`Reservation`, `Payment`, `Event`) to execute minimal SQL `UPDATE` statements containing only dirty columns.
 4. **JSONB Mapping:** Map PostgreSQL `JSONB` columns (such as `payload` in `OutboxEvent`) using `@JdbcTypeCode(SqlTypes.JSON)`.
