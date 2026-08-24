@@ -23,12 +23,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class UserServiceImpl implements UserService {
+
+    private static final String USER_REGISTERED_EVENT = "UserRegistered";
 
     private final UserRepository userRepository;
     private final OutboxEventRepository outboxEventRepository;
@@ -38,36 +41,20 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserProfileResponse getOrCreateUserProfile(String externalId, String email) {
-        log.debug("Resolving user profile. externalId={}, email={}", externalId, email);
-
-        return userRepository.findByExternalId(externalId)
-                .map(existingUser -> {
-                    log.debug("Existing user found. userId={}, externalId={}", existingUser.getId(), externalId);
-                    return userMapper.toResponse(existingUser);
-                })
-                .orElseGet(() -> {
-                    log.info("JIT provisioning new user. externalId={}, email={}", externalId, email);
-                    User newUser = createUserFromJwtClaims(externalId, email);
-                    writeUserRegisteredOutboxEvent(newUser);
-                    return userMapper.toResponse(newUser);
-                });
+        return userMapper.toResponse(getOrProvisionUser(externalId, email));
     }
 
     @Override
     @Transactional
     public UserProfileResponse updateUserProfile(String externalId, String email, UpdateUserProfileRequest request) {
-        User user = userRepository.findByExternalId(externalId)
-                .orElseGet(() -> {
-                    log.info("JIT provisioning on profile update. externalId={}, email={}", externalId, email);
-                    User newUser = createUserFromJwtClaims(externalId, email);
-                    writeUserRegisteredOutboxEvent(newUser);
-                    return newUser;
-                });
+        User user = getOrProvisionUser(externalId, email);
 
-        if (request.phone() != null) {
-            user.setPhone(request.phone());
+        if (request.phone() == null) {
+            log.debug("No profile changes requested. userId={}, externalId={}", user.getId(), externalId);
+            return userMapper.toResponse(user);
         }
 
+        user.setPhone(request.phone());
         User updatedUser = userRepository.save(user);
         log.info("User profile updated. userId={}, externalId={}", updatedUser.getId(), externalId);
         return userMapper.toResponse(updatedUser);
@@ -77,7 +64,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public PagedResult<UserProfileResponse> getAllUsers(Pageable pageable) {
         Page<User> page = userRepository.findAll(pageable);
-        var content = page.getContent().stream()
+        List<UserProfileResponse> content = page.getContent().stream()
                 .map(userMapper::toResponse)
                 .toList();
         return PagedResult.of(content, page.getNumber(), page.getSize(), page.getTotalElements());
@@ -85,12 +72,25 @@ public class UserServiceImpl implements UserService {
 
     // ---- Private Helpers ----
 
+    private User getOrProvisionUser(String externalId, String email) {
+        return userRepository.findByExternalId(externalId)
+                .map(user -> {
+                    log.debug("Existing user resolved. userId={}, externalId={}", user.getId(), externalId);
+                    return user;
+                })
+                .orElseGet(() -> {
+                    log.info("JIT provisioning new user. externalId={}, email={}", externalId, email);
+                    User newUser = createUserFromJwtClaims(externalId, email);
+                    writeUserRegisteredOutboxEvent(newUser);
+                    return newUser;
+                });
+    }
+
     private User createUserFromJwtClaims(String externalId, String email) {
         User user = User.builder()
                 .externalId(externalId)
                 .email(email)
                 .build();
-
         return userRepository.saveAndFlush(user);
     }
 
@@ -101,10 +101,11 @@ public class UserServiceImpl implements UserService {
                 user.getCreatedAt()
         );
 
-        String correlationId = CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString());
+        String correlationId = CorrelationContext.getCorrelationId()
+                .orElseGet(() -> UUID.randomUUID().toString());
 
         EventEnvelope<UserRegisteredEvent> envelope = EventEnvelope.of(
-                "UserRegistered",
+                USER_REGISTERED_EVENT,
                 user.getId().toString(),
                 correlationId,
                 eventPayload
@@ -125,7 +126,7 @@ public class UserServiceImpl implements UserService {
 
         OutboxEvent outboxEvent = OutboxEvent.builder()
                 .aggregateId(user.getId())
-                .eventType("UserRegistered")
+                .eventType(USER_REGISTERED_EVENT)
                 .payload(payloadJson)
                 .build();
 
