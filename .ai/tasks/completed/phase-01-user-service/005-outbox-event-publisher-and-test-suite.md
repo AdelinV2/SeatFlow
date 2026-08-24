@@ -7,7 +7,7 @@
 - **Phase:** `Phase 01 - User Service`
 - **Related Specs:** `.ai/architecture/01-common-modules.md`, `.ai/architecture/05-messaging-and-outbox.md` (Section 3), `backend/AGENTS.md` (Section 7 & 10)
 - **Related ADRs:** None
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,26 +15,28 @@
 Implement the `OutboxEventPublisher` scheduled worker that polls unpublished events from `outbox_events` and publishes them to Kafka via `KafkaTemplate`. Additionally, implement the complete test suite covering unit tests (Mockito), repository slice tests (Testcontainers PostgreSQL), controller slice tests (`@WebMvcTest`), and end-to-end integration tests.
 
 ### Critical Invariants to Enforce:
-- [ ] Outbox publisher uses `@Scheduled(fixedDelayString = ...)` — NEVER `@Scheduled(fixedRate = ...)`.
-- [ ] Publisher sends events to `EventTopics.USER_EVENTS` (`seatflow.user.events`) topic.
-- [ ] Publisher uses aggregate ID as Kafka message key for partition ordering.
-- [ ] Failed Kafka sends increment `retry_count` — publisher does NOT throw and stop on individual failures.
-- [ ] Events exceeding `max_retries` (5) are skipped by the publisher (enforced by DB constraint).
-- [ ] Repository tests use Testcontainers PostgreSQL 16-alpine with `@DataJpaTest`.
-- [ ] Controller tests use `@WebMvcTest` with `spring-security-test` MockJwt.
-- [ ] No `@RestControllerAdvice` in test configuration — `GlobalExceptionHandler` is auto-configured.
+- [x] Outbox publisher uses `@Scheduled(fixedDelayString = ...)` — NEVER `@Scheduled(fixedRate = ...)`.
+- [x] Publisher sends events to `EventTopics.USER_EVENTS` (`seatflow.user.events`) topic.
+- [x] Publisher uses aggregate ID as Kafka message key for partition ordering.
+- [x] Failed Kafka sends increment `retry_count` — publisher does NOT throw and stop on individual failures.
+- [x] Events exceeding `max_retries` (5) are skipped by the publisher (enforced by DB constraint).
+- [x] Repository tests use Testcontainers PostgreSQL 16-alpine with `@DataJpaTest`.
+- [x] Controller tests use `@WebMvcTest` with `spring-security-test` MockJwt.
+- [x] No `@RestControllerAdvice` in test configuration — `GlobalExceptionHandler` is auto-configured.
 
 ---
 
 ## 3. Exact File Inventory
 
 - `[NEW]` `src/main/java/com/seatflow/user/messaging/producer/OutboxEventPublisher.java`
+- `[NEW]` `src/test/java/com/seatflow/user/messaging/producer/OutboxEventPublisherTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/service/UserServiceImplTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/repository/UserRepositoryTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/repository/OutboxEventRepositoryTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/web/controller/UserControllerTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/web/controller/AdminUserControllerTest.java`
 - `[NEW]` `src/test/java/com/seatflow/user/integration/UserServiceIntegrationTest.java`
+- `[NEW]` `src/main/resources/db/migration/V5__add_users_email_format_check.sql`
 
 All paths relative to `backend/services/user-service/`.
 

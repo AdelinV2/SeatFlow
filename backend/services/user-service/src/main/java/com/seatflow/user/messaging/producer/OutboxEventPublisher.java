@@ -10,10 +10,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -32,6 +32,7 @@ public class OutboxEventPublisher {
     private int batchSize;
 
     @Scheduled(fixedDelayString = "${outbox.publisher.fixed-delay-ms:3000}")
+    @Transactional
     public void publishPendingEvents() {
         List<OutboxEvent> events = outboxEventRepository.findUnpublishedForUpdate(MAX_RETRY_COUNT, batchSize);
         if (events.isEmpty()) {

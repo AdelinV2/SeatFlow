@@ -18,6 +18,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -66,9 +68,25 @@ public class UserController {
 
     private String requireEmail(Jwt jwt) {
         String email = jwt.getClaimAsString("email");
-        if (email == null || email.isBlank()) {
-            throw new BusinessException("Email claim is required in the access token", ErrorCode.UNAUTHORIZED, 401);
+        if (email != null && !email.isBlank()) {
+            return email;
         }
-        return email;
+
+        String preferredUsername = jwt.getClaimAsString("preferred_username");
+        if (preferredUsername != null && !preferredUsername.isBlank()) {
+            return preferredUsername;
+        }
+
+        List<String> emails = jwt.getClaimAsStringList("emails");
+        if (emails != null && !emails.isEmpty() && emails.getFirst() != null && !emails.getFirst().isBlank()) {
+            return emails.getFirst();
+        }
+
+        String upn = jwt.getClaimAsString("upn");
+        if (upn != null && !upn.isBlank()) {
+            return upn;
+        }
+
+        throw new BusinessException("Email or user principal claim is required in the access token", ErrorCode.UNAUTHORIZED, 401);
     }
 }

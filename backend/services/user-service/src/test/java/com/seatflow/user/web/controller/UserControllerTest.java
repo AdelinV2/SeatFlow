@@ -89,4 +89,67 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.phone").value("+1-555-0199"));
     }
+
+    @Test
+    void shouldFallbackToPreferredUsernameWhenEmailClaimIsAbsent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserProfileResponse response = new UserProfileResponse(
+                userId, "preferred@example.com", null, Instant.now());
+
+        when(userService.getOrCreateUserProfile(eq("ext-pref"), eq("preferred@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/users/me")
+                        .with(jwt().jwt(j -> j
+                                .subject("ext-pref")
+                                .claim("preferred_username", "preferred@example.com")
+                                .claim("roles", java.util.List.of("ROLE_CUSTOMER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("preferred@example.com"));
+    }
+
+    @Test
+    void shouldFallbackToEmailsListClaimWhenEmailIsAbsent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserProfileResponse response = new UserProfileResponse(
+                userId, "list@example.com", null, Instant.now());
+
+        when(userService.getOrCreateUserProfile(eq("ext-list"), eq("list@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/users/me")
+                        .with(jwt().jwt(j -> j
+                                .subject("ext-list")
+                                .claim("emails", java.util.List.of("list@example.com"))
+                                .claim("roles", java.util.List.of("ROLE_CUSTOMER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("list@example.com"));
+    }
+
+    @Test
+    void shouldFallbackToUpnClaimWhenEmailIsAbsent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UserProfileResponse response = new UserProfileResponse(
+                userId, "upn@example.com", null, Instant.now());
+
+        when(userService.getOrCreateUserProfile(eq("ext-upn"), eq("upn@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/users/me")
+                        .with(jwt().jwt(j -> j
+                                .subject("ext-upn")
+                                .claim("upn", "upn@example.com")
+                                .claim("roles", java.util.List.of("ROLE_CUSTOMER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("upn@example.com"));
+    }
+
+    @Test
+    void shouldReject401WhenNoEmailOrUsernameClaimExists() throws Exception {
+        mockMvc.perform(get("/api/users/me")
+                        .with(jwt().jwt(j -> j
+                                .subject("ext-no-email")
+                                .claim("roles", java.util.List.of("ROLE_CUSTOMER")))))
+                .andExpect(status().isUnauthorized());
+    }
 }
