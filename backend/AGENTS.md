@@ -62,8 +62,8 @@ Follow this strict sequence for every backend task without skipping steps:
 
 ```
 0. Mandatory Branch Checkout:
-   git checkout -b feat/<task-id>-<description> develop
-1. Read the assigned task file from .ai/tasks/phase-X/XXX-task.md.
+   git checkout -b feat/p<XX>-<YYY>-<description> develop
+1. Read the assigned task file from .ai/tasks/phase-XX-<phase-name>/<YYY>-<task-name>.md.
 2. Identify target microservice and check shared abstractions in backend/common/:
    - common-domain (Base exceptions, ErrorCode, ApiErrorResponse, PagedResult)
    - common-events (EventEnvelope<T>, DomainEvent, EventHeaders, EventTopics)

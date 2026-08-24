@@ -22,7 +22,7 @@ SeatFlow is engineered through an autonomous, modular engineering pipeline:
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 2. BUILDER / IMPLEMENTER                                    │
-│ • Receives single task: .ai/tasks/phase-X/XXX-task.md       │
+│ • Receives single task: .ai/tasks/phase-XX-<name>/XXX-task.md│
 │ • Reads stack rules in backend/AGENTS.md or frontend/AGENTS.md│
 │ • Strictly executes the implementation sequence             │
 │ • Writes production code + comprehensive unit/slice tests   │
@@ -127,7 +127,7 @@ Every engineer and agent must enforce these server-side invariants:
 6. **Idempotency Keys:** Mandatory on `POST /api/reservations` and `POST /api/payments`.
 7. **Environment Variable Configuration (`.env`):** Every microservice and the frontend must maintain a `.env.example` template with dummy defaults. Real `.env` files are local-only, strictly `.gitignore`d, and never committed. In Staging/Production, variables are injected via GCP Secret Manager and GitHub Environments.
 8. **Server-Side Authorization:** Never rely solely on frontend route guards. All endpoints must validate JWT roles server-side.
-9. **Mandatory Dedicated Branch per Task:** Never write code or modify files directly on `develop` or `main`. Every implementation task MUST start by checking out its dedicated feature branch (`feat/<task-id>-<desc>` from `develop`).
+9. **Mandatory Dedicated Branch per Task:** Never write code or modify files directly on `develop` or `main`. Every implementation task MUST start by checking out its dedicated feature branch (`feat/p<XX>-<YYY>-<desc>` from `develop`).
 
 ---
 
@@ -139,7 +139,7 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. FEATURE / FIX BRANCHES (Local Task Development)          │
-│ • feat/<task-id>-<description> (branched from develop)      │
+│ • feat/p<XX>-<YYY>-<desc> (branched from develop)           │
 │ • fix/<issue-name>                                          │
 │ • docs/<topic>, refactor/<scope>, test/<scope>              │
 └──────────────────────────────┬──────────────────────────────┘
@@ -163,7 +163,7 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
 
 - **`develop`** — Default integration and Staging branch. All feature PRs target `develop`. Auto-deploys to GCP Staging.
 - **`main`** — Protected Production branch. Deploys to GCP Production only via approved release PRs from `develop` or release tags (`v*.*.*`).
-- **`feat/<phase-or-task-id>-<description>`** — Feature branches created from `develop` (e.g. `feat/phase-00-foundation`, `feat/001-common-domain`).
+- **`feat/p<XX>-<YYY>-<description>`** — Feature branches created from `develop` with phase and task index (e.g. `feat/p01-001-user-entity`, `feat/p02-001-venue-models`).
 - **`fix/<issue-name>`** — Bug fixes targeting `develop`.
 - **`hotfix/<issue-name>`** — Critical production fixes branched directly from `main` and merged back into both `main` and `develop`.
 - **`docs/<topic>`** — Documentation, architecture, ADRs.
@@ -173,7 +173,7 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
 ### 6.2 GitHub Workflow & Environments
 1. **Mandatory Automatic Branch Checkout:** Before creating or modifying any code/files for a task, create a dedicated branch from `develop`:
    ```bash
-   git checkout -b feat/<task-id>-<description> develop
+   git checkout -b feat/p<XX>-<YYY>-<description> develop
    ```
 2. **Local Environment:** Copy `.env.example` to `.env` in the target service directory if not already created.
 3. **Execute & Test:** Follow the task specification and pass local unit/slice tests.
@@ -188,7 +188,50 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
 
 ---
 
-## 7. Global Definition of Done (DoD)
+## 7. Task Scoping & Naming Conventions
+
+All implementation tasks follow a standardized **phase-scoped hierarchy** to ensure zero naming collisions and infinite scalability across project phases:
+
+### 7.1 Hierarchy & Paths
+- **Phase Task Directory:** `.ai/tasks/phase-XX-<service-or-feature-name>/`
+- **Active Task File:** `.ai/tasks/phase-XX-<service-or-feature-name>/<YYY>-<task-description>.md`
+- **Completed Task File:** `.ai/tasks/completed/phase-XX-<service-or-feature-name>/<YYY>-<task-description>.md`
+- **Task Header & ID:** `# TASK-P<XX>-<YYY>: [Short Action-Oriented Title]`
+- **Git Feature Branch:** `feat/p<XX>-<YYY>-<task-description>`
+
+### 7.2 Numbering Rules
+1. **Phase Prefix (`P<XX>`):** Represents the 2-digit phase number (`P00`, `P01`, `P02`, ..., `P10`).
+2. **Task Number (`<YYY>`):** 3-digit sequence starting at `001` per phase (`001`, `002`, `003`...).
+3. **Phase Independence:** Each phase has its own task counter starting at `001`. Adding tasks to Phase 1 does not shift or impact task IDs in Phase 2.
+
+---
+
+## 8. Architecture Decision Records (ADRs) Protocol
+
+SeatFlow uses **Architecture Decision Records (ADRs)** located in `.ai/decisions/` to maintain the authoritative, immutable history of structural engineering choices.
+
+### 8.1 When an ADR is MANDATORY
+An Architect or Agent MUST create an ADR when:
+1. **Introducing a New Architectural Pattern:** (e.g., Transactional Outbox pattern, CQRS read model, Saga orchestration).
+2. **Technology / Library Selection:** Choosing between competing tools or libraries when multiple viable options exist (e.g., STOMP over WebSockets vs SSE, ZXing QR generation, Redis vs in-memory caching).
+3. **Modifying Domain Invariants or Policies:** Changes to critical business rules (e.g., altering the 15-minute seat hold timeout, changing the 10-seats-per-reservation limit, modifying concurrency locking models).
+4. **Cross-Cutting Shared Module Contracts:** Adding or modifying shared infrastructure abstractions in `backend/common/` (e.g., `common-security` authentication flow, `common-domain` error envelope contracts).
+5. **Data Storage & Consistency Trade-Offs:** Introducing distributed locks, database indexing strategies under high write contention, or schema migration patterns.
+
+### 8.2 When an ADR is NOT Required
+- Standard CRUD implementations following already documented service patterns.
+- Regular bug fixes and patches that do not alter the system topology or invariant rules.
+- Minor UI component styling or non-structural frontend refactoring.
+
+### 8.3 ADR Creation & Lifecycle Workflow
+1. **Template:** Copy [.ai/decisions/ADR-000-template.md](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/decisions/ADR-000-template.md) to `.ai/decisions/ADR-XXX-<short-title>.md` using a sequential 3-digit number.
+2. **Required Sections:** Complete Context, Decision, Alternatives Considered (with explicit pros/cons), Consequences (positive and negative trade-offs), and Implementation Notes.
+3. **Status Flow:** `PROPOSED` → `ACCEPTED` (upon implementation approval) → `DEPRECATED` | `SUPERSEDED by ADR-YYY`.
+4. **Task Linking:** Link the created ADR in Section 1 of the corresponding Task file (`Related ADRs:`).
+
+---
+
+## 9. Global Definition of Done (DoD)
 
 A task is considered **DONE** only when:
 - [ ] Code strictly satisfies the task specification without extra unrequested features.

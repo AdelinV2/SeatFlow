@@ -1,10 +1,12 @@
-# TASK-XXX: [Short Action-Oriented Title]
+# TASK-P<XX>-<YYY>: [Short Action-Oriented Title]
 
 ## 1. Task Metadata
+- **Task ID:** `TASK-P<XX>-<YYY>`
+- **Git Branch:** `feat/p<XX>-<YYY>-<short-description>`
 - **Target Module:** `backend/services/<service-name>` OR `frontend/src/app/...`
-- **Phase:** `Phase X - [Phase Name]`
+- **Phase:** `Phase <XX> - [Phase Name]` (e.g. `Phase 01 - User Service`)
 - **Related Specs:** `.ai/architecture/XX-[spec-name].md`
-- **Related ADRs:** `.ai/decisions/ADR-XXX-[decision].md`
+- **Related ADRs:** `.ai/decisions/ADR-XXX-[decision].md` (or `None`)
 - **Status:** `READY FOR IMPLEMENTATION` <!-- Options: DRAFT, READY FOR IMPLEMENTATION, IN PROGRESS, COMPLETED -->
 
 ---
@@ -82,4 +84,4 @@ mvn clean test -Dtest=ExampleServiceTest,ExampleIntegrationTest
 ```
 - [ ] Code compiles without warnings.
 - [ ] All unit and slice tests pass.
-- [ ] Task file is moved to `.ai/tasks/completed/<phase-name>/`.
+- [ ] Task file is moved to `.ai/tasks/completed/phase-XX-<phase-name>/<YYY>-<task-desc>.md`.

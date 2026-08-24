@@ -6,7 +6,7 @@
 
 ## 1. Goal & Rules of Engagement
 
-The Builder/Implementer role receives a single task specification (`.ai/tasks/phase-X/XXX-task.md`) and implements it with zero deviation.
+The Builder/Implementer role receives a single task specification (`.ai/tasks/phase-XX-<phase-name>/<YYY>-<task-name>.md`) and implements it with zero deviation.
 
 ### Non-Negotiable Rules:
 1. **Do not improvise architecture:** Follow the exact schema, method signatures, and directory layout given in the task file.
@@ -25,8 +25,8 @@ The Builder/Implementer role receives a single task specification (`.ai/tasks/ph
 
 ```
 1. Checkout a dedicated feature branch from develop:
-   git checkout -b feat/<task-id>-<description> develop
-2. Ingest the assigned task file from .ai/tasks/phase-X/XXX-task.md.
+   git checkout -b feat/p<XX>-<YYY>-<description> develop
+2. Ingest the assigned task file from .ai/tasks/phase-XX-<phase-name>/<YYY>-<task-name>.md.
 3. Ensure the local .env file exists in the target service (copy from .env.example).
 4. Verify dependent classes in backend/common/ (e.g. ApiErrorResponse, EventEnvelope).
 5. Write files one by one in the order specified in Section 5 of the task.
@@ -40,7 +40,7 @@ The Builder/Implementer role receives a single task specification (`.ai/tasks/ph
 8. If all tests pass:
    - Update .env.example if new environment variables were introduced.
    - Mark task checklist items as [x].
-   - Move task file to .ai/tasks/completed/<phase-name>/.
+   - Move task file to .ai/tasks/completed/phase-XX-<phase-name>/.
    - Commit changes: git commit -m "feat(<scope>): <description>"
-   - Push and open PR targeting develop: git push origin feat/<task-id>-<description>
+   - Push and open PR targeting develop: git push origin feat/p<XX>-<YYY>-<description>
 ```

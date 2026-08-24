@@ -46,8 +46,8 @@ Follow this strict sequence for every frontend task without skipping steps:
 
 ```
 0. Mandatory Branch Checkout:
-   git checkout -b feat/<task-id>-<description> develop
-1. Read assigned task file from .ai/tasks/phase-09-frontend-portal/ or specific phase.
+   git checkout -b feat/p<XX>-<YYY>-<description> develop
+1. Read assigned task file from .ai/tasks/phase-09-frontend-portal/ (e.g. 001-...).
 2. Ensure local .env file exists in frontend/ (copy from .env.example).
 3. Implement in this exact sequence:
    a. TypeScript Interfaces/Models (src/app/models/)
