@@ -3,30 +3,44 @@ package com.seatflow.user.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.UpdateTimestamp;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users", indexes = {
-    @Index(name = "idx_users_phone", columnList = "phone"),
-    @Index(name = "idx_users_created_at", columnList = "created_at")
-})
+@Table(
+    name = "users",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_users_external_id", columnNames = "external_id"),
+        @UniqueConstraint(name = "uq_users_email", columnNames = "email")
+    },
+    indexes = {
+        @Index(name = "idx_users_phone", columnList = "phone"),
+        @Index(name = "idx_users_created_at", columnList = "created_at")
+    }
+)
 @Getter
 @Setter
 @Builder
+@DynamicUpdate
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
+    @ToString.Include
+    @Column(updatable = false)
     private UUID id;
 
-    @Column(name = "external_id", nullable = false, unique = true)
+    @Column(name = "external_id", nullable = false)
     private String externalId;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String email;
 
     @Column(length = 50)

@@ -6,7 +6,7 @@
 - **Target Module:** `backend/services/user-service`
 - **Phase:** `Phase 01 - User Service`
 - **Related Specs:** `.ai/architecture/01-common-modules.md`, `.ai/architecture/03-database-models.md` (Section 2.1), `.ai/architecture/05-messaging-and-outbox.md` (Section 2.2: UserRegisteredEvent), `.ai/architecture/06-api-contracts.md` (Section 2.1)
-- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md` (Section 3.6)
+- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md` (Section 3.6), `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md` (§3.1, §3.2.4, §3.3)
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---
