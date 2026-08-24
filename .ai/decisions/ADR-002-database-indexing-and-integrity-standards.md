@@ -16,6 +16,7 @@ Without formal database-level unique constraints, partial indexes, check constra
 2. Background polling processes (e.g. 15-minute hold expiration sweeper, Transactional Outbox publishers) would perform expensive sequential scans across growing tables.
 3. Inconsistent constraint and index naming would make database troubleshooting and Flyway migration maintenance error-prone.
 4. JPA entity definitions might deviate from the physical database schema, degrading performance or failing to communicate DDL intent.
+5. Inappropriate Lombok annotations (such as `@Data` or implicit `@EqualsAndHashCode`) on JPA entities could trigger `LazyInitializationException`, recursive hash code loops, or accidental N+1 queries during logging.
 
 ## 3. Decision
 We establish a mandatory, platform-wide **Database Indexing, Constraint, and Integrity Architecture** across all PostgreSQL catalogs and Spring Data JPA entities:
@@ -68,22 +69,35 @@ All database objects must strictly follow explicit prefix conventions:
 6. **Ticket Validation & Gate Scanner Audit:**
    Introduce `ticket_validations` table in `seatflow_ticket` to record every scan event at entry gates with scanner device ID, timestamp, and verification outcome (`SUCCESS`, `ALREADY_USED`, `INVALID`, `CANCELLED`).
 
-### 3.3 JPA Entity `@Table` Mapping Rules
-All JPA entities must reflect these constraints in their annotations:
-```java
-@Entity
-@Table(
-    name = "seat_holds",
-    uniqueConstraints = {
-        @UniqueConstraint(name = "uq_active_seat_hold", columnNames = {"event_id", "seat_id"})
-    },
-    indexes = {
-        @Index(name = "idx_holds_reservation_id", columnList = "reservation_id"),
-        @Index(name = "idx_holds_event_seat", columnList = "event_id, seat_id"),
-        @Index(name = "idx_holds_event_status", columnList = "event_id, status")
-    }
-)
-```
+### 3.3 JPA Entity & Hibernate Standards Checklist
+To ensure application code perfectly mirrors database-level guarantees without performance degradation:
+
+1. **Explicit `@Table` Metadata:** Always define `name`, `uniqueConstraints`, and `indexes` matching Flyway DDL:
+   ```java
+   @Entity
+   @Table(
+       name = "reservations",
+       uniqueConstraints = {
+           @UniqueConstraint(name = "uq_reservations_idempotency_key", columnNames = {"idempotency_key"})
+       },
+       indexes = {
+           @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
+           @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+           @Index(name = "idx_res_user_status", columnList = "user_id, status"),
+           @Index(name = "idx_res_customer_email", columnList = "customer_email"),
+           @Index(name = "idx_res_created_at", columnList = "created_at")
+       }
+   )
+   ```
+2. **Schema Invariant Reflection (`@Check`):** Reflect database `CHECK` constraints on entities via Hibernate `@Check(constraints = "...")`.
+3. **`@DynamicUpdate` for High-Write Aggregates:** Generates targeted SQL `UPDATE` statements containing only dirty columns, reducing row lock contention.
+4. **Safe Lombok Equality (`@EqualsAndHashCode`):** Always `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` exclusively on the `@Id` field. **NEVER `@Data` on JPA entities.**
+5. **Safe Logging (`@ToString`):** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude entity associations to avoid triggering lazy-loading or N+1 queries during logger calls.
+6. **PostgreSQL JSONB Type Mapping:** Use `@JdbcTypeCode(SqlTypes.JSON)` for JSONB fields (e.g. `payload` in `OutboxEvent`).
+7. **Column Immutability:** Explicitly declare `updatable = false` on immutable identifiers (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`).
+8. **Monetary Precision:** Use `BigDecimal` with `@Column(precision = 10, scale = 2, nullable = false)`.
+9. **Protected Default Constructor:** Always `@NoArgsConstructor(access = AccessLevel.PROTECTED)` as required by JPA.
+10. **String Enum Persistence:** Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
 
 ## 4. Alternatives Considered
 1. **Application-Only Validation (e.g. Spring `@Valid` & Service Locks Only):**
@@ -107,6 +121,7 @@ All JPA entities must reflect these constraints in their annotations:
 - **Ultra-Fast Polling:** Hold sweeper and Outbox publishers scan only pending records, preserving database CPU and memory.
 - **Enterprise Consistency:** Uniform naming across all 7 databases accelerates onboarding, debugging, and migration reviews.
 - **Schema-Level Invariant Enforcement:** Core rules (10-seat limit, email syntax, non-negative amounts) are enforced even if bypassed at the API layer.
+- **Robust JPA Layer:** Elimination of `LazyInitializationException` and unnecessary dirty-checking update overhead.
 
 ### Negative / Trade-offs:
 - Minor write overhead on inserts/updates due to index maintenance (negligible compared to correctness benefits).

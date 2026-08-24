@@ -495,34 +495,51 @@ Every JPA entity must declare its table name, explicit unique constraints, and i
         @Index(name = "idx_res_created_at", columnList = "created_at")
     }
 )
+@Check(constraints = "seat_count >= 1 AND seat_count <= 10")
+@DynamicUpdate // Generates targeted SQL UPDATEs for modified columns only, reducing lock contention
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 public class Reservation {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
+    @ToString.Include
     private UUID id;
 
-    @Column(name = "user_id")
+    @Column(name = "user_id", updatable = false)
+    @ToString.Include
     private UUID userId; // Nullable for guest checkouts (ADR-001)
 
-    @Column(name = "customer_email", nullable = false)
+    @Column(name = "customer_email", nullable = false, updatable = false)
+    @ToString.Include
     private String customerEmail;
 
-    @Column(name = "event_id", nullable = false)
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "event_id", nullable = false, updatable = false)
+    @ToString.Include
     private UUID eventId;
 
     @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)
+    @ToString.Include
     private ReservationStatus status;
 
     @Column(name = "expires_at", nullable = false)
+    @ToString.Include
     private Instant expiresAt;
 
-    @Column(name = "idempotency_key", nullable = false, unique = true)
+    @Column(name = "idempotency_key", nullable = false, unique = true, updatable = false)
     private String idempotencyKey;
+
+    @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal totalAmount;
 
     @Column(name = "seat_count", nullable = false)
     @Builder.Default
@@ -544,6 +561,10 @@ public class Reservation {
 
 - `@NoArgsConstructor(access = AccessLevel.PROTECTED)` — required by JPA, prevents accidental public no-arg construction.
 - Never use `@Data` on JPA entities (breaks proxy, equals/hashCode).
+- Always use `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` on `@Id` only.
+- Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relations to avoid lazy-loading loops and N+1 logging overhead.
+- Use `@DynamicUpdate` on mutable entities to minimize update lock contention.
+- Map JSONB columns with `@JdbcTypeCode(SqlTypes.JSON)`.
 - Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
 - Use `@Version` where concurrent modification is possible.
 - Use `GenerationType.UUID` for primary keys.

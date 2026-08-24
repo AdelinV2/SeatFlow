@@ -26,6 +26,18 @@ To maintain consistency and simplify database operations, all database objects f
 | **Partial Index** | `idx_<table>_<purpose>` (with `WHERE`) | `idx_res_pending_expires_at`, `idx_outbox_events_unpub` |
 | **Check Constraint** | `chk_<table>_<field_or_rule>` | `chk_res_seat_count`, `chk_pricing_price` |
 
+### 1.3 JPA Entity & Hibernate Production Standards Checklist
+Every Spring Data JPA entity must adhere to the following production rules:
+1. **Explicit `@Table` Metadata:** Always specify `name`, `uniqueConstraints`, and `indexes` matching the Flyway DDL specifications.
+2. **Dynamic Updates (`@DynamicUpdate`):** Enable on high-write mutable entities (`Reservation`, `Payment`, `Event`) so Hibernate executes minimal SQL `UPDATE` statements containing only dirty columns.
+3. **Hibernate `@Check` Reflection:** Annotate entities with `@Check(constraints = "...")` to mirror schema check constraints.
+4. **Lombok Equality Safety (`@EqualsAndHashCode`):** Always use `@EqualsAndHashCode(onlyExplicitlyIncluded = true)` with `@EqualsAndHashCode.Include` exclusively on the `@Id` field. Never use `@Data` or implicit equality.
+5. **ToString & Logging Safety (`@ToString`):** Use `@ToString(onlyExplicitlyIncluded = true)` or exclude relationship fields (`@ManyToOne`, `@OneToMany`) to prevent triggering lazy-loading and N+1 query loops.
+6. **Native JSONB Mapping:** Map PostgreSQL JSONB columns using `@JdbcTypeCode(SqlTypes.JSON)` (e.g. `payload` in `OutboxEvent`).
+7. **Column Immutability (`updatable = false`):** Mark immutable attributes (`id`, `createdAt`, `idempotencyKey`, `eventId`, `userId`) with `@Column(..., updatable = false)`.
+8. **Monetary Precision:** Use `BigDecimal` with `@Column(precision = 10, scale = 2, nullable = false)`.
+9. **Enum Mapping:** Always `@Enumerated(EnumType.STRING)`, never `ORDINAL`.
+
 ---
 
 ## 2. Database Schemas by Service
