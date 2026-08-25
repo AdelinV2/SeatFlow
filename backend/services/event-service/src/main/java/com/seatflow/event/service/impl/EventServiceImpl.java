@@ -15,6 +15,7 @@ import com.seatflow.event.client.SeatMapVenueSeat;
 import com.seatflow.event.mapper.EventMapper;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.messaging.event.EventCancelledEvent;
+import com.seatflow.event.messaging.event.EventCompletedEvent;
 import com.seatflow.event.messaging.event.EventCreatedEvent;
 import com.seatflow.event.messaging.event.EventPublishedEvent;
 import com.seatflow.event.model.entity.Event;
@@ -41,6 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -65,6 +67,7 @@ public class EventServiceImpl implements EventService {
     private static final String EVENT_CREATED = "EVENT_CREATED";
     private static final String EVENT_PUBLISHED = "EVENT_PUBLISHED";
     private static final String EVENT_CANCELLED = "EVENT_CANCELLED";
+    private static final String EVENT_COMPLETED = "EVENT_COMPLETED";
 
     private final EventRepository eventRepository;
     private final OutboxEventRepository outboxEventRepository;
@@ -164,7 +167,9 @@ public class EventServiceImpl implements EventService {
                             new EventCancelledEvent(event.getId(), event.getVenueId(), event.getTitle(),
                                     event.getEventDate(), Instant.now()));
                 } else if (requested == EventStatus.COMPLETED) {
-                    // Terminal completion persists state only; no outbox event required.
+                    publishOutbox(EVENT_COMPLETED, event.getId(),
+                            new EventCompletedEvent(event.getId(), event.getVenueId(), event.getTitle(),
+                                    event.getEventDate(), Instant.now()));
                 } else {
                     throw new ValidationException("Illegal status transition", ErrorCode.INVALID_REQUEST);
                 }
@@ -208,7 +213,7 @@ public class EventServiceImpl implements EventService {
     public EventDetailResponse getPublishedEvent(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
-        if (event.getStatus() != EventStatus.PUBLISHED) {
+        if (event.getStatus() != EventStatus.PUBLISHED || !event.getEventDate().isAfter(Instant.now())) {
             throw new ResourceNotFoundException("Event", eventId);
         }
         return eventMapper.toDetailResponse(event);
@@ -226,7 +231,7 @@ public class EventServiceImpl implements EventService {
     public EventSeatMapResponse getEventSeatMap(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
-        if (event.getStatus() != EventStatus.PUBLISHED) {
+        if (event.getStatus() != EventStatus.PUBLISHED || !event.getEventDate().isAfter(Instant.now())) {
             throw new ResourceNotFoundException("Event", eventId);
         }
         SeatMapVenueLayout venue = seatMapClient.getVenueLayout(event.getVenueId());
@@ -253,6 +258,20 @@ public class EventServiceImpl implements EventService {
 
     private SeatMapSeatResponse toSeatMapSeat(SeatMapVenueSeat vs) {
         return new SeatMapSeatResponse(vs.seatId(), vs.rowLabel(), vs.seatNumber(), vs.gridX(), vs.gridY(), vs.isActive());
+    }
+
+    @Override
+    @Transactional
+    public int completeExpiredEvents(Instant now, int batchSize) {
+        List<Event> expired = eventRepository.findPublishedExpiredForUpdate(now, PageRequest.of(0, batchSize));
+        for (Event event : expired) {
+            event.setStatus(EventStatus.COMPLETED);
+            event.setUpdatedAt(now);
+            publishOutbox(EVENT_COMPLETED, event.getId(),
+                    new EventCompletedEvent(event.getId(), event.getVenueId(), event.getTitle(),
+                            event.getEventDate(), now));
+        }
+        return expired.size();
     }
 
     private boolean venueExists(UUID venueId) {

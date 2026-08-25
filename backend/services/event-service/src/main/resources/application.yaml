@@ -61,3 +61,9 @@ outbox:
     fixed-delay-ms: 3000
     batch-size: 50
     topic: seatflow.event.events
+
+event:
+  completion:
+    cron: "0 */15 * * * *"
+    enabled: true
+    batch-size: 50

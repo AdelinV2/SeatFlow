@@ -47,7 +47,7 @@ public class EventPricingServiceImpl implements EventPricingService {
     @Transactional
     public List<PricingTierResponse> configurePricing(UUID eventId, ConfigurePricingRequest request) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Event: ", eventId));
+                .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
         if (event.getStatus() == EventStatus.CANCELLED || event.getStatus() == EventStatus.COMPLETED) {
             throw new ValidationException("Pricing cannot be modified for a terminal event", ErrorCode.INVALID_REQUEST);
         }
