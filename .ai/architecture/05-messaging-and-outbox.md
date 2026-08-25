@@ -15,6 +15,7 @@ All Kafka topics are partitioned and keyed by their primary aggregate identifier
 | `seatflow.payment.events` | Payment Service | Ticket, Notification, Reservation | `paymentId` | Payment completed, failed, refunded |
 | `seatflow.ticket.events` | Ticket Service | Notification | `ticketId` | Ticket generated and issued |
 | `seatflow.seatmap.events` | Seat Map Service | Event Service | `venueId` / `sectionId` | Venue created, section and seat grid created |
+| `seatflow.event.events` | Event Service | Downstream Services | `eventId` | Event created, published, cancelled, or completed |
 | `seatflow.notification.events` | Multiple Services | Notification Service | `notificationId` | Internal notification triggers |
 
 *Note: The Realtime Service subscribes directly to `seatflow.reservation.events` and `seatflow.payment.events` lifecycle topics to broadcast WebSocket seat status updates.*
@@ -137,6 +138,52 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "colCount": 20,
   "totalSeats": 200,
   "createdAt": "2026-08-23T10:05:00Z"
+}
+```
+
+#### `EventCreatedEvent` (eventType: `"EventCreated"`)
+```json
+{
+  "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "venueId": "923e4567-e89b-12d3-a456-426614174000",
+  "title": "Hamlet — Royal Shakespeare Co.",
+  "category": "THEATRE",
+  "eventDate": "2026-09-15T19:30:00Z",
+  "occurredAt": "2026-08-23T10:00:00Z"
+}
+```
+
+#### `EventPublishedEvent` (eventType: `"EventPublished"`)
+```json
+{
+  "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "venueId": "923e4567-e89b-12d3-a456-426614174000",
+  "title": "Hamlet — Royal Shakespeare Co.",
+  "category": "THEATRE",
+  "eventDate": "2026-09-15T19:30:00Z",
+  "occurredAt": "2026-08-23T11:00:00Z"
+}
+```
+
+#### `EventCancelledEvent` (eventType: `"EventCancelled"`)
+```json
+{
+  "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "venueId": "923e4567-e89b-12d3-a456-426614174000",
+  "title": "Hamlet — Royal Shakespeare Co.",
+  "eventDate": "2026-09-15T19:30:00Z",
+  "occurredAt": "2026-08-23T12:00:00Z"
+}
+```
+
+#### `EventCompletedEvent` (eventType: `"EventCompleted"`)
+```json
+{
+  "eventId": "223e4567-e89b-12d3-a456-426614174000",
+  "venueId": "923e4567-e89b-12d3-a456-426614174000",
+  "title": "Hamlet — Royal Shakespeare Co.",
+  "eventDate": "2026-09-15T19:30:00Z",
+  "occurredAt": "2026-09-15T23:00:00Z"
 }
 ```
 

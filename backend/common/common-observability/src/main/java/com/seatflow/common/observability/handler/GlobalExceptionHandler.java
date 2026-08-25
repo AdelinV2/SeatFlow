@@ -11,13 +11,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 @Slf4j
@@ -73,6 +76,31 @@ public class GlobalExceptionHandler {
             request.getRequestURI(),
             getCorrelationId(),
             errors
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleHandlerMethodValidation(HandlerMethodValidationException ex,
+                                                                         HttpServletRequest request) {
+        log.warn("Handler method validation failed on request [{}]: {}", request.getRequestURI(), ex.getMessage());
+        List<ValidationError> errors = ex.getParameterValidationResults().stream()
+                .map(result -> {
+                    String field = result.getMethodParameter().getParameterName();
+                    String message = result.getResolvableErrors().stream()
+                            .map(MessageSourceResolvable::getDefaultMessage)
+                            .collect(Collectors.joining("; "));
+                    return new ValidationError(field, message, result.getArgument());
+                })
+                .toList();
+        ApiErrorResponse response = ApiErrorResponse.withValidation(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ErrorCode.INVALID_REQUEST.getCode(),
+                "Validation failed for one or more parameters",
+                request.getRequestURI(),
+                getCorrelationId(),
+                errors
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }

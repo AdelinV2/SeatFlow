@@ -95,11 +95,11 @@ This document defines the complete catalog of REST API endpoints exposed across 
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/events` | Public | Search & list upcoming events with filters |
-| `GET` | `/api/events/{eventId}` | Public | Get single event details with pricing tiers |
-| `GET` | `/api/events/{eventId}/seat-map` | Public | Get event seat map merged with section pricing |
-| `POST` | `/api/admin/events` | Admin only | Create new event |
-| `PUT` | `/api/admin/events/{eventId}` | Admin only | Update event details |
+| `GET` | `/api/events` | Public | Search & list upcoming published events (`eventDate > now()`) with filters |
+| `GET` | `/api/events/{eventId}` | Public | Get single event details (404 if not published or `eventDate <= now()`, ADR-003) |
+| `GET` | `/api/events/{eventId}/seat-map` | Public | Get event seat map merged with section pricing (404 if `eventDate <= now()`, ADR-003) |
+| `POST` | `/api/admin/events` | Admin only | Create new draft event |
+| `PUT` | `/api/admin/events/{eventId}` | Admin only | Update event details & state transitions |
 | `POST` | `/api/admin/events/{eventId}/pricing` | Admin only | Configure section pricing tiers |
 
 #### `GET /api/events` (Query Parameters: `category`, `search`, `page`, `size`, `sort`)
