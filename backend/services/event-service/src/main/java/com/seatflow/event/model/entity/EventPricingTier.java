@@ -37,7 +37,6 @@ public class EventPricingTier {
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
-    @ToString.Exclude
     private Event event;
 
     @Column(name = "section_id", nullable = false)

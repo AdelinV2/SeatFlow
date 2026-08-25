@@ -17,7 +17,7 @@ public class KafkaProducerConfig {
 
     @Bean
     public ProducerFactory<String, String> producerFactory(
-            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
+            @Value("${spring.kafka.bootstrap-servers:localhost:9092}") String bootstrapServers,
             @Value("${spring.kafka.producer.acks:all}") String acks,
             @Value("${spring.kafka.producer.retries:3}") int retries) {
         Map<String, Object> configuration = new HashMap<>();

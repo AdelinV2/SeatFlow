@@ -1,6 +1,7 @@
 package com.seatflow.event.messaging.producer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.events.EventTopics;
 import com.seatflow.event.model.entity.OutboxEvent;
 import com.seatflow.event.repository.OutboxEventRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +28,8 @@ public class OutboxEventPublisher {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${outbox.publisher.topic:seatflow.event.events}")
-    private String topic = "seatflow.event.events";
+    @Value("${outbox.publisher.topic:" + EventTopics.EVENT_EVENTS + "}")
+    private String topic = EventTopics.EVENT_EVENTS;
 
     @Value("${outbox.publisher.batch-size:50}")
     private int batchSize = 50;

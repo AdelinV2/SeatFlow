@@ -28,6 +28,10 @@ outbox:
     fixed-delay-ms: 60000
     batch-size: 10
 
+event:
+  completion:
+    enabled: false
+
 logging:
   level:
     com.seatflow: WARN

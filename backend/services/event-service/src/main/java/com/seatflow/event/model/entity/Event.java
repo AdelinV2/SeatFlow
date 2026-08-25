@@ -84,7 +84,6 @@ public class Event {
 
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
-    @ToString.Exclude
     private List<EventPricingTier> pricingTiers = new ArrayList<>();
 
     @Override

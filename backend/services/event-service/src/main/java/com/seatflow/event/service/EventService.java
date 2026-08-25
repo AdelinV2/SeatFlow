@@ -9,6 +9,7 @@ import com.seatflow.event.web.dto.response.EventSeatMapResponse;
 import com.seatflow.event.web.dto.response.EventSummaryResponse;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public interface EventService {
@@ -24,4 +25,6 @@ public interface EventService {
     EventDetailResponse getEventForAdministration(UUID eventId);
 
     EventSeatMapResponse getEventSeatMap(UUID eventId);
+
+    int completeExpiredEvents(Instant now, int batchSize);
 }

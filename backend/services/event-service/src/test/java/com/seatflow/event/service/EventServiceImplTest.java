@@ -184,6 +184,21 @@ class EventServiceImplTest {
     }
 
     @Test
+    void updateEvent_completeTransition_publishesEventCompleted() {
+        Event published = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(published));
+        when(eventRepository.save(any(Event.class))).thenReturn(published);
+        when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
+
+        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, null, EventStatus.COMPLETED));
+
+        assertThat(published.getStatus()).isEqualTo(EventStatus.COMPLETED);
+        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getEventType()).isEqualTo("EVENT_COMPLETED");
+    }
+
+    @Test
     void updateEvent_illegalTransition_rejects() {
         Event draft = buildEvent(EventStatus.DRAFT);
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
@@ -242,6 +257,54 @@ class EventServiceImplTest {
 
         assertThatThrownBy(() -> eventService.getPublishedEvent(EVENT_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getPublishedEvent_hidesPastEvents() {
+        Event past = buildEvent(EventStatus.PUBLISHED);
+        past.setEventDate(Instant.now().minusSeconds(3600));
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(past));
+
+        assertThatThrownBy(() -> eventService.getPublishedEvent(EVENT_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getPublishedEvent_returnsFuturePublishedEvent() {
+        Event future = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(future));
+        when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
+
+        EventDetailResponse result = eventService.getPublishedEvent(EVENT_ID);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void getEventSeatMap_hidesPastEvents() {
+        Event past = buildEvent(EventStatus.PUBLISHED);
+        past.setEventDate(Instant.now().minusSeconds(3600));
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(past));
+
+        assertThatThrownBy(() -> eventService.getEventSeatMap(EVENT_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void completeExpiredEvents_transitionsToCompletedAndPublishes() {
+        Event expired = buildEvent(EventStatus.PUBLISHED);
+        expired.setEventDate(Instant.now().minusSeconds(3600));
+        when(eventRepository.findPublishedExpiredForUpdate(any(Instant.class), any(Pageable.class)))
+                .thenReturn(List.of(expired));
+
+        int completed = eventService.completeExpiredEvents(Instant.now(), 50);
+
+        assertThat(completed).isEqualTo(1);
+        assertThat(expired.getStatus()).isEqualTo(EventStatus.COMPLETED);
+        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+        assertThat(captor.getValue().getEventType()).isEqualTo("EVENT_COMPLETED");
+        assertThat(captor.getValue().getAggregateId()).isEqualTo(EVENT_ID);
     }
 
     @Test
