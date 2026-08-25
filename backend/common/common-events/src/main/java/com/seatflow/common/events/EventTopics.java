@@ -6,6 +6,7 @@ public final class EventTopics {
     public static final String PAYMENT_EVENTS = "seatflow.payment.events";
     public static final String TICKET_EVENTS = "seatflow.ticket.events";
     public static final String NOTIFICATION_EVENTS = "seatflow.notification.events";
+    public static final String SEATMAP_EVENTS = "seatflow.seatmap.events";
 
     private EventTopics() {
         throw new UnsupportedOperationException("Utility class cannot be instantiated");

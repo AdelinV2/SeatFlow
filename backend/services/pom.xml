@@ -20,6 +20,7 @@
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>user-service</module>
+        <module>seat-map-service</module>
     </modules>
 
     <!-- Additional microservice modules are added here as they are created
