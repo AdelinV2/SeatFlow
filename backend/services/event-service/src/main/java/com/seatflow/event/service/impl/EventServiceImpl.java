@@ -38,6 +38,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -72,12 +74,24 @@ public class EventServiceImpl implements EventService {
     private final SeatMapClient seatMapClient;
     private final ObjectMapper objectMapper;
 
+    @Autowired
+    @Lazy
+    private EventServiceImpl self;
+
+    private EventServiceImpl proxy() {
+        return self != null ? self : this;
+    }
+
     @Override
-    @Transactional
     public EventDetailResponse createEvent(CreateEventRequest request) {
         if (!venueExists(request.venueId())) {
             throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
         }
+        return proxy().createEventInTx(request);
+    }
+
+    @Transactional
+    public EventDetailResponse createEventInTx(CreateEventRequest request) {
         Event event = eventMapper.toEntity(request);
         event.setStatus(EventStatus.DRAFT);
         Event saved = eventRepository.save(event);
@@ -89,13 +103,24 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    @Transactional
     public EventDetailResponse updateEvent(UUID eventId, UpdateEventRequest request) {
-        Event event = eventRepository.findWithPricingTiersById(eventId)
+        Event snapshot = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
-        if (event.getStatus() == EventStatus.CANCELLED || event.getStatus() == EventStatus.COMPLETED) {
+        if (snapshot.getStatus() == EventStatus.CANCELLED || snapshot.getStatus() == EventStatus.COMPLETED) {
             throw new ValidationException("Event is immutable in its current lifecycle state", ErrorCode.INVALID_REQUEST);
         }
+        boolean publishRequested = request.status() != null && request.status() == EventStatus.PUBLISHED
+                && snapshot.getStatus() != EventStatus.PUBLISHED;
+        if (publishRequested && !venueExists(snapshot.getVenueId())) {
+            throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
+        }
+        return proxy().updateEventInTx(eventId, request);
+    }
+
+    @Transactional
+    public EventDetailResponse updateEventInTx(UUID eventId, UpdateEventRequest request) {
+        Event event = eventRepository.findWithPricingTiersById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
         boolean noChange = request.title() == null && request.description() == null && request.category() == null
                 && request.bannerUrl() == null && request.eventDate() == null && request.status() == null;
         if (noChange) {
@@ -119,9 +144,6 @@ public class EventServiceImpl implements EventService {
         switch (current) {
             case DRAFT -> {
                 if (requested == EventStatus.PUBLISHED) {
-                    if (!venueExists(event.getVenueId())) {
-                        throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
-                    }
                     if (!pricingTierRepository.existsByEvent_Id(event.getId())) {
                         throw new ValidationException("Cannot publish an event without pricing tiers", ErrorCode.INVALID_REQUEST);
                     }
@@ -201,7 +223,6 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public EventSeatMapResponse getEventSeatMap(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
@@ -209,19 +230,26 @@ public class EventServiceImpl implements EventService {
             throw new ResourceNotFoundException("Event", eventId);
         }
         VenueSeatMapResponse venue = seatMapClient.getVenueSeatMap(event.getVenueId());
+        List<VenueSectionResponse> sections = venue.sections() == null ? List.of() : venue.sections();
+        return proxy().getEventSeatMapInTx(event, sections, venue);
+    }
+
+    @Transactional(readOnly = true)
+    public EventSeatMapResponse getEventSeatMapInTx(Event event, List<VenueSectionResponse> sections,
+                                                   VenueSeatMapResponse venue) {
         List<PricingTierResponse> allTiers = event.getPricingTiers().stream()
                 .map(tierMapper::toResponse).toList();
-        List<SeatMapSectionResponse> sections = venue.sections().stream().map(vs -> {
+        List<SeatMapSectionResponse> mapped = sections.stream().map(vs -> {
             List<PricingTierResponse> sectionTiers = allTiers.stream()
                     .filter(t -> t.sectionId().equals(vs.sectionId())).toList();
             List<SeatMapSeatResponse> seats = vs.seats() == null ? List.of()
                     : vs.seats().stream().map(this::toSeatMapSeat).toList();
             return new SeatMapSectionResponse(vs.sectionId(), vs.name(), vs.rowCount(), vs.colCount(), seats, sectionTiers);
         }).toList();
-        long totalConfiguredSeats = venue.sections().stream().mapToLong(vs ->
+        long totalConfiguredSeats = sections.stream().mapToLong(vs ->
                 vs.seatCount() != null ? vs.seatCount() : (vs.seats() == null ? 0 : vs.seats().size())).sum();
         return new EventSeatMapResponse(event.getId(), event.getVenueId(), event.getTitle(), event.getEventDate(),
-                venue.venueName(), venue.capacity(), totalConfiguredSeats, sections);
+                venue.venueName(), venue.capacity(), totalConfiguredSeats, mapped);
     }
 
     private SeatMapSeatResponse toSeatMapSeat(VenueSeatResponse vs) {

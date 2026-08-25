@@ -4,7 +4,9 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
-import com.seatflow.event.client.VenueValidationPort;
+import com.seatflow.event.client.SeatMapClient;
+import com.seatflow.event.client.VenueSeatMapResponse;
+import com.seatflow.event.client.VenueSectionResponse;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.model.common.EventPriceRange;
 import com.seatflow.event.model.entity.Event;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,7 +41,7 @@ public class EventPricingServiceImpl implements EventPricingService {
     private final EventRepository eventRepository;
     private final EventPricingTierRepository pricingTierRepository;
     private final EventPricingTierMapper tierMapper;
-    private final VenueValidationPort venueValidationPort;
+    private final SeatMapClient seatMapClient;
 
     @Override
     @Transactional
@@ -63,8 +66,9 @@ public class EventPricingServiceImpl implements EventPricingService {
             throw new ValidationException("All pricing tiers must use a single currency", ErrorCode.INVALID_REQUEST);
         }
 
+        Set<UUID> validSectionIds = loadVenueSectionIds(event.getVenueId());
         for (PricingTierItemRequest item : items) {
-            if (!sectionBelongsToVenue(event.getVenueId(), item.sectionId())) {
+            if (!validSectionIds.contains(item.sectionId())) {
                 throw new ValidationException("Section does not belong to the event venue", ErrorCode.INVALID_REQUEST);
             }
         }
@@ -74,11 +78,27 @@ public class EventPricingServiceImpl implements EventPricingService {
                 .map(item -> tierMapper.toEntity(item, event)).toList();
         event.getPricingTiers().addAll(tiers);
         event.setUpdatedAt(Instant.now());
-        eventRepository.save(event);
+        Event saved = eventRepository.save(event);
         pricingTierRepository.flush();
 
-        return pricingTierRepository.findByEvent_IdOrderByPriceAsc(eventId).stream()
-                .map(tierMapper::toResponse).toList();
+        return pricingTierRepository.findByEvent_IdOrderByPriceAsc(saved.getId()).stream()
+                .map(tierMapper::toResponse)
+                .sorted(Comparator.comparing(PricingTierResponse::price))
+                .toList();
+    }
+
+    private Set<UUID> loadVenueSectionIds(UUID venueId) {
+        try {
+            VenueSeatMapResponse venue = seatMapClient.getVenueSeatMap(venueId);
+            if (venue == null || venue.sections() == null) {
+                return Set.of();
+            }
+            return venue.sections().stream()
+                    .map(VenueSectionResponse::sectionId)
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            throw new BusinessException("Venue validation service unavailable", ErrorCode.INTERNAL_SERVER_ERROR, 500);
+        }
     }
 
     @Override
@@ -99,13 +119,5 @@ public class EventPricingServiceImpl implements EventPricingService {
             return new EventPriceRange(null, null, null);
         }
         return new EventPriceRange(projection.getMinPrice(), projection.getMaxPrice(), projection.getCurrency());
-    }
-
-    private boolean sectionBelongsToVenue(UUID venueId, UUID sectionId) {
-        try {
-            return venueValidationPort.sectionBelongsToVenue(venueId, sectionId);
-        } catch (Exception e) {
-            throw new BusinessException("Venue validation service unavailable", ErrorCode.INTERNAL_SERVER_ERROR, 500);
-        }
     }
 }
