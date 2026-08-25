@@ -3,11 +3,11 @@ package com.seatflow.event.client;
 import java.util.List;
 import java.util.UUID;
 
-public record VenueSectionResponse(
+public record SeatMapVenueSection(
         UUID sectionId,
         String name,
         Integer rowCount,
         Integer colCount,
-        Integer seatCount,
-        List<VenueSeatResponse> seats
-) {}
+        List<SeatMapVenueSeat> seats
+) {
+}

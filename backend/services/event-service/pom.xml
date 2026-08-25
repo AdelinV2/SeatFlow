@@ -69,6 +69,12 @@
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
+        <!-- Spring Cloud LoadBalancer (client-side LB via Eureka service discovery) -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
         <!-- Resilience4j Circuit Breaker -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

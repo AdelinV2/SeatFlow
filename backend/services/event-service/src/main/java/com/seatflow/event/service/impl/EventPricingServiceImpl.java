@@ -5,8 +5,8 @@ import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.event.client.SeatMapClient;
-import com.seatflow.event.client.VenueSeatMapResponse;
-import com.seatflow.event.client.VenueSectionResponse;
+import com.seatflow.event.client.SeatMapVenueLayout;
+import com.seatflow.event.client.SeatMapVenueSection;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.model.common.EventPriceRange;
 import com.seatflow.event.model.entity.Event;
@@ -89,12 +89,12 @@ public class EventPricingServiceImpl implements EventPricingService {
 
     private Set<UUID> loadVenueSectionIds(UUID venueId) {
         try {
-            VenueSeatMapResponse venue = seatMapClient.getVenueSeatMap(venueId);
+            SeatMapVenueLayout venue = seatMapClient.getVenueLayout(venueId);
             if (venue == null || venue.sections() == null) {
                 return Set.of();
             }
             return venue.sections().stream()
-                    .map(VenueSectionResponse::sectionId)
+                    .map(SeatMapVenueSection::sectionId)
                     .collect(Collectors.toSet());
         } catch (Exception e) {
             throw new BusinessException("Venue validation service unavailable", ErrorCode.INTERNAL_SERVER_ERROR, 500);

@@ -4,5 +4,5 @@ import java.util.UUID;
 
 public interface SeatMapClient extends VenueValidationPort {
 
-    VenueSeatMapResponse getVenueSeatMap(UUID venueId);
+    SeatMapVenueLayout getVenueLayout(UUID venueId);
 }

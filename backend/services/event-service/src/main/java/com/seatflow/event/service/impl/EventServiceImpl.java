@@ -9,9 +9,9 @@ import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
 import com.seatflow.event.client.SeatMapClient;
-import com.seatflow.event.client.VenueSeatMapResponse;
-import com.seatflow.event.client.VenueSectionResponse;
-import com.seatflow.event.client.VenueSeatResponse;
+import com.seatflow.event.client.SeatMapVenueLayout;
+import com.seatflow.event.client.SeatMapVenueSection;
+import com.seatflow.event.client.SeatMapVenueSeat;
 import com.seatflow.event.mapper.EventMapper;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.messaging.event.EventCancelledEvent;
@@ -229,14 +229,14 @@ public class EventServiceImpl implements EventService {
         if (event.getStatus() != EventStatus.PUBLISHED) {
             throw new ResourceNotFoundException("Event", eventId);
         }
-        VenueSeatMapResponse venue = seatMapClient.getVenueSeatMap(event.getVenueId());
-        List<VenueSectionResponse> sections = venue.sections() == null ? List.of() : venue.sections();
+        SeatMapVenueLayout venue = seatMapClient.getVenueLayout(event.getVenueId());
+        List<SeatMapVenueSection> sections = venue.sections() == null ? List.of() : venue.sections();
         return proxy().getEventSeatMapInTx(event, sections, venue);
     }
 
     @Transactional(readOnly = true)
-    public EventSeatMapResponse getEventSeatMapInTx(Event event, List<VenueSectionResponse> sections,
-                                                   VenueSeatMapResponse venue) {
+    public EventSeatMapResponse getEventSeatMapInTx(Event event, List<SeatMapVenueSection> sections,
+                                                   SeatMapVenueLayout venue) {
         List<PricingTierResponse> allTiers = event.getPricingTiers().stream()
                 .map(tierMapper::toResponse).toList();
         List<SeatMapSectionResponse> mapped = sections.stream().map(vs -> {
@@ -246,13 +246,12 @@ public class EventServiceImpl implements EventService {
                     : vs.seats().stream().map(this::toSeatMapSeat).toList();
             return new SeatMapSectionResponse(vs.sectionId(), vs.name(), vs.rowCount(), vs.colCount(), seats, sectionTiers);
         }).toList();
-        long totalConfiguredSeats = sections.stream().mapToLong(vs ->
-                vs.seatCount() != null ? vs.seatCount() : (vs.seats() == null ? 0 : vs.seats().size())).sum();
+        long totalConfiguredSeats = venue.totalConfiguredSeats() != null ? venue.totalConfiguredSeats() : 0L;
         return new EventSeatMapResponse(event.getId(), event.getVenueId(), event.getTitle(), event.getEventDate(),
-                venue.venueName(), venue.capacity(), totalConfiguredSeats, mapped);
+                venue.name(), venue.capacity(), totalConfiguredSeats, mapped);
     }
 
-    private SeatMapSeatResponse toSeatMapSeat(VenueSeatResponse vs) {
+    private SeatMapSeatResponse toSeatMapSeat(SeatMapVenueSeat vs) {
         return new SeatMapSeatResponse(vs.seatId(), vs.rowLabel(), vs.seatNumber(), vs.gridX(), vs.gridY(), vs.isActive());
     }
 
