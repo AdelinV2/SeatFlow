@@ -23,7 +23,8 @@ public interface VenueMapper {
     @Mapping(target = "city", source = "venue.city")
     @Mapping(target = "country", source = "venue.country")
     @Mapping(target = "capacity", source = "venue.capacity")
+    @Mapping(target = "totalConfiguredSeats", source = "totalConfiguredSeats")
     @Mapping(target = "sections", source = "sections")
     @Mapping(target = "createdAt", source = "venue.createdAt")
-    VenueDetailResponse toDetailResponse(Venue venue, List<VenueSectionResponse> sections);
+    VenueDetailResponse toDetailResponse(Venue venue, Long totalConfiguredSeats, List<VenueSectionResponse> sections);
 }

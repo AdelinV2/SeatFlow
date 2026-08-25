@@ -8,6 +8,8 @@ import java.util.UUID;
 public record VenueSeatMapLayoutResponse(
     @Schema(description = "Venue UUID") UUID venueId,
     @Schema(description = "Venue name") String name,
-    @Schema(description = "Total capacity") Integer capacity,
+    @Schema(description = "Total maximum capacity") Integer capacity,
+    @Schema(description = "Total active seats configured in this layout") Long totalConfiguredSeats,
     @Schema(description = "Sections with seat grids") List<SectionLayoutResponse> sections
 ) {}
+
