@@ -6,9 +6,9 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.event.client.SeatMapClient;
-import com.seatflow.event.client.VenueSeatMapResponse;
-import com.seatflow.event.client.VenueSectionResponse;
-import com.seatflow.event.client.VenueSeatResponse;
+import com.seatflow.event.client.SeatMapVenueLayout;
+import com.seatflow.event.client.SeatMapVenueSection;
+import com.seatflow.event.client.SeatMapVenueSeat;
 import com.seatflow.event.mapper.EventMapper;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.model.entity.Event;
@@ -253,10 +253,10 @@ class EventServiceImplTest {
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
         when(tierMapper.toResponse(any(EventPricingTier.class)))
                 .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_ID, "VIP", new BigDecimal("50"), "USD"));
-        when(seatMapClient.getVenueSeatMap(VENUE_ID)).thenReturn(new VenueSeatMapResponse(
-                VENUE_ID, "Grand Hall", 500,
-                List.of(new VenueSectionResponse(SECTION_ID, "A", 5, 10, 10,
-                        List.of(new VenueSeatResponse(UUID.randomUUID(), "R1", 1, 1, 1, true))))));
+        when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
+                VENUE_ID, "Grand Hall", 500, 10L,
+                List.of(new SeatMapVenueSection(SECTION_ID, "A", 5, 10,
+                        List.of(new SeatMapVenueSeat(UUID.randomUUID(), "R1", 1, 1, 1, true))))));
 
         EventSeatMapResponse result = eventService.getEventSeatMap(EVENT_ID);
 
