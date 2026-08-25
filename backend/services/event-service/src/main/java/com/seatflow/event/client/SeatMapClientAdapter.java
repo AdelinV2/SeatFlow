@@ -18,9 +18,9 @@ public class SeatMapClientAdapter implements SeatMapClient {
 
     private final RestClient restClient;
 
-    public SeatMapClientAdapter(
-            @Value("${seatmap.service.url:http://localhost:8082}") String baseUrl) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+    public SeatMapClientAdapter(RestClient.Builder restClientBuilder,
+                                @Value("${seatmap.service.url:http://localhost:8082}") String baseUrl) {
+        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
     }
 
     @Override

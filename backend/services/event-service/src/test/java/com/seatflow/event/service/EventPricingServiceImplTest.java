@@ -4,7 +4,9 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
-import com.seatflow.event.client.VenueValidationPort;
+import com.seatflow.event.client.SeatMapClient;
+import com.seatflow.event.client.VenueSeatMapResponse;
+import com.seatflow.event.client.VenueSectionResponse;
 import com.seatflow.event.mapper.EventPricingTierMapper;
 import com.seatflow.event.model.common.EventPriceRange;
 import com.seatflow.event.model.entity.Event;
@@ -48,7 +50,7 @@ class EventPricingServiceImplTest {
     @Mock
     private EventPricingTierMapper tierMapper;
     @Mock
-    private VenueValidationPort venueValidationPort;
+    private SeatMapClient seatMapClient;
 
     @InjectMocks
     private EventPricingServiceImpl pricingService;
@@ -82,14 +84,16 @@ class EventPricingServiceImplTest {
                 tier(SECTION_1, "VIP", new BigDecimal("50.00"), "USD"),
                 tier(SECTION_2, "GEN", new BigDecimal("30.00"), "USD")));
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
-        when(venueValidationPort.sectionBelongsToVenue(VENUE_ID, SECTION_1)).thenReturn(true);
-        when(venueValidationPort.sectionBelongsToVenue(VENUE_ID, SECTION_2)).thenReturn(true);
+        when(seatMapClient.getVenueSeatMap(VENUE_ID)).thenReturn(
+                new VenueSeatMapResponse(VENUE_ID, "Venue", 1000, List.of(
+                        new VenueSectionResponse(SECTION_1, "VIP", 10, 20, null, List.of()),
+                        new VenueSectionResponse(SECTION_2, "GEN", 10, 20, null, List.of()))));
         when(eventRepository.save(any(Event.class))).thenReturn(event);
         when(pricingTierRepository.findByEvent_IdOrderByPriceAsc(EVENT_ID)).thenReturn(List.of(
-                EventPricingTier.builder().id(UUID.randomUUID()).sectionId(SECTION_2).categoryName("GEN")
-                        .price(new BigDecimal("30.00")).currency("USD").build(),
                 EventPricingTier.builder().id(UUID.randomUUID()).sectionId(SECTION_1).categoryName("VIP")
-                        .price(new BigDecimal("50.00")).currency("USD").build()));
+                        .price(new BigDecimal("50.00")).currency("USD").build(),
+                EventPricingTier.builder().id(UUID.randomUUID()).sectionId(SECTION_2).categoryName("GEN")
+                        .price(new BigDecimal("30.00")).currency("USD").build()));
         when(tierMapper.toResponse(any(EventPricingTier.class)))
                 .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_2, "GEN", new BigDecimal("30.00"), "USD"),
                         new PricingTierResponse(UUID.randomUUID(), SECTION_1, "VIP", new BigDecimal("50.00"), "USD"));
@@ -136,7 +140,9 @@ class EventPricingServiceImplTest {
         ConfigurePricingRequest request = new ConfigurePricingRequest(List.of(
                 tier(SECTION_1, "VIP", new BigDecimal("50.00"), "USD")));
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
-        when(venueValidationPort.sectionBelongsToVenue(VENUE_ID, SECTION_1)).thenReturn(false);
+        when(seatMapClient.getVenueSeatMap(VENUE_ID)).thenReturn(
+                new VenueSeatMapResponse(VENUE_ID, "Venue", 1000, List.of(
+                        new VenueSectionResponse(SECTION_2, "GEN", 10, 20, null, List.of()))));
 
         assertThatThrownBy(() -> pricingService.configurePricing(EVENT_ID, request))
                 .isInstanceOf(ValidationException.class)
@@ -163,7 +169,7 @@ class EventPricingServiceImplTest {
         ConfigurePricingRequest request = new ConfigurePricingRequest(List.of(
                 tier(SECTION_1, "VIP", new BigDecimal("50.00"), "USD")));
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
-        when(venueValidationPort.sectionBelongsToVenue(VENUE_ID, SECTION_1)).thenThrow(new RuntimeException("outage"));
+        when(seatMapClient.getVenueSeatMap(VENUE_ID)).thenThrow(new RuntimeException("outage"));
 
         assertThatThrownBy(() -> pricingService.configurePricing(EVENT_ID, request))
                 .isInstanceOf(BusinessException.class)
