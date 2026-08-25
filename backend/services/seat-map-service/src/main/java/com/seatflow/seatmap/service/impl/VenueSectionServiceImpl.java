@@ -164,7 +164,7 @@ public class VenueSectionServiceImpl implements VenueSectionService {
     /**
      * Generates alphabetic row labels: 0 → "A", 25 → "Z", 26 → "AA", 27 → "AB", ...
      */
-    static String generateRowLabel(int rowIndex) {
+    public static String generateRowLabel(int rowIndex) {
         StringBuilder label = new StringBuilder();
         int index = rowIndex;
         do {
