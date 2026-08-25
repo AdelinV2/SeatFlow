@@ -53,12 +53,16 @@ public class SeatMapLayoutServiceImpl implements SeatMapLayoutService {
                 })
                 .toList();
 
-        log.debug("Venue layout retrieved. venueId={}, name={}, sectionCount={}",
-                venueId, venue.getName(), sectionLayouts.size());
+        long totalConfiguredSeats = sectionLayouts.stream()
+                .mapToLong(s -> s.seats().size())
+                .sum();
+
+        log.debug("Venue layout retrieved. venueId={}, name={}, sectionCount={}, totalConfiguredSeats={}",
+                venueId, venue.getName(), sectionLayouts.size(), totalConfiguredSeats);
 
         return new VenueSeatMapLayoutResponse(
                 venue.getId(), venue.getName(),
-                venue.getCapacity(), sectionLayouts
+                venue.getCapacity(), totalConfiguredSeats, sectionLayouts
         );
     }
 }

@@ -7,6 +7,7 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
@@ -99,11 +100,23 @@ public class VenueServiceImpl implements VenueService {
             );
         }
 
+        // Validate capacity reduction against currently configured active seats
+        if (request.capacity() != null) {
+            long currentActiveSeats = seatRepository.countActiveSeatsByVenueId(venueId);
+            if (request.capacity() < currentActiveSeats) {
+                throw new ValidationException(
+                    "Cannot reduce venue capacity to %d because %d active seats are already configured across sections"
+                            .formatted(request.capacity(), currentActiveSeats),
+                    ErrorCode.INVALID_REQUEST
+                );
+            }
+            venue.setCapacity(request.capacity());
+        }
+
         if (request.name() != null) venue.setName(request.name());
         if (request.address() != null) venue.setAddress(request.address());
         if (request.city() != null) venue.setCity(request.city());
         if (request.country() != null) venue.setCountry(request.country());
-        if (request.capacity() != null) venue.setCapacity(request.capacity());
 
         venue = venueRepository.save(venue);
         log.info("Venue updated. venueId={}, name={}", venue.getId(), venue.getName());
@@ -124,7 +137,11 @@ public class VenueServiceImpl implements VenueService {
                 ))
                 .toList();
 
-        return venueMapper.toDetailResponse(venue, sectionResponses);
+        long totalConfiguredSeats = sectionResponses.stream()
+                .mapToLong(VenueSectionResponse::activeSeatCount)
+                .sum();
+
+        return venueMapper.toDetailResponse(venue, totalConfiguredSeats, sectionResponses);
     }
 
     @Override
