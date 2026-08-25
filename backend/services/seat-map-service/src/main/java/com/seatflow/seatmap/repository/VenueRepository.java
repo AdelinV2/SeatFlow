@@ -15,7 +15,7 @@ public interface VenueRepository extends JpaRepository<Venue, UUID> {
 
     Page<Venue> findAll(Pageable pageable);
 
-    @Query("SELECT v FROM Venue v WHERE (:city IS NULL OR v.city = :city) AND (:name IS NULL OR LOWER(v.name) LIKE LOWER(CONCAT('%', :name, '%')))")
+    @Query("SELECT v FROM Venue v WHERE (:city IS NULL OR v.city = :city) AND (:name IS NULL OR LOWER(v.name) LIKE LOWER(CONCAT('%', CAST(:name AS String), '%')))")
     Page<Venue> findByFilters(@Param("city") String city, @Param("name") String name, Pageable pageable);
 
     boolean existsByNameAndCity(String name, String city);

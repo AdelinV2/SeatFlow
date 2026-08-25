@@ -30,11 +30,11 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
             """, nativeQuery = true)
     List<OutboxEvent> findUnpublishedForUpdate(@Param("maxRetry") int maxRetry, @Param("limit") int limit);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE OutboxEvent o SET o.publishedAt = :now WHERE o.id = :id AND o.publishedAt IS NULL")
     int markPublished(@Param("id") UUID id, @Param("now") Instant now);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE OutboxEvent o SET o.retryCount = o.retryCount + 1 WHERE o.id = :id AND o.retryCount < :max")
     int incrementRetryCount(@Param("id") UUID id, @Param("max") int max);
 }
