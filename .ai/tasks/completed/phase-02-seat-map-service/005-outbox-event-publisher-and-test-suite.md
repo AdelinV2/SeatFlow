@@ -8,7 +8,7 @@
 - **Related Specs:** `.ai/architecture/01-common-modules.md`, `.ai/architecture/05-messaging-and-outbox.md` (Section 3), `backend/AGENTS.md` (Section 7 & 10)
 - **Related ADRs:** None
 - **Dependencies:** `TASK-P02-004` (All production code must exist: entities, services, controllers, security)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
