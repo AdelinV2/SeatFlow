@@ -131,7 +131,7 @@ CREATE INDEX idx_venue_sections_venue_id ON venue_sections(venue_id);
 CREATE TABLE seats (
     id          UUID         NOT NULL DEFAULT gen_random_uuid(),
     section_id  UUID         NOT NULL,
-    row_number  VARCHAR(10)  NOT NULL, -- e.g. "A", "B", "10"
+    row_label   VARCHAR(10)  NOT NULL, -- e.g. "A", "B", "AA"
     seat_number INT          NOT NULL, -- e.g. 1, 2, 3
     grid_x      INT          NOT NULL, -- Visual layout column index (0-based)
     grid_y      INT          NOT NULL, -- Visual layout row index (0-based)
@@ -140,7 +140,7 @@ CREATE TABLE seats (
 
     CONSTRAINT pk_seats PRIMARY KEY (id),
     CONSTRAINT fk_seats_venue_sections FOREIGN KEY (section_id) REFERENCES venue_sections(id) ON DELETE CASCADE,
-    CONSTRAINT uq_seats_section_row_seat UNIQUE (section_id, row_number, seat_number),
+    CONSTRAINT uq_seats_section_row_seat UNIQUE (section_id, row_label, seat_number),
     CONSTRAINT uq_seats_section_grid UNIQUE (section_id, grid_x, grid_y),
     CONSTRAINT chk_seats_seat_number CHECK (seat_number > 0),
     CONSTRAINT chk_seats_grid_x CHECK (grid_x >= 0),
@@ -166,6 +166,7 @@ CREATE TABLE outbox_events (
 );
 
 CREATE INDEX idx_seatmap_outbox_unpub ON outbox_events(created_at ASC) WHERE published_at IS NULL;
+CREATE INDEX idx_seatmap_outbox_aggregate ON outbox_events(aggregate_id, created_at DESC);
 ```
 
 ---

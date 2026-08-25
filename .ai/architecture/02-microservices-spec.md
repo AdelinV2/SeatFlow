@@ -39,9 +39,10 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Responsibilities:**
   - Management of physical venues (name, location, total capacity).
   - Management of venue sections (e.g. VIP, Balcony, Orchestra).
-  - Grid coordinate layout of rows and seat numbers (`grid_x`, `grid_y`, `row_number`, `seat_number`).
+  - Grid coordinate layout of rows and seat numbers (`grid_x`, `grid_y`, `row_label`, `seat_number`).
   - Venue seat layout retrieval for the interactive seat map UI.
-- **Dependencies:** `common-domain`, `common-observability`, `common-security`.
+  - Publishing `VenueCreated` and `VenueSectionCreated` domain events via Transactional Outbox.
+- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Kafka.
 
 ---
 

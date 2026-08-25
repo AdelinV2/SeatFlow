@@ -57,7 +57,9 @@ This document defines the complete catalog of REST API endpoints exposed across 
 | `GET` | `/api/venues/{venueId}` | Public | Get venue details |
 | `GET` | `/api/venues/{venueId}/layout` | Public | Get complete venue seat grid and sections |
 | `POST` | `/api/admin/venues` | Admin only | Create new venue |
+| `PUT` | `/api/admin/venues/{venueId}` | Admin only | Update venue details |
 | `POST` | `/api/admin/venues/{venueId}/sections` | Admin only | Configure venue section and seats |
+| `PATCH` | `/api/admin/venues/{venueId}/sections/{sectionId}/seats/{seatId}` | Admin only | Toggle seat active/inactive status |
 
 #### `GET /api/venues/{venueId}/layout`
 **Response Body (200 OK):**
@@ -75,10 +77,11 @@ This document defines the complete catalog of REST API endpoints exposed across 
       "seats": [
         {
           "seatId": "723e4567-e89b-12d3-a456-426614174000",
-          "rowNumber": "A",
+          "rowLabel": "A",
           "seatNumber": 1,
           "gridX": 0,
-          "gridY": 0
+          "gridY": 0,
+          "isActive": true
         }
       ]
     }
