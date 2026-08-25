@@ -52,8 +52,10 @@ This document details the responsibilities, dependencies, internal architecture,
   - Event management: Title, description, banner URL, category, dates, status (`DRAFT`, `PUBLISHED`, `CANCELLED`, `COMPLETED`).
   - Associating an event with a venue layout from `seat-map-service`.
   - Seat category pricing tiers (e.g., VIP = \$150, General = \$50, Student = \$30).
-  - Public event catalog queries with pagination, search, and date filters.
-- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`.
+  - Public event catalog queries with pagination, search, and date filters (`eventDate > now()`).
+  - **Fail-Fast Public Access Guard (ADR-003):** Rejects public queries (`GET /api/events/{id}`, `GET /api/events/{id}/seat-map`) with 404 if `eventDate <= now()`.
+  - **Automated Event Completion Sweeper (ADR-003):** Multi-instance safe background scheduler (`@Scheduled` + `SELECT ... FOR UPDATE SKIP LOCKED`) transitioning expired published events (`event_date <= now()`) to `COMPLETED` and publishing `EventCompletedEvent` via Transactional Outbox.
+- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Kafka.
 
 ---
 

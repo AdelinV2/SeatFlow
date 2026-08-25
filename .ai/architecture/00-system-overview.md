@@ -137,6 +137,7 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 
 ### 4.2 Asynchronous Communication (Kafka)
 - Used for all decoupled domain events and cross-service state transitions:
+  - Event created / published / cancelled / completed.
   - Reservation held / expired / cancelled.
   - Payment completed / failed.
   - Ticket created.

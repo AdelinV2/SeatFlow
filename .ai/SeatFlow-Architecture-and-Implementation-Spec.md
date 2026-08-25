@@ -796,18 +796,20 @@ The identity provider owns authentication credentials. SeatFlow stores only requ
 
 ### Responsibility
 
-- Events.
+- Events metadata & catalog.
 - Event descriptions.
-- Dates/times.
-- Venue association.
-- Seat-map association.
-- Event publishing/unpublishing.
+- Dates/times and public catalog filtering (`eventDate > now()`).
+- Venue association & priced seat map aggregation.
+- Seat-map section pricing tiers.
+- Event publishing/unpublishing and administrative lifecycle.
+- **Fail-Fast Public Access Guard (ADR-003):** Rejects public queries (`/api/events/{id}`, `/api/events/{id}/seat-map`) with 404 if `eventDate <= now()`.
+- **Automated Event Completion Scheduler (ADR-003):** Periodic background sweeper (`@Scheduled` + `SELECT ... FOR UPDATE SKIP LOCKED`) transitioning expired events to `COMPLETED` and publishing `EventCompletedEvent` via Transactional Outbox.
 - Event listing for the Angular frontend.
 
-### Example states
+### Lifecycle States
 
 ```text
-DRAFT -> PUBLISHED -> SOLD_OUT -> FINISHED
+DRAFT -> PUBLISHED -> COMPLETED
           |
           +-> CANCELLED
 ```

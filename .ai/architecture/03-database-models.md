@@ -484,7 +484,7 @@ CREATE INDEX idx_notif_pending_retry ON notification_logs(created_at ASC)
 | `seat_holds` | `uq_active_seat_hold` | **Partial Unique:** `(event_id, seat_id) WHERE status IN ('HELD', 'SOLD')` | Guarantees Zero Double-Booking invariant under concurrent seat reservations. |
 | `reservations` | `idx_res_pending_expires_at` | **Partial B-Tree:** `(expires_at ASC) WHERE status = 'PENDING'` | Hold sweeper polling query (`WHERE status = 'PENDING' AND expires_at < now()`). |
 | `reservations` | `idx_res_customer_email` | **B-Tree:** `(customer_email)` | Guest ticket claiming upon account registration (`UserRegisteredEvent`). |
-| `events` | `idx_events_status_date` | **Compound B-Tree:** `(status, event_date ASC)` | Public catalog query (`WHERE status = 'PUBLISHED' ORDER BY event_date ASC`). |
+| `events` | `idx_events_status_date` | **Compound B-Tree:** `(status, event_date ASC)` | Public catalog query (`WHERE status = 'PUBLISHED' AND event_date > now()`) and auto-completion sweeper (`WHERE status = 'PUBLISHED' AND event_date <= now()`) (ADR-003). |
 | `events` | `idx_events_category_date` | **Partial Compound:** `(category, event_date ASC) WHERE status = 'PUBLISHED'` | Public category browsing and event filtering. |
 | `payments` | `uq_payments_stripe_intent` | **Partial Unique:** `(stripe_payment_intent_id) WHERE stripe_payment_intent_id IS NOT NULL` | Stripe webhook deduplication and idempotency verification. |
 | `tickets` | `uq_tickets_event_seat_valid` | **Partial Unique:** `(event_id, seat_id) WHERE status = 'VALID'` | Prevents issuing multiple active valid tickets for the same physical seat. |
