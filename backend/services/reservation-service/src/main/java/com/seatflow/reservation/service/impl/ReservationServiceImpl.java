@@ -13,6 +13,7 @@ import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.messaging.event.PaymentCompletedEvent;
+import com.seatflow.reservation.messaging.event.ReservationExpiredEvent;
 import com.seatflow.reservation.messaging.event.ReservationCancelledEvent;
 import com.seatflow.reservation.messaging.event.ReservationHeldEvent;
 import com.seatflow.reservation.messaging.event.UserRegisteredEvent;
@@ -289,6 +290,51 @@ public class ReservationServiceImpl implements ReservationService {
         log.info("Guest reservations linked to registered user. userId={}, customerEmail={}, linkedCount={}",
                 userId, customerEmail, updatedCount);
         return updatedCount;
+    }
+
+    @Override
+    @Transactional
+    public int expireHoldReservations(Instant now, int batchSize) {
+        List<UUID> expiredIds = reservationRepository.findExpiredReservationsForUpdate(now, batchSize);
+        if (expiredIds.isEmpty()) {
+            return 0;
+        }
+
+        log.info("Processing expired reservations sweep. count={}", expiredIds.size());
+
+        int processed = 0;
+        for (UUID id : expiredIds) {
+            Reservation reservation = reservationRepository.findWithSeatHoldsById(id).orElse(null);
+            if (reservation == null || reservation.getStatus() != ReservationStatus.PENDING) {
+                continue;
+            }
+
+            reservation.setStatus(ReservationStatus.EXPIRED);
+            reservation.setUpdatedAt(now);
+
+            List<UUID> releasedSeatIds = new ArrayList<>();
+            for (SeatHold hold : reservation.getSeatHolds()) {
+                hold.setStatus(SeatHoldStatus.RELEASED);
+                releasedSeatIds.add(hold.getSeatId());
+            }
+
+            reservationRepository.save(reservation);
+
+            ReservationExpiredEvent eventPayload = new ReservationExpiredEvent(
+                    reservation.getId(),
+                    reservation.getEventId(),
+                    releasedSeatIds,
+                    "HOLD_TIMEOUT_EXCEEDED",
+                    now);
+            saveOutboxRecord("ReservationExpired", reservation.getId(), eventPayload);
+
+            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatCount={}",
+                    reservation.getId(), reservation.getEventId(), releasedSeatIds.size());
+            processed++;
+        }
+
+        meterRegistry.counter("seatflow.reservations.expired.total").increment(processed);
+        return processed;
     }
 
     private String resolveCustomerEmail(CreateReservationRequest request) {

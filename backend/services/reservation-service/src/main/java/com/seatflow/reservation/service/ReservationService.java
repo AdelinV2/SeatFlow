@@ -4,6 +4,7 @@ import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public interface ReservationService {
@@ -19,4 +20,6 @@ public interface ReservationService {
     void confirmReservation(UUID reservationId, UUID paymentId);
 
     int claimGuestReservations(UUID userId, String customerEmail);
+
+    int expireHoldReservations(Instant now, int batchSize);
 }
