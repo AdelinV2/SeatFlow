@@ -33,6 +33,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -207,5 +208,26 @@ class PaymentServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         assertThat(service.getPaymentByReservationId(reservationId, reservationUserId, false)).isNotNull();
+    }
+
+    @Test
+    void claimGuestPaymentsUpdatesPaymentsForCustomerEmail() {
+        UUID userId = UUID.randomUUID();
+        String customerEmail = "guest@example.com";
+        when(paymentRepository.updateUserIdForCustomerEmail(eq(userId), eq(customerEmail), any(Instant.class)))
+                .thenReturn(3);
+
+        int updated = service.claimGuestPayments(userId, customerEmail);
+
+        assertThat(updated).isEqualTo(3);
+        verify(paymentRepository, times(1)).updateUserIdForCustomerEmail(eq(userId), eq(customerEmail), any(Instant.class));
+    }
+
+    @Test
+    void claimGuestPaymentsReturnsZeroWhenUserIdOrEmailIsInvalid() {
+        assertThat(service.claimGuestPayments(null, "guest@example.com")).isEqualTo(0);
+        assertThat(service.claimGuestPayments(UUID.randomUUID(), null)).isEqualTo(0);
+        assertThat(service.claimGuestPayments(UUID.randomUUID(), "   ")).isEqualTo(0);
+        verify(paymentRepository, never()).updateUserIdForCustomerEmail(any(), any(), any());
     }
 }

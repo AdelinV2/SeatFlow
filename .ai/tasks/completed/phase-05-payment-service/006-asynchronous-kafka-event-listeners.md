@@ -7,7 +7,7 @@
 - **Phase:** `Phase 05 - Payment & Stripe Service`
 - **Related Specs:** `.ai/architecture/05-messaging-and-outbox.md`, `.ai/architecture/02-microservices-spec.md` (Section 7), `.ai/architecture/03-database-models.md`
 - **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`, `.ai/decisions/ADR-004-stripe-tax-and-tax-inclusive-pricing.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,10 +15,10 @@
 Implement asynchronous Kafka consumer listeners in `payment-service` for event-driven cross-service synchronization. Specifically, consume `UserRegisteredEvent` from `user-service` to automatically associate historical guest payment records with newly registered customer accounts per ADR-001.
 
 ### Critical Invariants to Enforce:
-- [ ] **ADR-001 (Automatic Guest Account Linking):** When `UserRegisteredEvent` arrives on `seatflow.user.events`, execute an atomic update linking all historical payments matching `customer_email = :email AND user_id IS NULL` to the newly registered `userId`.
-- [ ] **Consumer Idempotency:** If `UserRegisteredEvent` is re-delivered, executing the `UPDATE ... WHERE customer_email = :email AND user_id IS NULL` query is idempotent and results in 0 rows updated without throwing errors.
-- [ ] **Kafka Consumer Group:** Set to `payment-service` for topic listeners.
-- [ ] **Zero Poison Pills / Polymorphic Event Handling:** Check `eventType` before binding payload records to ensure non-matching topic events (e.g. `UserProfileUpdated`) are safely ignored without triggering deserialization failures or consumer retry loops.
+- [x] **ADR-001 (Automatic Guest Account Linking):** When `UserRegisteredEvent` arrives on `seatflow.user.events`, execute an atomic update linking all historical payments matching `customer_email = :email AND user_id IS NULL` to the newly registered `userId`.
+- [x] **Consumer Idempotency:** If `UserRegisteredEvent` is re-delivered, executing the `UPDATE ... WHERE customer_email = :email AND user_id IS NULL` query is idempotent and results in 0 rows updated without throwing errors.
+- [x] **Kafka Consumer Group:** Set to `payment-service` for topic listeners.
+- [x] **Zero Poison Pills / Polymorphic Event Handling:** Check `eventType` before binding payload records to ensure non-matching topic events (e.g. `UserProfileUpdated`) are safely ignored without triggering deserialization failures or consumer retry loops.
 
 ---
 
@@ -234,8 +234,8 @@ To verify this task, run from the repository root:
 mvn clean test -pl backend/services/payment-service -Dtest=UserEventsConsumerTest,KafkaConsumerIntegrationTest
 ```
 
-- [ ] `UserRegisteredEvent` claims all unlinked guest payments by email.
-- [ ] Duplicate user registration events are handled idempotently.
-- [ ] Non-matching event types on `seatflow.user.events` are ignored safely without deserialization errors.
-- [ ] Integration test passes with real Kafka and PostgreSQL Testcontainers.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-05-payment-service/006-asynchronous-kafka-event-listeners.md` when complete.
+- [x] `UserRegisteredEvent` claims all unlinked guest payments by email.
+- [x] Duplicate user registration events are handled idempotently.
+- [x] Non-matching event types on `seatflow.user.events` are ignored safely without deserialization errors.
+- [x] Integration test passes with real Kafka and PostgreSQL Testcontainers.
+- [x] Task file is moved to `.ai/tasks/completed/phase-05-payment-service/006-asynchronous-kafka-event-listeners.md` when complete.

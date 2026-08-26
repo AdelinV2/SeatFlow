@@ -168,4 +168,17 @@ public class PaymentServiceImpl implements PaymentService {
 
         return paymentMapper.toResponse(payment);
     }
+
+    @Override
+    @Transactional
+    public int claimGuestPayments(UUID userId, String customerEmail) {
+        if (userId == null || customerEmail == null || customerEmail.isBlank()) {
+            log.warn("Cannot claim guest payments with null userId or blank email. userId={}, email={}", userId, customerEmail);
+            return 0;
+        }
+        log.info("Claiming historical guest payments for newly registered user. userId={}, email={}", userId, customerEmail);
+        int updatedCount = paymentRepository.updateUserIdForCustomerEmail(userId, customerEmail, Instant.now());
+        log.info("Claimed historical guest payments. userId={}, email={}, count={}", userId, customerEmail, updatedCount);
+        return updatedCount;
+    }
 }

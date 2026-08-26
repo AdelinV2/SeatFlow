@@ -13,4 +13,6 @@ public interface PaymentService {
     PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin);
 
     PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin);
+
+    int claimGuestPayments(UUID userId, String customerEmail);
 }
