@@ -1,5 +1,6 @@
 package com.seatflow.payment.model.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.Hibernate;
@@ -44,7 +45,7 @@ public class OutboxEvent {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb", updatable = false)
-    private String payload;
+    private JsonNode payload;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public final class UserContext {
@@ -18,6 +19,18 @@ public final class UserContext {
 
     public static Optional<String> getCurrentUserId() {
         return getJwt().map(Jwt::getSubject);
+    }
+
+    public static Optional<UUID> getCurrentUserIdAsUuid() {
+        return getJwt()
+                .map(Jwt::getSubject)
+                .flatMap(subject -> {
+                    try {
+                        return Optional.of(UUID.fromString(subject));
+                    } catch (IllegalArgumentException ex) {
+                        return Optional.empty();
+                    }
+                });
     }
 
     public static Optional<String> getCurrentUserEmail() {

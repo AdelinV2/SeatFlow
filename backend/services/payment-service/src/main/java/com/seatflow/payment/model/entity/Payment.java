@@ -62,11 +62,22 @@ public class Payment {
     @ToString.Include
     private String stripePaymentIntentId;
 
+    @Column(name = "client_secret", updatable = false)
+    private String clientSecret;
+
     @Column(name = "idempotency_key", nullable = false, unique = true, updatable = false)
     private String idempotencyKey;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "tax_amount", nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
+    @Column(name = "net_amount", nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal netAmount = BigDecimal.ZERO;
 
     @Column(nullable = false, length = 3)
     @Builder.Default

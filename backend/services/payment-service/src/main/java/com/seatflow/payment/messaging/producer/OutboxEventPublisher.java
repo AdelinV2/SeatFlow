@@ -11,6 +11,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -37,9 +38,12 @@ public class OutboxEventPublisher {
     private int batchSize = 50;
 
     @Scheduled(fixedDelayString = "${outbox.publisher.fixed-delay-ms:3000}")
-    @Transactional
     public void publishPendingEvents() {
-        List<OutboxEvent> pendingEvents = outboxEventRepository.findUnpublishedForUpdate(MAX_RETRY_COUNT, batchSize);
+        // Claim a batch in its own short transaction (FOR UPDATE SKIP LOCKED) and release the
+        // acquired row locks immediately. The blocking Kafka send must NOT happen inside a database
+        // transaction, otherwise a slow/hanging broker would hold PostgreSQL row locks and exhaust
+        // the connection pool (risk of lock_timeout / idle_in_transaction_session_timeout).
+        List<OutboxEvent> pendingEvents = claimPendingEvents();
         if (pendingEvents.isEmpty()) {
             return;
         }
@@ -51,7 +55,7 @@ public class OutboxEventPublisher {
                 CompletableFuture<SendResult<String, String>> sendFuture = kafkaTemplate.send(
                         topic,
                         event.getAggregateId().toString(),
-                        event.getPayload()
+                        event.getPayload().toString()
                 );
                 sendFuture.get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
@@ -61,16 +65,21 @@ public class OutboxEventPublisher {
                             event.getId(), event.getAggregateId(), event.getEventType(), topic);
                 }
             } catch (Exception ex) {
-                int retryUpdated = outboxEventRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
-                if (retryUpdated == 0) {
+                int updated = outboxEventRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
+                if (updated == 0) {
                     log.error("Payment outbox event exceeded max retry limit ({}) or was already published. outboxEventId={}, eventType={}, aggregateId={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(), ex);
                     meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
-                    log.warn("Failed to publish payment outbox event, retry incremented. outboxEventId={}, eventType={}, retryCount={}",
-                            event.getId(), event.getEventType(), event.getRetryCount() + 1, ex);
+                    log.warn("Failed to publish payment outbox event, retry incremented. outboxEventId={}, eventType={}, aggregateId={}",
+                            event.getId(), event.getEventType(), event.getAggregateId(), ex);
                 }
             }
         }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<OutboxEvent> claimPendingEvents() {
+        return outboxEventRepository.findUnpublishedForUpdate(MAX_RETRY_COUNT, batchSize);
     }
 }

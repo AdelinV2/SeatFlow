@@ -1,5 +1,6 @@
 package com.seatflow.payment.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -113,6 +114,8 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         BigDecimal netAmount = payment.getAmount().subtract(taxAmount);
 
         payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setTaxAmount(taxAmount);
+        payment.setNetAmount(netAmount);
         payment.setUpdatedAt(Instant.now());
         paymentRepository.save(payment);
 
@@ -197,13 +200,21 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
                     JsonElement amountDetailsElem = objElem.getAsJsonObject().get("amount_details");
                     if (amountDetailsElem != null && amountDetailsElem.isJsonObject()) {
                         JsonElement taxElem = amountDetailsElem.getAsJsonObject().get("tax");
-                        if (taxElem != null && taxElem.isJsonObject()) {
-                            JsonElement totalTaxElem = taxElem.getAsJsonObject().get("total_tax_amount");
-                            if (totalTaxElem != null && totalTaxElem.isJsonPrimitive()) {
-                                long taxInCents = totalTaxElem.getAsLong();
-                                return BigDecimal.valueOf(taxInCents)
-                                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                        // Stripe Tax (ADR-004) returns `amount_details.tax` as a JSON array of
+                        // line items, each carrying an `amount` (in cents), e.g.
+                        // [{"amount":190,"tax_rate":"txr_..."}]. There is no `total_tax_amount` field.
+                        if (taxElem != null && taxElem.isJsonArray()) {
+                            long totalTaxCents = 0;
+                            for (JsonElement item : taxElem.getAsJsonArray()) {
+                                if (item.isJsonObject() && item.getAsJsonObject().has("amount")) {
+                                    JsonElement amountElem = item.getAsJsonObject().get("amount");
+                                    if (amountElem.isJsonPrimitive()) {
+                                        totalTaxCents += amountElem.getAsLong();
+                                    }
+                                }
                             }
+                            return BigDecimal.valueOf(totalTaxCents)
+                                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
                         }
                     }
                 }
@@ -223,11 +234,12 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
                     CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
                     (com.seatflow.common.events.DomainEvent) payload
             );
-            String payloadJson = objectMapper.writeValueAsString(envelope);
+            // Store the envelope as a real JSON object in the jsonb column (not a JSON-string scalar).
+            JsonNode payloadNode = objectMapper.valueToTree(envelope);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .aggregateId(aggregateId)
                     .eventType(eventType)
-                    .payload(payloadJson)
+                    .payload(payloadNode)
                     .build();
             outboxEventRepository.save(outboxEvent);
         } catch (Exception ex) {

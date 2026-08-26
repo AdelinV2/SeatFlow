@@ -51,9 +51,7 @@ public class PaymentController {
     public ResponseEntity<PaymentIntentResponse> createPaymentIntent(
             @Valid @RequestBody CreatePaymentIntentRequest request) {
 
-        UUID authenticatedUserId = UserContext.getCurrentUserId()
-                .map(UUID::fromString)
-                .orElse(null);
+        UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
 
         PaymentIntentResponse response = paymentService.createPaymentIntent(request, authenticatedUserId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -69,9 +67,7 @@ public class PaymentController {
     @ApiResponse(responseCode = "404", description = "Payment not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<PaymentResponse> getPayment(@PathVariable UUID paymentId) {
-        UUID authenticatedUserId = UserContext.getCurrentUserId()
-                .map(UUID::fromString)
-                .orElse(null);
+        UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
         boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
 
         PaymentResponse response = paymentService.getPaymentById(paymentId, authenticatedUserId, isAdmin);
@@ -88,9 +84,7 @@ public class PaymentController {
     @ApiResponse(responseCode = "404", description = "Payment for reservation not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<PaymentResponse> getPaymentByReservation(@PathVariable UUID reservationId) {
-        UUID authenticatedUserId = UserContext.getCurrentUserId()
-                .map(UUID::fromString)
-                .orElse(null);
+        UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
         boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
 
         PaymentResponse response = paymentService.getPaymentByReservationId(reservationId, authenticatedUserId, isAdmin);

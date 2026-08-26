@@ -57,7 +57,7 @@ public class PaymentServiceImpl implements PaymentService {
                 Payment existing = existingIdempotentPayment.get();
                 if (existing.getReservationId().equals(request.reservationId())) {
                     log.info("Idempotent replay for paymentId={}, idempotencyKey={}", existing.getId(), request.idempotencyKey());
-                    return paymentMapper.toIntentResponse(existing, null);
+                    return paymentMapper.toIntentResponse(existing, existing.getClientSecret());
                 } else {
                     throw new ConflictException("Idempotency key reused with different parameters", ErrorCode.CONFLICT);
                 }
@@ -116,6 +116,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .customerEmail(reservation.customerEmail())
                     .eventId(reservation.eventId())
                     .stripePaymentIntentId(stripeResult.paymentIntentId())
+                    .clientSecret(stripeResult.clientSecret())
                     .idempotencyKey(request.idempotencyKey())
                     .amount(reservation.totalAmount())
                     .currency("USD")
@@ -145,12 +146,7 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
 
-        if (!isAdmin && payment.getUserId() != null) {
-            if (authenticatedUserId == null || !payment.getUserId().equals(authenticatedUserId)) {
-                throw new ResourceNotFoundException("Payment", paymentId);
-            }
-        }
-
+        assertAuthorized(payment, authenticatedUserId, isAdmin);
         return paymentMapper.toResponse(payment);
     }
 
@@ -160,13 +156,30 @@ public class PaymentServiceImpl implements PaymentService {
         Payment payment = paymentRepository.findByReservationId(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment for reservation", reservationId));
 
-        if (!isAdmin && payment.getUserId() != null) {
-            if (authenticatedUserId == null || !payment.getUserId().equals(authenticatedUserId)) {
-                throw new ResourceNotFoundException("Payment for reservation", reservationId);
-            }
-        }
-
+        assertAuthorized(payment, authenticatedUserId, isAdmin);
         return paymentMapper.toResponse(payment);
+    }
+
+    private void assertAuthorized(Payment payment, UUID authenticatedUserId, boolean isAdmin) {
+        if (isAdmin) {
+            return;
+        }
+        if (payment.getUserId() != null) {
+            // Registered payment: only the owner may access it.
+            if (authenticatedUserId == null || !payment.getUserId().equals(authenticatedUserId)) {
+                throw new ResourceNotFoundException("Payment", payment.getId());
+            }
+            return;
+        }
+        // Guest payment (userId == null): accessible anonymously (guest checkout flow, ADR-001)
+        // or by an authenticated caller whose verified email matches the payment's customer email.
+        // This prevents an authenticated user from enumerating another guest's payment.
+        String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
+        boolean anonymous = authenticatedUserId == null && callerEmail == null;
+        boolean emailMatches = callerEmail != null && callerEmail.equalsIgnoreCase(payment.getCustomerEmail());
+        if (!anonymous && !emailMatches) {
+            throw new ResourceNotFoundException("Payment", payment.getId());
+        }
     }
 
     @Override
