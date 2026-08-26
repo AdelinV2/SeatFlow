@@ -185,23 +185,24 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
     }
 
     private BigDecimal extractTaxAmount(JsonObject eventRaw) {
+        if (eventRaw == null) {
+            return new BigDecimal("0.00");
+        }
+
         try {
-            if (eventRaw != null && eventRaw.has("data")) {
-                JsonObject data = eventRaw.getAsJsonObject("data");
-                if (data != null && data.has("object")) {
-                    JsonObject object = data.getAsJsonObject("object");
-                    if (object != null && object.has("amount_details")) {
-                        JsonObject amountDetails = object.getAsJsonObject("amount_details");
-                        // Stripe represents tax as an object: amount_details.tax.total_tax_amount (integer, in cents).
-                        if (amountDetails != null && amountDetails.has("tax")) {
-                            JsonElement tax = amountDetails.get("tax");
-                            if (tax != null && tax.isJsonObject()) {
-                                JsonElement totalTax = tax.getAsJsonObject().get("total_tax_amount");
-                                if (totalTax != null && !totalTax.isJsonNull()) {
-                                    long taxInCents = totalTax.getAsLong();
-                                    return BigDecimal.valueOf(taxInCents)
-                                            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                                }
+            JsonElement dataElem = eventRaw.get("data");
+            if (dataElem != null && dataElem.isJsonObject()) {
+                JsonElement objElem = dataElem.getAsJsonObject().get("object");
+                if (objElem != null && objElem.isJsonObject()) {
+                    JsonElement amountDetailsElem = objElem.getAsJsonObject().get("amount_details");
+                    if (amountDetailsElem != null && amountDetailsElem.isJsonObject()) {
+                        JsonElement taxElem = amountDetailsElem.getAsJsonObject().get("tax");
+                        if (taxElem != null && taxElem.isJsonObject()) {
+                            JsonElement totalTaxElem = taxElem.getAsJsonObject().get("total_tax_amount");
+                            if (totalTaxElem != null && totalTaxElem.isJsonPrimitive()) {
+                                long taxInCents = totalTaxElem.getAsLong();
+                                return BigDecimal.valueOf(taxInCents)
+                                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
                             }
                         }
                     }
@@ -210,7 +211,8 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         } catch (Exception ex) {
             log.warn("Unable to extract Stripe Tax amount from webhook event payload", ex);
         }
-        return BigDecimal.ZERO;
+
+        return new BigDecimal("0.00");
     }
 
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
