@@ -133,7 +133,9 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 
 ### 4.1 Synchronous Communication (REST / HTTP)
 - Used when the caller requires an immediate response (e.g. browsing events, rendering a seat map, requesting a hold, checking payment status).
-- Service-to-service calls resolve instances dynamically via **Eureka** using `RestClient` or `@FeignClient`.
+- Service-to-service synchronous calls resolve instances dynamically via **Eureka** using Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder` with logical service URLs, e.g. `http://<service-name>`).
+- All synchronous REST clients must configure explicit connect/read timeouts (`SimpleClientHttpRequestFactory`), forward `X-Correlation-Id` via `CorrelationContext`, and protect remote invocations with Resilience4j circuit breakers.
+- Services declaring `@LoadBalanced` builders must also define a `@Primary` plain `RestClient.Builder` bean to preserve Eureka client's internal registration mechanism.
 
 ### 4.2 Asynchronous Communication (Kafka)
 - Used for all decoupled domain events and cross-service state transitions:

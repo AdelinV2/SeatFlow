@@ -18,6 +18,7 @@ The Builder/Implementer role receives a single task specification (`.ai/tasks/ph
    - Frontend: Interfaces/Models → Service → Component → Template → Route → Tests.
 4. **No `@Data` on JPA Entities:** Always use explicit `@Getter`, `@Setter`, `@Builder`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, `@AllArgsConstructor`.
 5. **No custom GlobalExceptionHandler:** Use `common-observability` and `common-domain`.
+6. **Synchronous Inter-Service Calls via Eureka & LoadBalancer:** When a service calls another microservice synchronously, use Eureka service discovery + Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder` with target `http://<service-name>`). Always declare a `@Primary` plain `RestClient.Builder` alongside the `@LoadBalanced` bean and wrap calls with Resilience4j circuit breakers.
 
 ---
 

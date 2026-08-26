@@ -342,9 +342,9 @@ For local development, multiple PostgreSQL databases can run inside one PostgreS
 
 ## 5.0 Service Discovery and Common Modules
 
-## 5.0.1 Eureka Discovery
+## 5.0.1 Eureka Discovery & Synchronous Inter-Service Communication
 
-Use **Netflix Eureka Server** for service discovery. Every Spring Boot business service and the API Gateway must register as a Eureka client. The Gateway should resolve downstream service instances through Eureka rather than hardcoding service hostnames/ports.
+Use **Netflix Eureka Server** for service discovery. Every Spring Boot business service and the API Gateway must register as a Eureka client. The Gateway and inter-service REST clients resolve downstream service instances dynamically through Eureka rather than hardcoding service hostnames or ports.
 
 Local development may run one Eureka Server container/application instance. Production should use the simplest reliable topology supported by the chosen deployment model; do not create an unnecessary multi-node Eureka cluster for the portfolio MVP.
 
@@ -352,8 +352,15 @@ Responsibilities:
 
 - service registration.
 - service discovery.
-- health-aware instance information where supported.
-- removing hardcoded service URLs from the Gateway and inter-service clients.
+- dynamic client-side load balancing via Spring Cloud LoadBalancer.
+- removing hardcoded service URLs from the Gateway and inter-service clients (`http://<service-name>`).
+
+**Synchronous Inter-Service REST Pattern:**
+When a microservice needs to invoke another service synchronously over HTTP:
+1. Include `org.springframework.cloud:spring-cloud-starter-loadbalancer`.
+2. Provide a `@Bean @Primary RestClient.Builder` (plain builder) to allow Eureka client's internal registration mechanism to contact the Eureka server without load-balancing interception.
+3. Provide a `@Bean @LoadBalanced RestClient.Builder` with a specific qualifier for inter-service REST calls.
+4. Construct the client adapter using `baseUrl("http://" + serviceId)`, timeout controls via `SimpleClientHttpRequestFactory`, `X-Correlation-Id` forwarding from `CorrelationContext`, and Resilience4j circuit breaking.
 
 Eureka is for **discovery**, not for business data, configuration, distributed locking or event transport.
 
@@ -733,7 +740,14 @@ Use `application.yaml` (not `.yml`). Profiles: `dev`, `test`, `prod`.
 
 Use **springdoc-openapi 3.x** (`springdoc-openapi-starter-webmvc-ui`). Every controller must be discoverable and fully documented at `/swagger-ui.html`.
 
+### Inter-Service REST Clients (Eureka + Spring Cloud LoadBalancer)
 
+Any microservice requiring synchronous REST queries to another internal service must:
+- Include `spring-cloud-starter-loadbalancer`.
+- Provide a `@Primary` plain `RestClient.Builder` alongside a `@LoadBalanced` qualified `RestClient.Builder` in `config/RestClientConfig.java`.
+- Inject the `@LoadBalanced` builder into the client implementation in `client/impl/`, using `baseUrl("http://" + serviceId)`.
+- Configure `SimpleClientHttpRequestFactory` connection/read timeouts, propagate `X-Correlation-Id` from `CorrelationContext`, and protect calls with Resilience4j `CircuitBreaker`.
+- Never hardcode hostnames (`localhost`) or static port numbers.
 
 ## 5.0.4 Service Communication Matrix
 
@@ -741,8 +755,9 @@ Use **springdoc-openapi 3.x** (`springdoc-openapi-starter-webmvc-ui`). Every con
 |---|---|---|---|
 | Angular | API Gateway | REST | API requests |
 | Angular | Realtime Service | WebSocket | Live seat/status updates |
-| API Gateway | User/Event/SeatMap/Reservation/Payment/Ticket/Admin APIs | REST via Eureka | Synchronous request/response |
-| Reservation Service | Seat Map Service | REST via Eureka | Validate referenced seat metadata when required |
+| API Gateway | User/Event/SeatMap/Reservation/Payment/Ticket/Admin APIs | REST via Eureka (`lb://SERVICE-NAME`) | Synchronous request/response routing |
+| Event Service | Seat Map Service | REST via Eureka (`@LoadBalanced RestClient`) | Retrieve venue layout and section metadata |
+| Reservation Service | Event Service | REST via Eureka (`@LoadBalanced RestClient`) | Validate event status and fetch authoritative seat pricing |
 | Reservation Service | Kafka | Outbox -> event | Reservation lifecycle events |
 | Payment Service | Stripe | HTTPS/webhooks | Payment processing |
 | Payment Service | Kafka | Outbox/event | Payment outcome events |
@@ -755,7 +770,7 @@ Rules:
 - REST is for immediate reads/commands where a synchronous response is required.
 - Kafka is for domain events and asynchronous workflows.
 - No service reads another service's database.
-- Eureka resolves service instances for synchronous service-to-service REST.
+- Eureka resolves service instances dynamically for synchronous service-to-service REST via Spring Cloud LoadBalancer (`@LoadBalanced RestClient`).
 - Kafka does not replace Eureka.
 - Eureka does not replace Kafka.
 

@@ -117,7 +117,7 @@ Every business microservice must follow this exact package layout:
     │   │   │   ├── consumer/      # Kafka consumers (idempotent)
     │   │   │   ├── producer/      # Outbox publisher / Kafka producers
     │   │   │   └── event/         # Local event records (implementing DomainEvent)
-    │   │   └── client/            # RestClient / FeignClient for internal REST calls
+    │   │   └── client/            # RestClient adapters for inter-service REST calls (Eureka + LoadBalancer)
     │   └── resources/
     │       ├── application.yaml          # Base configuration (common defaults, Jackson, OpenAPI, Actuator)
     │       ├── application-local.yaml     # Local IDE execution (connects to localhost:5432, ANSI console logs)
@@ -436,6 +436,45 @@ Global exception handling is centralized in **`common-observability`** (`GlobalE
 - `ValidationException` (400) — for business rule violations (`ErrorCode.MAX_SEATS_EXCEEDED`).
 - `BusinessException` (Custom status) — for generic domain violations.
 
+### 5.7 Synchronous Inter-Service REST Clients (Eureka + Spring Cloud LoadBalancer)
+
+When a microservice needs to query or command another microservice synchronously over HTTP REST:
+
+1. **Dependency:** Include `spring-cloud-starter-loadbalancer` in `pom.xml`:
+   ```xml
+   <dependency>
+       <groupId>org.springframework.cloud</groupId>
+       <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+   </dependency>
+   ```
+2. **RestClient Configuration (`config/RestClientConfig.java`):**
+   - **Mandatory `@Primary` Plain Builder:** Always declare an un-annotated `@Primary` `RestClient.Builder`. Eureka Client internally uses `RestClient` to contact Eureka Server; if the only builder in the context were `@LoadBalanced`, Eureka would attempt to resolve its own server URL through the load balancer and fail registration.
+   - **Load-Balanced Builder:** Declare a `@LoadBalanced` `RestClient.Builder` with a distinct bean qualifier for inter-service communication.
+   ```java
+   @Configuration
+   public class RestClientConfig {
+
+       @Bean
+       @Primary
+       public RestClient.Builder restClientBuilder() {
+           return RestClient.builder();
+       }
+
+       @Bean
+       @LoadBalanced
+       public RestClient.Builder targetServiceLoadBalancedBuilder() {
+           return RestClient.builder();
+       }
+   }
+   ```
+3. **Client Implementation (`client/impl/<Target>ClientImpl.java`):**
+   - Inject the qualified `@LoadBalanced` `RestClient.Builder`.
+   - Set the `baseUrl("http://" + serviceId)` using the target service's registered Spring Application name (e.g. `http://event-service`, `http://seat-map-service`).
+   - Configure connection and read timeouts explicitly via `SimpleClientHttpRequestFactory` (e.g., connect timeout 3s, read timeout 5s).
+   - Propagate `X-Correlation-Id` using a request interceptor reading from `CorrelationContext.getCorrelationId()`.
+   - Guard inter-service executions with a Resilience4j `CircuitBreaker`.
+   - Never hardcode hostnames (`localhost`) or static ports in client code or production configurations.
+
 ---
 
 ## 6. Concurrency, Locking & Invariant Sweeping
@@ -645,7 +684,7 @@ public class ReservationServiceImpl implements ReservationService {
 
 ## 9. Resilience & Security
 
-### 8.1 Resilience4j
+### 9.1 Resilience4j
 Configure circuit breakers and retries for synchronous inter-service communication:
 ```yaml
 resilience4j:
@@ -770,4 +809,5 @@ A backend task is complete only when all items are verified:
 - [ ] Outbox pattern used for domain events (NO direct `kafkaTemplate.send` in business transaction).
 - [ ] Kafka consumers are idempotent.
 - [ ] Unit tests (Mockito), repository tests (Testcontainers), and concurrency tests pass locally.
+- [ ] Synchronous inter-service REST clients use Eureka + Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder`) with a `@Primary` plain builder, timeout settings, and Resilience4j circuit breaking.
 - [ ] Zero secrets hardcoded.

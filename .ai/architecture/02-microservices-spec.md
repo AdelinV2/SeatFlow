@@ -50,12 +50,12 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_event` (PostgreSQL).
 - **Responsibilities:**
   - Event management: Title, description, banner URL, category, dates, status (`DRAFT`, `PUBLISHED`, `CANCELLED`, `COMPLETED`).
-  - Associating an event with a venue layout from `seat-map-service`.
+  - Associating an event with a venue layout from `seat-map-service` (queried via `@LoadBalanced RestClient` and Eureka discovery).
   - Seat category pricing tiers (e.g., VIP = \$150, General = \$50, Student = \$30).
   - Public event catalog queries with pagination, search, and date filters (`eventDate > now()`).
   - **Fail-Fast Public Access Guard (ADR-003):** Rejects public queries (`GET /api/events/{id}`, `GET /api/events/{id}/seat-map`) with 404 if `eventDate <= now()`.
   - **Automated Event Completion Sweeper (ADR-003):** Multi-instance safe background scheduler (`@Scheduled` + `SELECT ... FOR UPDATE SKIP LOCKED`) transitioning expired published events (`event_date <= now()`) to `COMPLETED` and publishing `EventCompletedEvent` via Transactional Outbox.
-- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Kafka.
+- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, `spring-cloud-starter-loadbalancer`, Kafka.
 
 ---
 
@@ -65,12 +65,12 @@ This document details the responsibilities, dependencies, internal architecture,
   - Temporary seat hold creation (15 minutes).
   - **Hybrid Guest & Authenticated Holds:** Supports authenticated customers (resolving `userId` from token) and guest customers (accepting `customerEmail` and optional `customerName` in payload).
   - Enforce maximum 10 seats per reservation limit.
-  - **Authoritative Server-Side Pricing:** The client only sends `eventId` and `seatIds`. `reservation-service` queries `event-service` via internal REST client to fetch official pricing tiers and calculates `total_amount` authoritatively on the server side (never trusts client prices).
+  - **Authoritative Server-Side Pricing:** The client only sends `eventId` and `seatIds`. `reservation-service` queries `event-service` via internal `@LoadBalanced RestClient` (resolved through Eureka) to fetch official pricing tiers and calculates `total_amount` authoritatively on the server side (never trusts client prices).
   - Concurrency control: Zero double-booking guarantee via DB unique constraints and pessimistic/optimistic locking.
   - Reservation state machine: `PENDING` → `CONFIRMED` | `CANCELLED` | `EXPIRED`.
   - Transactional Outbox Pattern for publishing `ReservationHeld`, `ReservationExpired`, `ReservationCancelled`.
   - **Multi-Instance Expiration Sweeper:** Background sweeper job (`@Scheduled` + `SELECT ... FOR UPDATE SKIP LOCKED`) releasing expired holds without deadlock or cluster contention across instances.
-- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Kafka.
+- **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, `spring-cloud-starter-loadbalancer`, Kafka.
 
 ---
 
@@ -117,3 +117,20 @@ This document details the responsibilities, dependencies, internal architecture,
   - Dispatches emails via SMTP / SendGrid adapter directly to `customerEmail`.
   - Tracks delivery logs and retry attempts in `notification_logs` table.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, JavaMailSender / SendGrid.
+
+---
+
+## 11. Synchronous Inter-Service Communication Standard
+
+Whenever a microservice needs to synchronously query or command another microservice via HTTP REST:
+
+1. **Service Discovery & Client-Side Load Balancing:**
+   - Add `org.springframework.cloud:spring-cloud-starter-loadbalancer` to `pom.xml`.
+   - In `config/RestClientConfig.java`, define an un-annotated `@Primary` `RestClient.Builder` (preventing Eureka registration failure) alongside a qualified `@Bean @LoadBalanced RestClient.Builder`.
+2. **Client Implementation (`client/impl/<Target>ClientImpl.java`):**
+   - Inject the qualified `@LoadBalanced` builder.
+   - Configure base URL with the target service's registered name: `http://<service-name>` (e.g. `http://event-service`, `http://seat-map-service`).
+   - Configure timeouts explicitly (`SimpleClientHttpRequestFactory` with connect timeout 3s and read timeout 5s).
+   - Forward trace context via `X-Correlation-Id` header interceptor using `CorrelationContext.getCorrelationId()`.
+   - Wrap remote invocations with a Resilience4j `CircuitBreaker`.
+   - Never use static IP addresses or hardcoded localhost ports for inter-service communication.

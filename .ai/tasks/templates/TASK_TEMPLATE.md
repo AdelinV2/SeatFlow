@@ -65,6 +65,12 @@ public interface ExampleService {
 }
 ```
 
+### 4.4 Inter-Service Client & Load Balancing (If Applicable)
+When calling another microservice synchronously over HTTP:
+- Dependency: `spring-cloud-starter-loadbalancer`.
+- Config: `config/RestClientConfig.java` with `@Primary` plain `RestClient.Builder` and `@LoadBalanced` qualified `RestClient.Builder`.
+- Client: `client/impl/<Target>ClientImpl.java` targeting `http://<service-name>` with timeouts, `X-Correlation-Id` interceptor, and Resilience4j circuit breaker.
+
 ---
 
 ## 5. Step-by-Step Implementation Sequence (For Builder / Implementer)
