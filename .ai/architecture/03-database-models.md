@@ -326,7 +326,9 @@ CREATE TABLE payments (
     event_id                 UUID          NOT NULL,
     stripe_payment_intent_id VARCHAR(255),
     idempotency_key          VARCHAR(255)  NOT NULL,
-    amount                   NUMERIC(10,2) NOT NULL,
+    amount                   NUMERIC(10,2) NOT NULL, -- Total gross amount charged (tax-inclusive)
+    tax_amount               NUMERIC(10,2) NOT NULL DEFAULT 0.00, -- Tax/VAT computed by Stripe Tax (ADR-004)
+    net_amount               NUMERIC(10,2) NOT NULL DEFAULT 0.00, -- Net merchant revenue (amount - tax_amount)
     currency                 VARCHAR(3)    NOT NULL DEFAULT 'USD',
     status                   VARCHAR(30)   NOT NULL, -- INITIATED, SUCCESS, FAILED, REFUNDED
     failure_reason           TEXT,
@@ -339,6 +341,8 @@ CREATE TABLE payments (
     CONSTRAINT uq_payments_reservation_id UNIQUE (reservation_id), -- Only 1 payment pipeline per reservation
     CONSTRAINT chk_payments_status CHECK (status IN ('INITIATED', 'SUCCESS', 'FAILED', 'REFUNDED')),
     CONSTRAINT chk_payments_amount CHECK (amount > 0.00),
+    CONSTRAINT chk_payments_tax_amount CHECK (tax_amount >= 0.00),
+    CONSTRAINT chk_payments_net_amount CHECK (net_amount >= 0.00),
     CONSTRAINT chk_payments_currency CHECK (length(currency) = 3),
     CONSTRAINT chk_payments_email CHECK (customer_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
 );
@@ -384,18 +388,24 @@ CREATE TABLE tickets (
     customer_email VARCHAR(255) NOT NULL,
     attendee_name  VARCHAR(255),
     event_id       UUID         NOT NULL,
-    seat_id        UUID         NOT NULL,
-    ticket_code    VARCHAR(64)  NOT NULL, -- Cryptographically secure token (URL-safe)
-    qr_code_data   TEXT         NOT NULL,
-    status         VARCHAR(30)  NOT NULL DEFAULT 'VALID', -- VALID, USED, CANCELLED
-    version        BIGINT       NOT NULL DEFAULT 0,
-    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    seat_id        UUID          NOT NULL,
+    price          NUMERIC(10,2) NOT NULL, -- Total ticket price (tax-inclusive)
+    tax_amount     NUMERIC(10,2) NOT NULL DEFAULT 0.00, -- Tax/VAT portion (ADR-004)
+    net_amount     NUMERIC(10,2) NOT NULL DEFAULT 0.00, -- Net ticket base price
+    ticket_code    VARCHAR(64)   NOT NULL, -- Cryptographically secure token (URL-safe)
+    qr_code_data   TEXT          NOT NULL,
+    status         VARCHAR(30)   NOT NULL DEFAULT 'VALID', -- VALID, USED, CANCELLED
+    version        BIGINT        NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
 
     CONSTRAINT pk_tickets PRIMARY KEY (id),
     CONSTRAINT uq_tickets_ticket_code UNIQUE (ticket_code),
     CONSTRAINT uq_tickets_reservation_seat UNIQUE (reservation_id, seat_id),
     CONSTRAINT chk_tickets_status CHECK (status IN ('VALID', 'USED', 'CANCELLED')),
+    CONSTRAINT chk_tickets_price CHECK (price >= 0.00),
+    CONSTRAINT chk_tickets_tax_amount CHECK (tax_amount >= 0.00),
+    CONSTRAINT chk_tickets_net_amount CHECK (net_amount >= 0.00),
     CONSTRAINT chk_tickets_email CHECK (customer_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
 );
 

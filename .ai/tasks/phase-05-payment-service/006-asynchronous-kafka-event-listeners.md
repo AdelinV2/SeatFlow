@@ -6,7 +6,7 @@
 - **Target Module:** `backend/services/payment-service`
 - **Phase:** `Phase 05 - Payment & Stripe Service`
 - **Related Specs:** `.ai/architecture/05-messaging-and-outbox.md`, `.ai/architecture/02-microservices-spec.md` (Section 7), `.ai/architecture/03-database-models.md`
-- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`
+- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`, `.ai/decisions/ADR-004-stripe-tax-and-tax-inclusive-pricing.md`
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---

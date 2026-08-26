@@ -6,17 +6,18 @@
 - **Target Module:** `backend/services/payment-service`
 - **Phase:** `Phase 05 - Payment & Stripe Service`
 - **Related Specs:** `.ai/architecture/04-authentication-security.md`, `.ai/architecture/06-api-contracts.md` (Section 2.5), `.ai/architecture/05-messaging-and-outbox.md`
-- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`
+- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-004-stripe-tax-and-tax-inclusive-pricing.md`
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---
 
 ## 2. Objective & Invariants
-Expose the HTTP REST endpoints for payment intent creation, payment status queries, and Stripe asynchronous webhook ingestion. Implement cryptographic Stripe signature verification, webhook idempotency handling, payment status transition (`INITIATED` → `SUCCESS` / `FAILED`), and transactional outbox event creation (`PaymentCompletedEvent` / `PaymentFailedEvent`). Configure stateless Spring Security OAuth2 Resource Server integration permitting guest checkouts and webhook processing.
+Expose the HTTP REST endpoints for payment intent creation, payment status queries, and Stripe asynchronous webhook ingestion. Implement cryptographic Stripe signature verification, webhook idempotency handling, automated Stripe Tax breakdown extraction (`taxAmount`, `netAmount`), payment status transition (`INITIATED` → `SUCCESS` / `FAILED`), and transactional outbox event creation (`PaymentCompletedEvent` / `PaymentFailedEvent`). Configure stateless Spring Security OAuth2 Resource Server integration permitting guest checkouts and webhook processing.
 
 ### Critical Invariants to Enforce:
 - [ ] **Cryptographic Webhook Signature Verification:** All incoming requests to `POST /api/payments/webhook` must verify the `Stripe-Signature` header against the configured `stripe.webhook-secret` using Stripe SDK `Webhook.constructEvent`. Reject invalid signatures with HTTP 400 (`ValidationException(ErrorCode.UNAUTHORIZED)`).
 - [ ] **Webhook Idempotency Guarantee:** If `payment_intent.succeeded` arrives for a payment already in `PaymentStatus.SUCCESS`, safely log INFO and return `200 OK` immediately without re-transitioning or generating duplicate outbox events.
+- [ ] **Stripe Tax Extraction (ADR-004):** Extract tax computed by Stripe Tax from `paymentIntent.getAmountDetails().getTax()`. Calculate `netAmount = amount.subtract(taxAmount)` and propagate in `PaymentCompletedEvent`.
 - [ ] **Transactional Outbox Pattern:** Status transitions and domain event writes (`PaymentCompletedEvent` or `PaymentFailedEvent`) MUST be committed to `payments` and `outbox_events` in the **same database transaction**. **Never invoke KafkaTemplate directly inside business controllers or webhook handlers.**
 - [ ] **Hybrid Guest Checkout (ADR-001):** `POST /api/payments/intent` is publicly accessible. If an `Authorization: Bearer <JWT>` token is present, resolve `userId` and token claims via `UserContext`; otherwise, process payment for the guest customer.
 - [ ] **Server-Side Authorization:** `SecurityConfig` permits public access to `/api/payments/intent`, `/api/payments/*`, `/api/payments/webhook`, `/v3/api-docs/**`, `/swagger-ui/**`, and `/actuator/health`. Secured operations extract roles using the auto-configured `JwtRoleConverter` from `common-security`.
@@ -59,6 +60,8 @@ public record PaymentCompletedEvent(
     String customerEmail,
     UUID eventId,
     BigDecimal amount,
+    BigDecimal taxAmount,
+    BigDecimal netAmount,
     String currency,
     String stripePaymentId,
     Instant occurredAt
@@ -261,6 +264,14 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
             return;
         }
 
+        // Extract tax breakdown computed by Stripe Tax (ADR-004)
+        BigDecimal taxAmount = BigDecimal.ZERO;
+        if (paymentIntent.getAmountDetails() != null && paymentIntent.getAmountDetails().getTax() != null) {
+            long taxInCents = paymentIntent.getAmountDetails().getTax();
+            taxAmount = BigDecimal.valueOf(taxInCents).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+        }
+        BigDecimal netAmount = payment.getAmount().subtract(taxAmount);
+
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setUpdatedAt(Instant.now());
         paymentRepository.save(payment);
@@ -272,6 +283,8 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
                 payment.getCustomerEmail(),
                 payment.getEventId(),
                 payment.getAmount(),
+                taxAmount,
+                netAmount,
                 payment.getCurrency(),
                 payment.getStripePaymentIntentId(),
                 Instant.now()
@@ -280,8 +293,8 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         saveOutboxRecord("PaymentCompleted", payment.getId(), completedEvent);
         meterRegistry.counter("seatflow.payments.completed.total", "status", "SUCCESS").increment();
 
-        log.info("Payment successfully processed and PaymentCompleted outbox event created. paymentId={}, reservationId={}",
-                payment.getId(), payment.getReservationId());
+        log.info("Payment successfully processed and PaymentCompleted outbox event created. paymentId={}, reservationId={}, taxAmount={}, netAmount={}",
+                payment.getId(), payment.getReservationId(), taxAmount, netAmount);
     }
 
     private void handlePaymentIntentFailed(PaymentIntent paymentIntent) {

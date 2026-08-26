@@ -45,7 +45,8 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
                             PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                     .setEnabled(true)
                                     .build()
-                    );
+                    )
+                    .putExtraParam("automatic_tax", Map.of("enabled", true)); // Stripe Tax calculation (ADR-004)
 
             if (customerEmail != null && !customerEmail.isBlank()) {
                 paramsBuilder.setReceiptEmail(customerEmail);

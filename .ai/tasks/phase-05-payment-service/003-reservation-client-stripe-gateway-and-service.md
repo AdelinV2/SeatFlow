@@ -6,13 +6,13 @@
 - **Target Module:** `backend/services/payment-service`
 - **Phase:** `Phase 05 - Payment & Stripe Service`
 - **Related Specs:** `.ai/architecture/02-microservices-spec.md` (Section 7), `.ai/architecture/03-database-models.md` (Section 2.5), `.ai/architecture/06-api-contracts.md` (Section 2.5)
-- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`
+- **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`, `.ai/decisions/ADR-004-stripe-tax-and-tax-inclusive-pricing.md`
 - **Status:** `READY FOR IMPLEMENTATION`
 
 ---
 
 ## 2. Objective & Invariants
-Implement the synchronous `ReservationServiceClient` for inter-service communication with `reservation-service`, the `StripePaymentGateway` adapter wrapping the Stripe Java SDK for PaymentIntent creation, and the core transactional `PaymentService` business logic. This task enforces reservation validation (ensuring status `PENDING` and active non-expired hold), idempotency deduplication, server-side Stripe PaymentIntent creation, and initial `Payment` entity persistence in `INITIATED` status.
+Implement the synchronous `ReservationServiceClient` for inter-service communication with `reservation-service`, the `StripePaymentGateway` adapter wrapping the Stripe Java SDK for PaymentIntent creation with automated Stripe Tax, and the core transactional `PaymentService` business logic. This task enforces reservation validation (ensuring status `PENDING` and active non-expired hold), idempotency deduplication, server-side Stripe PaymentIntent creation with `automatic_tax` enabled, and initial `Payment` entity persistence in `INITIATED` status.
 
 ### Critical Invariants to Enforce:
 - [ ] **Synchronous Inter-Service Communication via Eureka & LoadBalancer:** Calls to `reservation-service` must resolve through Eureka service discovery using a `@LoadBalanced RestClient.Builder` targeting `http://reservation-service`. Declare a `@Primary` plain `RestClient.Builder` to prevent Eureka registration conflict.
@@ -22,6 +22,7 @@ Implement the synchronous `ReservationServiceClient` for inter-service communica
   - If `reservationId` matches, return the existing `PaymentIntentResponse` (or re-retrieve intent client secret).
   - If parameters conflict, throw `ConflictException("Idempotency key reused with different parameters", ErrorCode.CONFLICT)`.
 - [ ] **ADR-001 (Hybrid Guest/Customer):** If `userId` is present on the reservation, attach it to `Payment` and ensure authenticated caller owns the reservation; for unauthenticated guest reservations, allow checkout using the reservation's `customerEmail`.
+- [ ] **ADR-004 (Stripe Tax & Tax-Inclusive Pricing):** Stripe PaymentIntents must enable `automatic_tax` (`AutomaticTax.builder().setEnabled(true).build()`). `amount` represents the gross total amount (tax-inclusive).
 - [ ] **Stripe SDK Currency Conversion:** Stripe expects amounts in smallest currency units (e.g. cents for USD: `amount.multiply(BigDecimal.valueOf(100)).longValueExact()`).
 - [ ] **Resilience:** `ReservationServiceClient` uses Resilience4j Circuit Breaker and forwards `X-Correlation-Id`. Remote client outage fails fast with `ReservationClientUnavailableException` (HTTP 503, `ErrorCode.INTERNAL_SERVER_ERROR`).
 
@@ -315,7 +316,8 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
                             PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                     .setEnabled(true)
                                     .build()
-                    );
+                    )
+                    .putExtraParam("automatic_tax", Map.of("enabled", true)); // Stripe Tax calculation (ADR-004)
 
             if (customerEmail != null && !customerEmail.isBlank()) {
                 paramsBuilder.setReceiptEmail(customerEmail);

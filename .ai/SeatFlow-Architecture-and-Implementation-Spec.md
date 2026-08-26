@@ -110,8 +110,8 @@ Prefer Docker Compose locally and Terraform for cloud infrastructure where pract
 - Multiple seat selection (maximum 10 seats per reservation).
 - Reservation confirmation.
 - 15-minute temporary seat hold.
-- Stripe payment flow using Stripe Test Mode.
-- Payment success/failure handling via Stripe Payment Intents and webhooks.
+- Stripe payment flow using Stripe Test Mode and automated Stripe Tax calculation (Tax-Inclusive Pricing per ADR-004).
+- Payment success/failure handling via Stripe Payment Intents, webhooks, and fiscal breakdown recording.
 - Ticket creation.
 - QR code generation.
 - Email confirmation.

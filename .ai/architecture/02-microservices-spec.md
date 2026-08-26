@@ -78,9 +78,10 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_payment` (PostgreSQL).
 - **Responsibilities:**
   - Stripe integration (Payment Intent creation in Test Mode for both authenticated and guest reservations).
+  - **Stripe Tax Integration (ADR-004):** Enables `automatic_tax: { enabled: true }` on Stripe PaymentIntents using a **Tax-Inclusive Pricing Model**. The customer pays the exact gross amount (e.g. $10.00), while Stripe Tax computes the included tax portion (e.g. $1.90) and net revenue ($8.10).
   - **Cryptographic Webhook Verification:** Verifies incoming `Stripe-Signature` headers against the configured endpoint secret.
-  - **Webhook Idempotency:** Validates existing payment status (`if (payment.getStatus() == PaymentStatus.SUCCESS) return;`) to safely ignore duplicate webhook events from Stripe without producing duplicate outbox events.
-  - Publishing `PaymentCompleted` or `PaymentFailed` domain events via Transactional Outbox.
+  - **Webhook Idempotency & Fiscal Breakdown:** Validates existing payment status (`if (payment.getStatus() == PaymentStatus.SUCCESS) return;`) to safely ignore duplicate webhook events. Extracts `tax_amount` and calculates `net_amount` from Stripe webhook payload.
+  - Publishing `PaymentCompleted` (containing `amount`, `taxAmount`, `netAmount`) or `PaymentFailed` domain events via Transactional Outbox.
   - Payment state machine: `INITIATED` → `SUCCESS` | `FAILED` | `REFUNDED`.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Stripe SDK.
 
@@ -91,8 +92,9 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Responsibilities:**
   - Listens to `PaymentCompleted` Kafka events.
   - Generates secure digital tickets with cryptographic verification tokens (supporting both registered users and guest purchasers).
+  - Stores ticket financial attributes (`price`, `tax_amount`, `net_amount`).
   - Generates QR codes using **ZXing** containing signed ticket payload.
-  - Renders downloadable PDF tickets.
+  - Renders downloadable PDF tickets containing fiscal breakdown (Net Amount, Tax Amount, Total Gross Paid per ADR-004).
   - Publishing `TicketIssued` domain event via Outbox.
   - Ticket query endpoints for customer profile ("My Tickets"), secure guest access (`GET /api/tickets/guest/{ticketCode}`), and admin check-in.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, ZXing, OpenPDF.
@@ -113,7 +115,7 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** `seatflow_notification` (PostgreSQL).
 - **Responsibilities:**
   - Listens to Kafka events (`TicketIssued`, `ReservationHeld`, `PaymentFailed`).
-  - Asynchronously generates HTML email confirmations using Thymeleaf templates with attached PDF ticket and secure guest access link.
+  - Asynchronously generates HTML email confirmations using Thymeleaf templates with attached PDF ticket, fiscal tax breakdown receipt (Net + Tax = Total), and secure guest access link.
   - Dispatches emails via SMTP / SendGrid adapter directly to `customerEmail`.
   - Tracks delivery logs and retry attempts in `notification_logs` table.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, JavaMailSender / SendGrid.
