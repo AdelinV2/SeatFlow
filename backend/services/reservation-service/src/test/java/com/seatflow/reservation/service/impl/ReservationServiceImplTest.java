@@ -77,6 +77,14 @@ class ReservationServiceImplTest {
     void setUp() {
         service = new ReservationServiceImpl(reservationRepository, seatHoldRepository, outboxEventRepository,
                 reservationMapper, eventClient, objectMapper, meterRegistry);
+        // Emulate the Spring transactional proxy for the self-invoked transactional method in unit tests
+        try {
+            var field = ReservationServiceImpl.class.getDeclaredField("self");
+            field.setAccessible(true);
+            field.set(service, service);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
         CorrelationContext.setCorrelationId("test-correlation");
     }
 
@@ -124,7 +132,7 @@ class ReservationServiceImplTest {
         when(reservationMapper.toEntity(any(), any())).thenReturn(stubReservation(null, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-1")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findByEventIdAndSeatIdInAndStatusIn(eq(eventId), eq(seatIds), any())).thenReturn(List.of());
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), eq(seatIds))).thenReturn(List.of());
         when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             r.setId(reservationId);
@@ -187,7 +195,7 @@ class ReservationServiceImplTest {
                 Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-conflict")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findByEventIdAndSeatIdInAndStatusIn(eq(eventId), eq(seatIds), any()))
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), eq(seatIds)))
                 .thenReturn(List.of(SeatHold.builder().seatId(seatId).status(SeatHoldStatus.HELD).build()));
 
         ConflictException ex = assertThrows(ConflictException.class, () -> service.createReservation(request, null));
@@ -214,7 +222,7 @@ class ReservationServiceImplTest {
     void getReservationByIdThrowsWhenMissing() {
         UUID id = UUID.randomUUID();
         when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, UUID.randomUUID()));
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, UUID.randomUUID(), null));
     }
 
     @Test
@@ -227,7 +235,7 @@ class ReservationServiceImplTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("p", null, List.of()));
 
-        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, stranger));
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, stranger, null));
     }
 
     @Test
@@ -241,7 +249,7 @@ class ReservationServiceImplTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("p", null, List.of(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))));
 
-        ReservationResponse result = service.getReservationById(id, caller);
+        ReservationResponse result = service.getReservationById(id, caller, null);
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(id);
@@ -257,7 +265,7 @@ class ReservationServiceImplTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("p", null, List.of()));
 
-        ReservationResponse result = service.getReservationById(id, owner);
+        ReservationResponse result = service.getReservationById(id, owner, null);
 
         assertThat(result).isNotNull();
     }
@@ -277,7 +285,7 @@ class ReservationServiceImplTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("p", null, List.of()));
 
-        service.cancelReservation(id, userId);
+        service.cancelReservation(id, userId, null);
 
         assertThat(res.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
         assertThat(res.getSeatHolds()).allMatch(h -> h.getStatus() == SeatHoldStatus.RELEASED);
@@ -294,7 +302,7 @@ class ReservationServiceImplTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("p", null, List.of()));
 
-        ConflictException ex = assertThrows(ConflictException.class, () -> service.cancelReservation(id, userId));
+        ConflictException ex = assertThrows(ConflictException.class, () -> service.cancelReservation(id, userId, null));
         assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
         verify(outboxEventRepository, never()).save(any());
     }
@@ -315,5 +323,115 @@ class ReservationServiceImplTest {
         EventSeatStatusResponse status = result.seatStatuses().get(0);
         assertThat(status.seatId()).isEqualTo(seatId);
         assertThat(status.status()).isEqualTo(SeatHoldStatus.HELD);
+    }
+
+    @Test
+    void createReservationRejectsDuplicateSeatIds() {
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        List<UUID> seatIds = List.of(seatId, seatId);
+        CreateReservationRequest request = buildRequest(eventId, seatIds,
+                List.of(new BigDecimal("50.00"), new BigDecimal("50.00")), "idem-dup");
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(reservationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createReservationRejectsSeatPriceSizeMismatch() {
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        List<UUID> seatIds = List.of(seatId);
+        CreateReservationRequest request = buildRequest(eventId, seatIds,
+                List.of(new BigDecimal("50.00"), new BigDecimal("50.00")), "idem-size");
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(reservationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createReservationRejectsPerSeatPriceSwap() {
+        UUID eventId = UUID.randomUUID();
+        UUID seatA = UUID.randomUUID();
+        UUID seatB = UUID.randomUUID();
+        List<UUID> seatIds = List.of(seatA, seatB);
+        CreateReservationRequest request = buildRequest(eventId, seatIds,
+                List.of(new BigDecimal("90.00"), new BigDecimal("10.00")), "idem-swap");
+
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
+                Instant.now().plusSeconds(3600), seatIds,
+                Map.of(seatA, new BigDecimal("10.00"), seatB, new BigDecimal("90.00")));
+        when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(reservationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void getReservationReturnsForGuestOwnerWithMatchingEmailProof() {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        Reservation res = stubReservation(id, eventId, null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, eventId));
+
+        ReservationResponse result = service.getReservationById(id, null, "Guest@Example.com");
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(id);
+    }
+
+    @Test
+    void getReservationThrowsForGuestOwnerWithWrongEmailProof() {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        Reservation res = stubReservation(id, eventId, null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, null, "other@example.com"));
+    }
+
+    @Test
+    void cancelReservationSucceedsForGuestOwnerWithMatchingEmailProof() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).seatId(seatId)
+                .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
+        Reservation res = stubReservation(id, eventId, null, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("p", null, List.of()));
+
+        service.cancelReservation(id, null, "guest@example.com");
+
+        assertThat(res.getStatus()).isEqualTo(ReservationStatus.CANCELLED);
+        verify(outboxEventRepository).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void confirmReservationPublishesReservationConfirmedOutbox() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).seatId(seatId)
+                .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
+        Reservation res = stubReservation(id, eventId, userId, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+
+        service.confirmReservation(id, paymentId);
+
+        assertThat(res.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(res.getSeatHolds()).allMatch(h -> h.getStatus() == SeatHoldStatus.SOLD);
+        verify(outboxEventRepository).save(any(OutboxEvent.class));
     }
 }

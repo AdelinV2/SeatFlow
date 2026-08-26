@@ -11,11 +11,11 @@ public interface ReservationService {
 
     ReservationResponse createReservation(CreateReservationRequest request, UUID authenticatedUserId);
 
-    ReservationResponse getReservationById(UUID reservationId, UUID authenticatedUserId);
+    ReservationResponse getReservationById(UUID reservationId, UUID authenticatedUserId, String customerEmailProof);
 
     SeatAvailabilityResponse getSeatAvailability(UUID eventId);
 
-    void cancelReservation(UUID reservationId, UUID authenticatedUserId);
+    void cancelReservation(UUID reservationId, UUID authenticatedUserId, String customerEmailProof);
 
     void confirmReservation(UUID reservationId, UUID paymentId);
 

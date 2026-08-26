@@ -74,7 +74,8 @@ public class Reservation {
 
     @Column(name = "seat_count", nullable = false)
     @ToString.Include
-    private Integer seatCount;
+    @Builder.Default
+    private Integer seatCount = 1;
 
     @Version
     @Column(nullable = false)

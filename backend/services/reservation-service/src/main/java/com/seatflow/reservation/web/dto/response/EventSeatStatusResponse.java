@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;
 
-@Schema(description = "Seat status tuple")
+@Schema(description = "Per-seat status response")
 public record EventSeatStatusResponse(
 
         @Schema(description = "Seat unique identifier") UUID seatId,

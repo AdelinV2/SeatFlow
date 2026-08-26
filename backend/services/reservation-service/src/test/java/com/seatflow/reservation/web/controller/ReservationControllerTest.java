@@ -105,13 +105,17 @@ class ReservationControllerTest {
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         String body = """
-                {
-                  "eventId": "%s",
-                  "seatIds": ["%s"],
-                  "seatPrices": ["50.00"],
-                  "idempotencyKey": "idem-3"
-                }
-                """.formatted(eventId, seatId);
+                 {
+                   "eventId": "%s",
+                   "seatIds": ["%s"],
+                   "seatPrices": ["50.00"],
+                   "idempotencyKey": "idem-3"
+                 }
+                 """.formatted(eventId, seatId);
+
+        when(reservationService.createReservation(any(), any()))
+                .thenThrow(new com.seatflow.common.domain.exception.ValidationException(
+                        "Customer email is required when unauthenticated", ErrorCode.INVALID_REQUEST));
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -162,7 +166,7 @@ class ReservationControllerTest {
     void getReservation_found_returns200() throws Exception {
         UUID id = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
-        when(reservationService.getReservationById(any(), any())).thenReturn(sampleResponse(id, eventId, null));
+        when(reservationService.getReservationById(any(), any(), any())).thenReturn(sampleResponse(id, eventId, null));
 
         mockMvc.perform(get("/api/reservations/{id}", id))
                 .andExpect(status().isOk())
@@ -172,7 +176,7 @@ class ReservationControllerTest {
     @Test
     void getReservation_notFound_returns404() throws Exception {
         UUID id = UUID.randomUUID();
-        when(reservationService.getReservationById(any(), any()))
+        when(reservationService.getReservationById(any(), any(), any()))
                 .thenThrow(new ResourceNotFoundException("Reservation", id));
 
         mockMvc.perform(get("/api/reservations/{id}", id))
@@ -182,7 +186,7 @@ class ReservationControllerTest {
     @Test
     void cancelReservation_returns204() throws Exception {
         UUID id = UUID.randomUUID();
-        doNothing().when(reservationService).cancelReservation(any(), any());
+        doNothing().when(reservationService).cancelReservation(any(), any(), any());
 
         mockMvc.perform(post("/api/reservations/{id}/cancel", id))
                 .andExpect(status().isNoContent());

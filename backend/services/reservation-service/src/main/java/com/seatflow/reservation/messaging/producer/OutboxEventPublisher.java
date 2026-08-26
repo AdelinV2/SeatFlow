@@ -3,6 +3,7 @@ package com.seatflow.reservation.messaging.producer;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,7 @@ public class OutboxEventPublisher {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Value("${outbox.publisher.topic:" + EventTopics.RESERVATION_EVENTS + "}")
     private String topic = EventTopics.RESERVATION_EVENTS;
@@ -63,9 +65,10 @@ public class OutboxEventPublisher {
                 if (retryUpdated == 0) {
                     log.error("Outbox event exceeded max retry limit ({}) or was already published. outboxEventId={}, eventType={}, aggregateId={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
                     log.warn("Failed to publish outbox event, retry incremented. outboxEventId={}, eventType={}, retryCount={}",
-                            event.getId(), event.getEventType(), event.getRetryCount() + 1, ex);
+                            event.getId(), event.getEventType(), event.getRetryCount(), ex);
                 }
             }
         }

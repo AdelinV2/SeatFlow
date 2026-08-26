@@ -3,7 +3,9 @@ package com.seatflow.reservation.repository;
 import com.seatflow.reservation.model.entity.SeatHold;
 import com.seatflow.reservation.model.enums.SeatHoldStatus;
 import com.seatflow.reservation.repository.projection.ActiveSeatHoldProjection;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,8 +31,20 @@ public interface SeatHoldRepository extends JpaRepository<SeatHold, UUID> {
     Optional<SeatHold> findActiveHold(@Param("eventId") UUID eventId, @Param("seatId") UUID seatId);
 
     List<SeatHold> findByEventIdAndSeatIdInAndStatusIn(UUID eventId,
-                                                       Collection<UUID> seatIds,
-                                                       Collection<SeatHoldStatus> statuses);
+                                                        Collection<UUID> seatIds,
+                                                        Collection<SeatHoldStatus> statuses);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           SELECT sh
+           FROM SeatHold sh
+           WHERE sh.eventId = :eventId
+             AND sh.seatId IN :seatIds
+             AND sh.status IN (com.seatflow.reservation.model.enums.SeatHoldStatus.HELD,
+                               com.seatflow.reservation.model.enums.SeatHoldStatus.SOLD)
+           """)
+    List<SeatHold> findAndLockSeatsForUpdate(@Param("eventId") UUID eventId,
+                                              @Param("seatIds") Collection<UUID> seatIds);
 
     @Query("""
            SELECT sh.seatId AS seatId, sh.status AS status

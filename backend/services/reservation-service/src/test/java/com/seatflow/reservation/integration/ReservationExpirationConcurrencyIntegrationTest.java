@@ -134,7 +134,7 @@ class ReservationExpirationConcurrencyIntegrationTest {
         assertThat(holds).allMatch(h -> h.getStatus() == SeatHoldStatus.RELEASED);
 
         assertThat(outboxEventRepository.findAll().stream()
-                .filter(o -> "ReservationExpired".equals(o.getEventType()))
+                .filter(o -> "ReservationExpiredEvent".equals(o.getEventType()))
                 .count()).isEqualTo(50);
 
         UUID releasedSeat = seatIds.get(0);

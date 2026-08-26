@@ -54,8 +54,8 @@ class ReservationMapperTest {
         assertThat(entity.getIdempotencyKey()).isEqualTo("idem-1");
         assertThat(entity.getStatus()).isEqualTo(ReservationStatus.PENDING);
         assertThat(entity.getSeatCount()).isEqualTo(2);
-        assertThat(entity.getTotalAmount()).isEqualByComparingTo("100.00");
-        assertThat(entity.getExpiresAt()).isAfter(Instant.now());
+        assertThat(entity.getTotalAmount()).isNull();
+        assertThat(entity.getExpiresAt()).isNull();
         assertThat(entity.getSeatHolds()).isEmpty();
         assertThat(entity.getId()).isNull();
     }

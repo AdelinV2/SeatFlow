@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -63,9 +64,10 @@ public class ReservationController {
         content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
     @ApiResponse(responseCode = "404", description = "Reservation not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    public ResponseEntity<ReservationResponse> getReservation(@PathVariable UUID reservationId) {
+    public ResponseEntity<ReservationResponse> getReservation(@PathVariable UUID reservationId,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserId().map(UUID::fromString).orElse(null);
-        ReservationResponse response = reservationService.getReservationById(reservationId, authenticatedUserId);
+        ReservationResponse response = reservationService.getReservationById(reservationId, authenticatedUserId, customerEmailProof);
         return ResponseEntity.ok(response);
     }
 
@@ -79,9 +81,10 @@ public class ReservationController {
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "404", description = "Reservation not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    public ResponseEntity<Void> cancelReservation(@PathVariable UUID reservationId) {
+    public ResponseEntity<Void> cancelReservation(@PathVariable UUID reservationId,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserId().map(UUID::fromString).orElse(null);
-        reservationService.cancelReservation(reservationId, authenticatedUserId);
+        reservationService.cancelReservation(reservationId, authenticatedUserId, customerEmailProof);
         return ResponseEntity.noContent().build();
     }
 

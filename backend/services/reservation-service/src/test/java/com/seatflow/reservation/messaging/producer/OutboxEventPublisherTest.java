@@ -6,6 +6,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -41,6 +44,9 @@ class OutboxEventPublisherTest {
     @Mock
     private KafkaTemplate<String, String> kafkaTemplate;
 
+    @Mock
+    private MeterRegistry meterRegistry;
+
     @InjectMocks
     private OutboxEventPublisher publisher;
 
@@ -48,6 +54,7 @@ class OutboxEventPublisherTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(mock(Counter.class));
         Logger logger = (Logger) LoggerFactory.getLogger(OutboxEventPublisher.class);
         logger.setLevel(Level.INFO);
         listAppender = new ListAppender<>();
