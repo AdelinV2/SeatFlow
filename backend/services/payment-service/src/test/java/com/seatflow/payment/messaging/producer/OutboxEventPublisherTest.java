@@ -1,5 +1,6 @@
 package com.seatflow.payment.messaging.producer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
@@ -49,12 +50,14 @@ class OutboxEventPublisherTest {
         lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(mock(Counter.class));
     }
 
-    private OutboxEvent outboxEvent(UUID aggregateId, String eventType, int retryCount) {
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private OutboxEvent outboxEvent(UUID aggregateId, String eventType, int retryCount) throws Exception {
         return OutboxEvent.builder()
                 .id(UUID.randomUUID())
                 .aggregateId(aggregateId)
                 .eventType(eventType)
-                .payload("{\"paymentId\":\"" + aggregateId + "\"}")
+                .payload(objectMapper.readTree("{\"paymentId\":\"" + aggregateId + "\"}"))
                 .retryCount(retryCount)
                 .build();
     }
@@ -71,7 +74,7 @@ class OutboxEventPublisherTest {
     }
 
     @Test
-    void successfulSendMarksEventPublished() {
+    void successfulSendMarksEventPublished() throws Exception {
         UUID aggregateId = UUID.randomUUID();
         OutboxEvent event = outboxEvent(aggregateId, "PaymentCompleted", 0);
         when(outboxEventRepository.findUnpublishedForUpdate(5, 50)).thenReturn(List.of(event));
@@ -81,13 +84,13 @@ class OutboxEventPublisherTest {
 
         publisher.publishPendingEvents();
 
-        verify(kafkaTemplate).send(eq(EventTopics.PAYMENT_EVENTS), eq(aggregateId.toString()), eq(event.getPayload()));
+        verify(kafkaTemplate).send(eq(EventTopics.PAYMENT_EVENTS), eq(aggregateId.toString()), eq(event.getPayload().toString()));
         verify(outboxEventRepository).markPublished(eq(event.getId()), any(java.time.Instant.class));
         verify(outboxEventRepository, never()).incrementRetryCount(any(), anyInt());
     }
 
     @Test
-    void brokerFailureIncrementsRetryCount() {
+    void brokerFailureIncrementsRetryCount() throws Exception {
         UUID aggregateId = UUID.randomUUID();
         OutboxEvent event = outboxEvent(aggregateId, "PaymentCompleted", 0);
         when(outboxEventRepository.findUnpublishedForUpdate(5, 50)).thenReturn(List.of(event));
@@ -103,7 +106,7 @@ class OutboxEventPublisherTest {
     }
 
     @Test
-    void eventAtMaxRetryIsSkippedAndLoggedAsError() {
+    void eventAtMaxRetryIsSkippedAndLoggedAsError() throws Exception {
         UUID aggregateId = UUID.randomUUID();
         OutboxEvent event = outboxEvent(aggregateId, "PaymentCompleted", 5);
         when(outboxEventRepository.findUnpublishedForUpdate(5, 50)).thenReturn(List.of(event));

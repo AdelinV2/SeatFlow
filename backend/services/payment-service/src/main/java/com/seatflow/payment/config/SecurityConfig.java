@@ -37,7 +37,7 @@ public class SecurityConfig {
                 // Public Stripe Webhook endpoint
                 .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
                 // Documentation & Actuator
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health", "/actuator/info", "/actuator/prometheus", "/actuator/metrics").permitAll()
                 // All other routes require authentication
                 .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->

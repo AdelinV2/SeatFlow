@@ -80,11 +80,16 @@ class StripeWebhookServiceImplTest {
         PaymentIntent pi = mock(PaymentIntent.class);
         when(pi.getId()).thenReturn("pi_123");
 
-        // Stripe Tax is only available from the raw EVENT JSON: data.object.amount_details.tax.total_tax_amount (cents).
-        JsonObject taxObject = new JsonObject();
-        taxObject.addProperty("total_tax_amount", 200);
+        // Stripe Tax (ADR-004) is only available from the raw EVENT JSON. Stripe returns
+        // `amount_details.tax` as a JSON ARRAY of line items, each carrying `amount` (in cents), e.g.
+        // [{"amount":200,"tax_rate":"txr_..."}]. There is no single `total_tax_amount` field.
+        JsonObject taxItem = new JsonObject();
+        taxItem.addProperty("amount", 200);
+        taxItem.addProperty("tax_rate", "txr_123");
+        com.google.gson.JsonArray taxArray = new com.google.gson.JsonArray();
+        taxArray.add(taxItem);
         JsonObject amountDetails = new JsonObject();
-        amountDetails.add("tax", taxObject);
+        amountDetails.add("tax", taxArray);
         JsonObject object = new JsonObject();
         object.add("amount_details", amountDetails);
         JsonObject data = new JsonObject();
@@ -122,7 +127,7 @@ class StripeWebhookServiceImplTest {
         assertThat(outbox.getEventType()).isEqualTo("PaymentCompleted");
 
         // 200 cents -> 2.00 tax; net = 10.00 - 2.00 = 8.00
-        JsonNode payloadNode = objectMapper.readTree(outbox.getPayload());
+        JsonNode payloadNode = outbox.getPayload();
         assertThat(payloadNode.get("payload").get("taxAmount").decimalValue()).isEqualByComparingTo("2.00");
         assertThat(payloadNode.get("payload").get("netAmount").decimalValue()).isEqualByComparingTo("8.00");
     }
