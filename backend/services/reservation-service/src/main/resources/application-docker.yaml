@@ -20,7 +20,7 @@ spring:
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:api://seatflow-backend}
 
 event-service:
-  base-url: ${EVENT_SERVICE_URL:http://event-service:8083}
+  service-id: ${EVENT_SERVICE_ID:event-service}
 
 eureka:
   client:

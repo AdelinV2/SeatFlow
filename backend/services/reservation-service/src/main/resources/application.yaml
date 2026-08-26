@@ -33,6 +33,9 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
+        ignoreExceptions:
+          - com.seatflow.common.domain.exception.ResourceNotFoundException
+          - com.seatflow.common.domain.exception.ValidationException
 
 eureka:
   client:

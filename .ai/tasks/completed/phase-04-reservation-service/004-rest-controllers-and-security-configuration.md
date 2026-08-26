@@ -7,12 +7,18 @@
 - **Phase:** `Phase 04 - Reservation & Hold Service`
 - **Related Specs:** `.ai/architecture/04-authentication-security.md`, `.ai/architecture/06-api-contracts.md` (Section 2.4), `.ai/architecture/02-microservices-spec.md` (Section 6)
 - **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
 ## 2. Objective & Invariants
 Expose the HTTP REST endpoints for seat reservation holds, cancellations, and real-time seat availability. Configure stateless Spring Security 7 OAuth2 Resource Server integration using the shared `JwtRoleConverter`, and document all endpoints with Swagger/OpenAPI annotations.
+
+### Implementation Notes (completed)
+- `RestClientConfig` was already introduced in TASK-P04-003 with Eureka + Spring Cloud LoadBalancer (`@Primary` plain `RestClient.Builder` + `@LoadBalanced eventServiceLoadBalancedBuilder`); it was reused as-is rather than re-adding a hardcoded `eventRestClient` bean.
+- `ReservationService` interface (from TASK-P04-003) exposes 2-arg methods (`getReservationById(reservationId, userId)`, `cancelReservation(reservationId, userId)`); admin bypass is enforced inside `ReservationServiceImpl.isOwnerOrAdmin(...)` via `UserContext.hasRole(SecurityRoles.ROLE_ADMIN)`. The controller therefore passes only `authenticatedUserId` (no `isAdmin` parameter) instead of the 3-arg signatures in the original spec.
+- `application.yaml` circuit breaker `eventService` gained `ignoreExceptions` for `ResourceNotFoundException` and `ValidationException` so business validations never trip the breaker (only real downstream outages do).
+- `SecurityConfig` mirrors `event-service` conventions (`csrf.disable()`, stateless, `JwtRoleConverter` + `JwtAuthenticationConverter`, public matchers for guest checkout/availability/actuator/docs).
 
 ### Critical Invariants to Enforce:
 - [ ] **Hybrid Guest Checkout (ADR-001):** `POST /api/reservations` is publicly accessible. If an `Authorization: Bearer <JWT>` token is present, resolve `userId` and token claims via `UserContext`; otherwise, process the hold for an unauthenticated guest using the provided `customerEmail`.
