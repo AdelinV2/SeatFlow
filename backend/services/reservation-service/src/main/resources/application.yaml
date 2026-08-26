@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: reservation-service
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+server:
+  port: 8084
+
+event-service:
+  service-id: ${EVENT_SERVICE_ID:event-service}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      eventService:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignoreExceptions:
+          - com.seatflow.common.domain.exception.ResourceNotFoundException
+          - com.seatflow.common.domain.exception.ValidationException
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+outbox:
+  publisher:
+    fixed-delay-ms: 3000
+    batch-size: 50
+    topic: seatflow.reservation.events
+
+reservation:
+  cleanup:
+    interval-ms: 10000
+    batch-size: 100
+    enabled: true
