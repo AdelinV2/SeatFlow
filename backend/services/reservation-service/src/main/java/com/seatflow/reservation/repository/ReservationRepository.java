@@ -114,4 +114,17 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
             """,
             nativeQuery = true)
     int updateUserIdForGuestEmail(@Param("customerEmail") String customerEmail, @Param("userId") UUID userId);
+
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE reservations r
+            SET user_id = :userId,
+                updated_at = :now
+            WHERE r.customer_email = :customerEmail
+              AND r.user_id IS NULL
+            """,
+            nativeQuery = true)
+    int updateUserIdForGuestEmail(@Param("userId") UUID userId,
+                                  @Param("customerEmail") String customerEmail,
+                                  @Param("now") Instant now);
 }

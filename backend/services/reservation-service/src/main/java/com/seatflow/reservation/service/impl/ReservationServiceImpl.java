@@ -12,8 +12,10 @@ import com.seatflow.common.security.context.UserContext;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
+import com.seatflow.reservation.messaging.event.PaymentCompletedEvent;
 import com.seatflow.reservation.messaging.event.ReservationCancelledEvent;
 import com.seatflow.reservation.messaging.event.ReservationHeldEvent;
+import com.seatflow.reservation.messaging.event.UserRegisteredEvent;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.model.entity.Reservation;
 import com.seatflow.reservation.model.entity.SeatHold;
@@ -239,6 +241,54 @@ public class ReservationServiceImpl implements ReservationService {
                 "eventId", reservation.getEventId().toString()).increment();
 
         log.info("Reservation cancelled reservationId={}, eventId={}", reservationId, reservation.getEventId());
+    }
+
+    @Override
+    @Transactional
+    public void confirmReservation(UUID reservationId, UUID paymentId) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+
+        if (reservation.getStatus() == ReservationStatus.CONFIRMED) {
+            log.info("Reservation already confirmed. Skipping duplicate PaymentCompleted. reservationId={}, paymentId={}",
+                    reservationId, paymentId);
+            return;
+        }
+
+        if (reservation.getStatus() != ReservationStatus.PENDING) {
+            log.error("Cannot confirm reservation in non-pending state. reservationId={}, paymentId={}, currentStatus={}",
+                    reservationId, paymentId, reservation.getStatus());
+            return;
+        }
+
+        reservation.setStatus(ReservationStatus.CONFIRMED);
+        reservation.setUpdatedAt(Instant.now());
+        for (SeatHold hold : reservation.getSeatHolds()) {
+            hold.setStatus(SeatHoldStatus.SOLD);
+        }
+        reservationRepository.save(reservation);
+
+        meterRegistry.counter("seatflow.reservations.confirmed.total",
+                "eventId", reservation.getEventId().toString(),
+                "status", "SUCCESS").increment();
+
+        log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatCount={}, amount={}",
+                reservationId, paymentId, reservation.getSeatHolds().size(), reservation.getTotalAmount());
+    }
+
+    @Override
+    @Transactional
+    public int claimGuestReservations(UUID userId, String customerEmail) {
+        Objects.requireNonNull(userId, "userId is required to claim guest reservations");
+        Objects.requireNonNull(customerEmail, "customerEmail is required to claim guest reservations");
+
+        int updatedCount = reservationRepository.updateUserIdForGuestEmail(userId, customerEmail, Instant.now());
+
+        meterRegistry.counter("seatflow.reservations.guest.claimed.total").increment(updatedCount);
+
+        log.info("Guest reservations linked to registered user. userId={}, customerEmail={}, linkedCount={}",
+                userId, customerEmail, updatedCount);
+        return updatedCount;
     }
 
     private String resolveCustomerEmail(CreateReservationRequest request) {
