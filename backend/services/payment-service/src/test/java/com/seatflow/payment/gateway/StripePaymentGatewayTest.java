@@ -67,6 +67,7 @@ class StripePaymentGatewayTest {
             assertThat(captured.getCurrency()).isEqualTo("usd");
             assertThat(captured.getMetadata()).containsEntry("reservationId", "r1");
             assertThat(captured.getMetadata()).containsEntry("customerEmail", "a@b.com");
+            assertThat(captured.getExtraParams()).containsEntry("automatic_tax", Map.of("enabled", true));
         }
     }
 

@@ -3,6 +3,7 @@ package com.seatflow.payment.messaging.producer;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,7 @@ public class OutboxEventPublisher {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Value("${outbox.publisher.topic:" + EventTopics.PAYMENT_EVENTS + "}")
     private String topic = EventTopics.PAYMENT_EVENTS;
@@ -63,6 +65,7 @@ public class OutboxEventPublisher {
                 if (retryUpdated == 0) {
                     log.error("Payment outbox event exceeded max retry limit ({}) or was already published. outboxEventId={}, eventType={}, aggregateId={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
                     log.warn("Failed to publish payment outbox event, retry incremented. outboxEventId={}, eventType={}, retryCount={}",
                             event.getId(), event.getEventType(), event.getRetryCount() + 1, ex);

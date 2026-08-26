@@ -69,7 +69,8 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
         } catch (StripeException ex) {
             log.error("Stripe API exception while creating PaymentIntent. idempotencyKey={}", idempotencyKey, ex);
-            throw new BusinessException("Payment gateway failure: " + ex.getUserMessage(), ErrorCode.PAYMENT_FAILED, 502);
+            String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
+            throw new BusinessException("Payment gateway failure: " + message, ErrorCode.PAYMENT_FAILED, 502);
         }
     }
 }
