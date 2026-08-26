@@ -7,12 +7,17 @@
 - **Phase:** `Phase 04 - Reservation & Hold Service`
 - **Related Specs:** `.ai/architecture/02-microservices-spec.md` (Section 6), `.ai/architecture/03-database-models.md`, `.ai/architecture/05-messaging-and-outbox.md`, `.ai/architecture/06-api-contracts.md`
 - **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`, `.ai/decisions/ADR-002-database-indexing-and-integrity-standards.md`, `.ai/decisions/ADR-003-automated-event-completion-and-lifecycle-reconciliation.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
 ## 2. Objective & Invariants
 Implement the synchronous `EventClient` for inter-service communication with `event-service` and the core transactional `ReservationService` business logic. This task enforces server-side pricing calculation, the 15-minute seat hold window, idempotency deduplication, zero double-booking concurrency control, outbox event generation, and Micrometer metrics instrumentation.
+
+### Implementation Notes (completed)
+- Inter-service calls to `event-service` use **Eureka + Spring Cloud LoadBalancer** via a `@LoadBalanced RestClient.Builder` (`eventServiceLoadBalancedBuilder`) declared in `config/RestClientConfig.java`. A `@Primary` plain `RestClient.Builder` is also declared so Eureka Client's own RestClient registration is not load-balanced (avoids Spring Cloud Netflix #4380). The service host is resolved from `event-service.service-id` (default `event-service`).
+- Resilience uses `io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry` directly (not the `@CircuitBreaker` annotation) so the breaker is active without pulling in `spring-boot-starter-aop`. Configured via `resilience4j.circuitbreaker.instances.eventService` in `application.yaml`; only exceptions count as failures (successful validations propagate as-is, never masked as 503).
+- `X-Correlation-Id` is forwarded on every outbound call via a `ClientHttpRequestInterceptor` using `CorrelationContext`.
 
 ### Critical Invariants to Enforce:
 - [ ] **Authoritative Server-Side Pricing (ADR-003):** The client provides only `eventId` and `seatIds`. `reservation-service` fetches official priced seat maps from `event-service` via `EventClient` and computes `totalAmount` authoritatively on the server; client prices are NEVER trusted or accepted.

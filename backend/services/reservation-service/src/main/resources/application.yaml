@@ -21,7 +21,7 @@ server:
   port: 8084
 
 event-service:
-  base-url: ${EVENT_SERVICE_URL:http://localhost:8083}
+  service-id: ${EVENT_SERVICE_ID:event-service}
 
 resilience4j:
   circuitbreaker:

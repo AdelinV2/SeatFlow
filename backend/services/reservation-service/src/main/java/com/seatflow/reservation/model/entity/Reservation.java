@@ -51,9 +51,6 @@ public class Reservation {
     @ToString.Include
     private String customerEmail;
 
-    @Column(name = "customer_name", length = 255)
-    private String customerName;
-
     @Column(name = "event_id", nullable = false)
     @ToString.Include
     private UUID eventId;

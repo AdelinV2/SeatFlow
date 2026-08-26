@@ -127,9 +127,6 @@ public class Reservation {
     @ToString.Include
     private String customerEmail;
 
-    @Column(name = "customer_name")
-    private String customerName;
-
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
     private UUID eventId;
@@ -509,11 +506,7 @@ public record CreateReservationRequest(
     @Schema(description = "Customer email address. Required for unauthenticated guest checkouts.", example = "guest@example.com", requiredMode = NOT_REQUIRED)
     @Email(message = "Invalid customer email format")
     @Size(max = 255)
-    String customerEmail,
-
-    @Schema(description = "Optional customer attendee full name", example = "Alex Smith", requiredMode = NOT_REQUIRED)
-    @Size(max = 255)
-    String customerName
+    String customerEmail
 ) {}
 ```
 
@@ -535,7 +528,6 @@ public record ReservationResponse(
     @Schema(description = "Target event identifier") UUID eventId,
     @Schema(description = "Authenticated customer ID (null for guests)") UUID userId,
     @Schema(description = "Customer email address") String customerEmail,
-    @Schema(description = "Customer full name") String customerName,
     @Schema(description = "Current reservation status") ReservationStatus status,
     @Schema(description = "Hold expiration timestamp (ISO-8601 UTC)") Instant expiresAt,
     @Schema(description = "Authoritative total reservation price") BigDecimal totalAmount,
