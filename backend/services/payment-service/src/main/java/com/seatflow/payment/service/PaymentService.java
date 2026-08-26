@@ -1,0 +1,16 @@
+package com.seatflow.payment.service;
+
+import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
+import com.seatflow.payment.web.dto.response.PaymentResponse;
+
+import java.util.UUID;
+
+public interface PaymentService {
+
+    PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, UUID authenticatedUserId);
+
+    PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin);
+
+    PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin);
+}
