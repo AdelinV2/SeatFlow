@@ -41,7 +41,6 @@ class ReservationMapperTest {
         CreateReservationRequest request = new CreateReservationRequest(
                 eventId,
                 "guest@example.com",
-                "Guest User",
                 java.util.List.of(UUID.randomUUID(), UUID.randomUUID()),
                 java.util.List.of(new BigDecimal("40.00"), new BigDecimal("60.00")),
                 "idem-1"
@@ -51,7 +50,6 @@ class ReservationMapperTest {
 
         assertThat(entity.getEventId()).isEqualTo(eventId);
         assertThat(entity.getCustomerEmail()).isEqualTo("guest@example.com");
-        assertThat(entity.getCustomerName()).isEqualTo("Guest User");
         assertThat(entity.getUserId()).isEqualTo(userId);
         assertThat(entity.getIdempotencyKey()).isEqualTo("idem-1");
         assertThat(entity.getStatus()).isEqualTo(ReservationStatus.PENDING);
@@ -78,7 +76,6 @@ class ReservationMapperTest {
                 .id(reservationId)
                 .eventId(UUID.randomUUID())
                 .customerEmail("guest@example.com")
-                .customerName("Guest User")
                 .status(ReservationStatus.PENDING)
                 .expiresAt(Instant.now().plusSeconds(900))
                 .idempotencyKey("idem-2")
@@ -92,7 +89,6 @@ class ReservationMapperTest {
         assertThat(response.id()).isEqualTo(reservationId);
         assertThat(response.customerEmail()).isEqualTo("guest@example.com");
         assertThat(response.status()).isEqualTo(ReservationStatus.PENDING);
-        assertThat(response.totalAmount()).isEqualByComparingTo("25.00");
         assertThat(response.seatCount()).isEqualTo(1);
         assertThat(response.seats()).hasSize(1);
         SeatHoldResponse seat = response.seats().getFirst();

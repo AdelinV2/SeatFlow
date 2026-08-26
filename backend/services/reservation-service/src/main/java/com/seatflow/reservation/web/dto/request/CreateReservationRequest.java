@@ -18,8 +18,6 @@ public record CreateReservationRequest(
         @NotBlank(message = "customerEmail is required")
         String customerEmail,
 
-        String customerName,
-
         @NotNull(message = "seatIds are required")
         @Size(min = 1, max = 10, message = "seatIds must contain between 1 and 10 entries")
         java.util.List<UUID> seatIds,

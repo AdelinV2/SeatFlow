@@ -25,6 +25,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @EntityGraph(attributePaths = "seatHolds")
     Optional<Reservation> findWithSeatHoldsById(UUID id);
 
+    @EntityGraph(attributePaths = "seatHolds")
+    Optional<Reservation> findWithSeatHoldsByIdempotencyKey(String idempotencyKey);
+
     @Query(value = """
             SELECT r FROM Reservation r
             WHERE r.status = com.seatflow.reservation.model.enums.ReservationStatus.PENDING

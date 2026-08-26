@@ -13,7 +13,6 @@ public record ReservationResponse(
         UUID eventId,
         UUID userId,
         String customerEmail,
-        String customerName,
         ReservationStatus status,
         Instant expiresAt,
         BigDecimal totalAmount,
