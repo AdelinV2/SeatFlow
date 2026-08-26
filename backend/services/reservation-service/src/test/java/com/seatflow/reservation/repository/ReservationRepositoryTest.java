@@ -168,6 +168,19 @@ class ReservationRepositoryTest {
     }
 
     @Test
+    void updateUserIdForGuestEmailThreeArgOverloadLinksGuestReservations() {
+        reservationRepository.saveAndFlush(
+                reservation(ReservationStatus.PENDING, Instant.now().plusSeconds(900), "guest-3arg-1", null));
+
+        UUID newUserId = UUID.randomUUID();
+        int updated = reservationRepository.updateUserIdForGuestEmail(newUserId, "guest@example.com", Instant.now());
+
+        assertThat(updated).isEqualTo(1);
+        Reservation guest = reservationRepository.findByIdempotencyKey("guest-3arg-1").orElseThrow();
+        assertThat(guest.getUserId()).isEqualTo(newUserId);
+    }
+
+    @Test
     void findExpiredPagedMustReturnOnlyPendingPastDue() {
         reservationRepository.saveAndFlush(
                 reservation(ReservationStatus.PENDING, Instant.now().minusSeconds(3600), "jpql-1", null));

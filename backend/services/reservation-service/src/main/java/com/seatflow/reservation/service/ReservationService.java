@@ -15,4 +15,8 @@ public interface ReservationService {
     SeatAvailabilityResponse getSeatAvailability(UUID eventId);
 
     void cancelReservation(UUID reservationId, UUID authenticatedUserId);
+
+    void confirmReservation(UUID reservationId, UUID paymentId);
+
+    int claimGuestReservations(UUID userId, String customerEmail);
 }
