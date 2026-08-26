@@ -3,6 +3,9 @@ package com.seatflow.payment.messaging.producer;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,6 +22,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -33,8 +38,16 @@ class OutboxEventPublisherTest {
     @Mock
     private KafkaTemplate<String, String> kafkaTemplate;
 
+    @Mock
+    private MeterRegistry meterRegistry;
+
     @InjectMocks
     private OutboxEventPublisher publisher;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(mock(Counter.class));
+    }
 
     private OutboxEvent outboxEvent(UUID aggregateId, String eventType, int retryCount) {
         return OutboxEvent.builder()

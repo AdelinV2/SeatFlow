@@ -20,7 +20,7 @@ spring:
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:api://seatflow-backend}
 
 reservation-service:
-  base-url: ${RESERVATION_SERVICE_URL:http://localhost:8084}
+  base-url: ${RESERVATION_SERVICE_URL:http://reservation-service}
 
 stripe:
   api-key: ${STRIPE_API_KEY:sk_test_dummy_key}
