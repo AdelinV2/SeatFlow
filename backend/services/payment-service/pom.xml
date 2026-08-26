@@ -94,6 +94,13 @@
             <version>28.0.0</version>
         </dependency>
 
+        <!-- Gson: required to read untyped Stripe Tax fields (amount_details.tax) from the raw
+             PaymentIntent JSON, since stripe-java 28.0.0 does not expose a typed getter. -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>
