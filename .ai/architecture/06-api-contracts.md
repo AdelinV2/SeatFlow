@@ -211,10 +211,27 @@ This document defines the complete catalog of REST API endpoints exposed across 
   "status": "INITIATED"
 }
 ```
+*Note: `amount` is tax-inclusive ($120.00 total). Automatic Stripe Tax calculation is enabled.*
+
+#### `GET /api/payments/{paymentId}`
+**Response Body (200 OK):**
+```json
+{
+  "id": "523e4567-e89b-12d3-a456-426614174000",
+  "reservationId": "123e4567-e89b-12d3-a456-426614174000",
+  "customerEmail": "customer@seatflow.com",
+  "amount": 120.00,
+  "taxAmount": 22.80,
+  "netAmount": 97.20,
+  "currency": "USD",
+  "status": "SUCCESS",
+  "createdAt": "2026-08-23T14:30:00Z"
+}
+```
 
 ---
 
-### 2.6 Ticket Service (`/api/tickets`)
+### 2.6 Ticket Service (`/api/tickets`, `/api/scanner/tickets`)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -222,13 +239,14 @@ This document defines the complete catalog of REST API endpoints exposed across 
 | `GET` | `/api/tickets/guest/{ticketCode}` | Public | Get ticket detail by secure ticket code (guest delivery) |
 | `GET` | `/api/tickets/{ticketId}` | Customer | Get ticket detail with QR code data (authenticated user) |
 | `GET` | `/api/tickets/{ticketId}/pdf` | Public / Customer | Download rendered PDF ticket |
-| `POST` | `/api/admin/tickets/validate` | Admin / Scanner | Validate ticket QR code at venue entrance |
+| `POST` | `/api/scanner/tickets/validate` | Staff / Admin | Validate ticket QR code at venue entrance (ADR-005) |
 
-#### `POST /api/admin/tickets/validate`
+#### `POST /api/scanner/tickets/validate`
 **Request Body:**
 ```json
 {
-  "ticketCode": "SF-TKT-9876-ABCD"
+  "ticketCode": "SF-TKT-9876-ABCD",
+  "scannerDeviceId": "GATE-SOUTH-SCANNER-01"
 }
 ```
 **Response Body (200 OK):**
@@ -236,13 +254,16 @@ This document defines the complete catalog of REST API endpoints exposed across 
 {
   "valid": true,
   "ticketId": "823e4567-e89b-12d3-a456-426614174000",
+  "ticketCode": "SF-TKT-9876-ABCD",
+  "result": "SUCCESS",
   "eventTitle": "Hamlet — Royal Shakespeare Co.",
   "eventDate": "2026-09-15T19:30:00Z",
   "attendeeName": "Alex Smith",
   "section": "Orchestra",
   "rowNumber": "A",
   "seatNumber": 1,
-  "scannedAt": "2026-09-15T18:45:10Z"
+  "scannedAt": "2026-09-15T18:45:10Z",
+  "message": "Entry granted successfully"
 }
 ```
 

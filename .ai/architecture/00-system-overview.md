@@ -18,7 +18,7 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 3. Select up to **10 available seats** concurrently on an interactive seat map.
 4. Place a temporary **15-minute hold** on the selected seats.
 5. Complete checkout seamlessly as a **Registered User** or as a **Guest** (providing only an email address and name, without creating an account).
-6. Complete payment via Stripe (using Payment Intents and webhooks).
+6. Complete payment via Stripe (using Payment Intents with Stripe Tax automatic calculation, tax-inclusive pricing, and secure webhooks).
 7. Receive email purchase confirmation and digital tickets with QR codes (ZXing) and secure access link.
 8. View historical orders and upcoming tickets in the user profile area (for registered users) or via secure link (for guests).
 9. Receive real-time seat availability updates via WebSockets without page reloads.
@@ -122,7 +122,7 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 | **Seat Map Service** | `8082` | `seatflow_seatmap` | Venue layouts, sections, rows, seat configurations |
 | **Event Service** | `8083` | `seatflow_event` | Event catalog, dates, descriptions, category pricing |
 | **Reservation Service** | `8084` | `seatflow_reservation` | 15-minute seat holds, concurrency locks, hold expiration sweeper |
-| **Payment Service** | `8085` | `seatflow_payment` | Stripe payment intents, webhooks, payment state |
+| **Payment Service** | `8085` | `seatflow_payment` | Stripe payment intents, Stripe Tax (tax-inclusive), webhooks, payment state |
 | **Ticket Service** | `8086` | `seatflow_ticket` | Ticket issuance, ZXing QR codes, PDF generation |
 | **Realtime Service** | `8087` | None (Redis) | WebSocket STOMP server, seat status live broadcasts |
 | **Notification Service**| `8088`| `seatflow_notification`| Async email notifications via Kafka events |
@@ -133,7 +133,9 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 
 ### 4.1 Synchronous Communication (REST / HTTP)
 - Used when the caller requires an immediate response (e.g. browsing events, rendering a seat map, requesting a hold, checking payment status).
-- Service-to-service calls resolve instances dynamically via **Eureka** using `RestClient` or `@FeignClient`.
+- Service-to-service synchronous calls resolve instances dynamically via **Eureka** using Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder` with logical service URLs, e.g. `http://<service-name>`).
+- All synchronous REST clients must configure explicit connect/read timeouts (`SimpleClientHttpRequestFactory`), forward `X-Correlation-Id` via `CorrelationContext`, and protect remote invocations with Resilience4j circuit breakers.
+- Services declaring `@LoadBalanced` builders must also define a `@Primary` plain `RestClient.Builder` bean to preserve Eureka client's internal registration mechanism.
 
 ### 4.2 Asynchronous Communication (Kafka)
 - Used for all decoupled domain events and cross-service state transitions:

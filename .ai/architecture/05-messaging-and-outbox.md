@@ -85,11 +85,14 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "customerEmail": "customer@seatflow.com",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "amount": 150.00,
+  "taxAmount": 28.50,
+  "netAmount": 121.50,
   "currency": "USD",
-  "stripePaymentId": "pi_3Nsk2e2eZvKYlo2C1gQ"
+  "stripePaymentId": "pi_3Nsk2e2eZvKYlo2C1gQ",
+  "occurredAt": "2026-08-23T14:35:00Z"
 }
 ```
-*Note: `userId` is `null` for guest payments.*
+*Note: `userId` is `null` for guest payments. `amount` is tax-inclusive ($150.00 = $121.50 Net + $28.50 Tax per ADR-004).*
 
 #### `TicketIssuedEvent` (eventType: `"TicketIssued"`)
 ```json
@@ -101,6 +104,9 @@ Every Kafka message must be serialized as an `EventEnvelope<T>` from `common-eve
   "attendeeName": "Alex Smith",
   "eventId": "223e4567-e89b-12d3-a456-426614174000",
   "seatId": "423e4567-e89b-12d3-a456-426614174000",
+  "price": 75.00,
+  "taxAmount": 14.25,
+  "netAmount": 60.75,
   "ticketCode": "SF-TKT-9876-ABCD",
   "qrCodeData": "SF://TKT/9876-ABCD/SIGNATURE"
 }

@@ -29,7 +29,7 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 /auth/logout                        --> Redirects to Entra logout endpoint
 /admin/events                       --> AdminEventListComponent (Event CRUD, venue assignment, pricing manager)
 /admin/venues                       --> AdminVenueListComponent (Venue layout designer, section builder)
-/admin/scanner                      --> AdminScannerComponent (Camera-based QR code entry validator)
+/scanner                            --> StaffScannerComponent (Camera-based QR code entry validator, guarded by staff.guard.ts, ADR-005)
 ```
 
 ---
@@ -62,12 +62,13 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 - Emits `(expired)` event when counter reaches `00:00`, triggering redirect back to event details with an expiry dialog.
 
 ### 3.4 Stripe Test Mode Checkout (`CheckoutComponent`)
-- Embeds Stripe Elements (`CardElement` or `PaymentElement`).
-- Supports **Hybrid Checkout**:
+- Embeds Stripe Elements (`PaymentElement` + `AddressElement`).
+- **Tax-Inclusive Display (ADR-004):** Displays the total gross price (e.g. $10.00) alongside Stripe Tax real-time inclusive tax breakdown (e.g. "Includes $1.90 VAT / Taxes") once the customer enters their country/postal code.
+- Supports **Hybrid Checkout** (ADR-001):
   - If authenticated: auto-fills customer details and links `userId`.
   - If guest: renders fields for `customerEmail` (required) and `customerName` (optional).
 - Retrieves `clientSecret` from `POST /api/payments/intent`.
-- Confirms payment client-side with Stripe SDK.
+- Confirms payment client-side with Stripe SDK (`stripe.confirmPayment`).
 - Handles 3D Secure simulation and redirects to `/order-confirmation/:paymentId`.
 
 ---

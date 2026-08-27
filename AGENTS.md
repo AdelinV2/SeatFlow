@@ -128,6 +128,7 @@ Every engineer and agent must enforce these server-side invariants:
 7. **Environment Variable Configuration (`.env`):** Every microservice and the frontend must maintain a `.env.example` template with dummy defaults. Real `.env` files are local-only, strictly `.gitignore`d, and never committed. In Staging/Production, variables are injected via GCP Secret Manager and GitHub Environments.
 8. **Server-Side Authorization:** Never rely solely on frontend route guards. All endpoints must validate JWT roles server-side.
 9. **Mandatory Dedicated Branch per Task:** Never write code or modify files directly on `develop` or `main`. Every implementation task MUST start by checking out its dedicated feature branch (`feat/p<XX>-<YYY>-<desc>` from `develop`).
+10. **Synchronous Inter-Service Communication via Eureka & LoadBalancer:** All synchronous REST calls between microservices MUST resolve target instances dynamically using Eureka Service Discovery and Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder` with target service URI `http://<service-name>`, e.g., `http://event-service`). Never hardcode hostnames or port numbers. Every service declaring load-balanced builders must also declare a `@Primary` plain `RestClient.Builder` bean to preserve Eureka client's internal registration mechanism.
 
 ---
 

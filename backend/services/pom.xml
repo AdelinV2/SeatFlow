@@ -23,6 +23,8 @@
         <module>seat-map-service</module>
         <module>event-service</module>
         <module>reservation-service</module>
+        <module>payment-service</module>
+        <module>ticket-service</module>
     </modules>
 
     <!-- Additional microservice modules are added here as they are created
