@@ -91,11 +91,21 @@ class TicketControllerTest {
         when(ticketService.generateTicketPdf(any(UUID.class), nullable(UUID.class), anyBoolean()))
                 .thenReturn(new byte[]{1, 2, 3});
 
-        mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
+        mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId)
+                        .with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))
+                                .authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_CUSTOMER))))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_PDF))
                 .andExpect(content().bytes(new byte[]{1, 2, 3}))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
                         org.hamcrest.Matchers.containsString("ticket-" + ticketId + ".pdf")));
+    }
+
+    @Test
+    void downloadPdf_unauthenticated_returns401() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
+                .andExpect(status().isUnauthorized());
     }
 }

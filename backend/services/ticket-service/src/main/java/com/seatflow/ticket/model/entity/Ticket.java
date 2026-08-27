@@ -80,7 +80,7 @@ public class Ticket {
     @Builder.Default
     private BigDecimal netAmount = BigDecimal.ZERO; // Net base price (ADR-004)
 
-    @Column(name = "ticket_code", nullable = false, unique = true, length = 64, updatable = false)
+    @Column(name = "ticket_code", nullable = false, length = 64, updatable = false)
     @ToString.Include
     private String ticketCode;
 

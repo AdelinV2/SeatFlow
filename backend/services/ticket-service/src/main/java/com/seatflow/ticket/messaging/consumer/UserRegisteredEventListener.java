@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
@@ -21,10 +20,9 @@ public class UserRegisteredEventListener {
 
     @KafkaListener(
         topics = EventTopics.USER_EVENTS,
-        groupId = "ticket-service",
+        groupId = "ticket-service-user",
         containerFactory = "kafkaListenerContainerFactory"
     )
-    @Transactional
     public void onUserRegistered(EventEnvelope<Object> envelope) {
         if (!"UserRegistered".equals(envelope.eventType())) {
             log.debug("Ignoring irrelevant user event type: {}", envelope.eventType());

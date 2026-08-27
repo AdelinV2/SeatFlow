@@ -7,7 +7,7 @@ spring:
   flyway:
     enabled: true
   kafka:
-    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+    bootstrap-servers: ${spring.kafka.bootstrap-servers:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer

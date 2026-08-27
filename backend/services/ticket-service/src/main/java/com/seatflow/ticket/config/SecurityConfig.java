@@ -40,9 +40,8 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
-                // Guest ticket delivery (ADR-001) and public PDF download
+                // Guest ticket delivery (ADR-001) — unauthenticated via secure token
                 .requestMatchers(HttpMethod.GET, "/api/tickets/guest/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
 
                 // Gate scanner verification (ADR-005: operational staff and admins)
                 .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority(SecurityRoles.ROLE_STAFF, SecurityRoles.ROLE_ADMIN)

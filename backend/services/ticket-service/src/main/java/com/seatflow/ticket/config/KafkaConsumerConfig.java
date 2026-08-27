@@ -9,10 +9,13 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.util.backoff.FixedBackOff;
@@ -28,6 +31,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class KafkaConsumerConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(KafkaConsumerConfig.class);
+
     private final ObjectMapper objectMapper;
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
@@ -40,6 +45,7 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "ticket-service");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
 
         Deserializer<Object> envelopeDeserializer = (topic, data) -> {
             if (data == null) {
@@ -63,7 +69,11 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
-        factory.setCommonErrorHandler(new DefaultErrorHandler(new FixedBackOff(1000L, 3L)));
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(new FixedBackOff(1000L, 3L));
+        errorHandler.setRetryListeners((record, ex, deliveryAttempt) ->
+                log.warn("Retrying ticket-service consumer record. attempt={}, topic={}", deliveryAttempt, record.topic()));
+        factory.setCommonErrorHandler(errorHandler);
         return factory;
     }
 }

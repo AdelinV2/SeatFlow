@@ -209,7 +209,7 @@ class TicketServiceImplTest {
     @Test
     void shouldValidateTicketSuccessfullyWhenValid() {
         Ticket ticket = sampleTicket(TicketStatus.VALID, userId);
-        when(ticketRepository.findByTicketCode("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(ticket));
+        when(ticketRepository.findByTicketCodeForUpdate("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(ticket));
         when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.of(
                 new EventSeatMapClientResponse(eventId, UUID.randomUUID(), "Concert", Instant.now(), "Sky Arena", 5000, 100L, List.of())));
 
@@ -227,7 +227,7 @@ class TicketServiceImplTest {
 
     @Test
     void shouldRejectValidationWhenTicketAlreadyUsed() {
-        when(ticketRepository.findByTicketCode("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(sampleTicket(TicketStatus.USED, userId)));
+        when(ticketRepository.findByTicketCodeForUpdate("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(sampleTicket(TicketStatus.USED, userId)));
 
         ValidationResultResponse result = ticketService.validateTicket(
                 new ValidateTicketRequest("SF-TKT-ABCDEFGHIJKL", "GATE-1"));
@@ -239,7 +239,7 @@ class TicketServiceImplTest {
 
     @Test
     void shouldRejectValidationWhenTicketCancelled() {
-        when(ticketRepository.findByTicketCode("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(sampleTicket(TicketStatus.CANCELLED, userId)));
+        when(ticketRepository.findByTicketCodeForUpdate("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(sampleTicket(TicketStatus.CANCELLED, userId)));
 
         ValidationResultResponse result = ticketService.validateTicket(
                 new ValidateTicketRequest("SF-TKT-ABCDEFGHIJKL", "GATE-1"));
@@ -251,7 +251,7 @@ class TicketServiceImplTest {
 
     @Test
     void shouldRejectValidationWhenTicketCodeNotFound() {
-        when(ticketRepository.findByTicketCode("MISSING")).thenReturn(Optional.empty());
+        when(ticketRepository.findByTicketCodeForUpdate("MISSING")).thenReturn(Optional.empty());
 
         ValidationResultResponse result = ticketService.validateTicket(
                 new ValidateTicketRequest("MISSING", "GATE-1"));
@@ -266,11 +266,11 @@ class TicketServiceImplTest {
 
     @Test
     void shouldClaimHistoricalGuestTickets() {
-        when(ticketRepository.updateUserIdByCustomerEmailAndUserIdIsNull(userId, "buyer@example.com")).thenReturn(3);
+        when(ticketRepository.updateUserIdByNormalizedEmail(userId, "buyer@example.com")).thenReturn(3);
 
         int claimed = ticketService.claimGuestTickets(userId, "buyer@example.com");
 
         assertThat(claimed).isEqualTo(3);
-        verify(ticketRepository).updateUserIdByCustomerEmailAndUserIdIsNull(userId, "buyer@example.com");
+        verify(ticketRepository).updateUserIdByNormalizedEmail(userId, "buyer@example.com");
     }
 }
