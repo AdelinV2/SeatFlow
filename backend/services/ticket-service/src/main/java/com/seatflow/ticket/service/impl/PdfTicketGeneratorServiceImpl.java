@@ -77,10 +77,12 @@ public class PdfTicketGeneratorServiceImpl implements PdfTicketGeneratorService 
             document.add(fiscalTable);
             document.add(new Paragraph(" "));
 
-            Image qr = Image.getInstance(ticketData.qrCodeImagePng());
-            qr.scaleToFit(QR_SIZE, QR_SIZE);
-            document.add(qr);
-            document.add(new Paragraph("Scan this QR code at entry gate", labelFont));
+            if (ticketData.qrCodeImagePng() != null && ticketData.qrCodeImagePng().length > 0) {
+                Image qr = Image.getInstance(ticketData.qrCodeImagePng());
+                qr.scaleToFit(QR_SIZE, QR_SIZE);
+                document.add(qr);
+                document.add(new Paragraph("Scan this QR code at entry gate", labelFont));
+            }
             } finally {
                 if (document.isOpen()) {
                     document.close();

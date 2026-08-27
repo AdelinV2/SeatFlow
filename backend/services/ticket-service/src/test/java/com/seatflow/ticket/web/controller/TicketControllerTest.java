@@ -1,6 +1,8 @@
 package com.seatflow.ticket.web.controller;
 
 import com.seatflow.common.domain.dto.PagedResult;
+import com.seatflow.common.domain.enums.ErrorCode;
+import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.observability.handler.GlobalExceptionHandler;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.ticket.config.SecurityConfig;
@@ -23,6 +25,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -86,7 +89,7 @@ class TicketControllerTest {
     }
 
     @Test
-    void downloadPdf_returnsApplicationPdfAndInlineHeader() throws Exception {
+    void downloadPdf_authenticatedCustomer_returns200() throws Exception {
         UUID ticketId = UUID.randomUUID();
         when(ticketService.generateTicketPdf(any(UUID.class), nullable(UUID.class), anyBoolean()))
                 .thenReturn(new byte[]{1, 2, 3});
@@ -102,10 +105,26 @@ class TicketControllerTest {
     }
 
     @Test
-    void downloadPdf_unauthenticated_returns401() throws Exception {
+    void downloadPdf_unauthenticatedGuest_returns200() throws Exception {
         UUID ticketId = UUID.randomUUID();
+        when(ticketService.generateTicketPdf(eq(ticketId), nullable(UUID.class), anyBoolean()))
+                .thenReturn(new byte[]{1, 2, 3});
 
         mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(content().bytes(new byte[]{1, 2, 3}))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        org.hamcrest.Matchers.containsString("ticket-" + ticketId + ".pdf")));
+    }
+
+    @Test
+    void downloadPdf_unauthenticatedForbiddenTicket_returns403() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketService.generateTicketPdf(eq(ticketId), nullable(UUID.class), anyBoolean()))
+                .thenThrow(new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403));
+
+        mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
+                .andExpect(status().isForbidden());
     }
 }
