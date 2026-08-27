@@ -1,0 +1,20 @@
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:realtime-service}
+      auto-offset-reset: latest
+      enable-auto-commit: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL}
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    root: INFO
+    com.seatflow: INFO
+    org.springframework.web.socket: INFO
+    org.springframework.messaging: INFO
