@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///seatflow_ticket_test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://test-issuer.example.com
+
+event-service:
+  base-url: http://localhost:8083
+reservation-service:
+  base-url: http://localhost:8084
+seat-map-service:
+  base-url: http://localhost:8082
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+outbox:
+  publisher:
+    fixed-delay-ms: 60000
+    batch-size: 50
+
+logging:
+  level:
+    com.seatflow: WARN
+    org.hibernate.SQL: WARN
