@@ -7,7 +7,7 @@
 - **Phase:** `Phase 07 - Realtime WebSocket Service`
 - **Related Specs:** `.ai/architecture/02-microservices-spec.md` (Section 9: Realtime Service), `.ai/architecture/05-messaging-and-outbox.md` (Section 2.2)
 - **Related ADRs:** `None`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,12 +15,12 @@
 Create the domain data transfer models and broadcasting service layer responsible for pushing real-time seat availability updates to connected STOMP subscribers. The broadcasting service encapsulates `SimpMessagingTemplate` and routes structured `SeatStatusUpdateMessage` payloads to the topic destination `/topic/events/{eventId}/seats`. This decouples the inbound messaging layer (Kafka consumers) from WebSocket protocol details.
 
 ### Critical Invariants to Enforce:
-- [ ] **STOMP Topic Destination Pattern:** All seat status updates must broadcast strictly to destination `/topic/events/{eventId}/seats`, where `{eventId}` is the aggregate UUID string of the event.
-- [ ] **Seat Status Finite State Enum:** `SeatStatus` must be strictly defined as `AVAILABLE`, `HELD`, or `SOLD`.
-- [ ] **Batch & Individual Seat Updates:** `SeatStatusUpdateMessage` contains `List<UUID> seatIds` allowing atomic multi-seat hold updates (e.g. when a customer reserves up to 10 seats simultaneously) or single-seat updates.
-- [ ] **Hold Expiration Timestamp Propagation:** When broadcasting a `HELD` status, `holdExpiresAt` must propagate the 15-minute expiration timestamp so connected Angular seat maps can display active countdown timers. For `AVAILABLE` and `SOLD` statuses, `holdExpiresAt` is null.
-- [ ] **Payload Validation:** Broadcaster must reject invalid calls with `IllegalArgumentException` if `eventId` is null, `seatIds` is null or empty, or `status` is null.
-- [ ] **Shared Observability & MDC:** Broadcast log events must include structured metadata (eventId, seat count, status, destination) and maintain MDC correlation context.
+- [x] **STOMP Topic Destination Pattern:** All seat status updates must broadcast strictly to destination `/topic/events/{eventId}/seats`, where `{eventId}` is the aggregate UUID string of the event.
+- [x] **Seat Status Finite State Enum:** `SeatStatus` must be strictly defined as `AVAILABLE`, `HELD`, or `SOLD`.
+- [x] **Batch & Individual Seat Updates:** `SeatStatusUpdateMessage` contains `List<UUID> seatIds` allowing atomic multi-seat hold updates (e.g. when a customer reserves up to 10 seats simultaneously) or single-seat updates.
+- [x] **Hold Expiration Timestamp Propagation:** When broadcasting a `HELD` status, `holdExpiresAt` must propagate the 15-minute expiration timestamp so connected Angular seat maps can display active countdown timers. For `AVAILABLE` and `SOLD` statuses, `holdExpiresAt` is null.
+- [x] **Payload Validation:** Broadcaster must reject invalid calls with `IllegalArgumentException` if `eventId` is null, `seatIds` is null or empty, or `status` is null.
+- [x] **Shared Observability & MDC:** Broadcast log events must include structured metadata (eventId, seat count, status, destination) and maintain MDC correlation context.
 
 ---
 
@@ -394,6 +394,20 @@ class SeatStatusUpdateMessageTest {
         assertNull(message.holdExpiresAt());
         assertNotNull(message.timestamp());
     }
+
+    @Test
+    @DisplayName("Factory methods should handle null seatIds or single null seat gracefully")
+    void of_WithNullSeats_HandlesGracefully() {
+        UUID eventId = UUID.randomUUID();
+
+        SeatStatusUpdateMessage messageList = SeatStatusUpdateMessage.of(eventId, (List<UUID>) null, SeatStatus.AVAILABLE, null);
+        assertNotNull(messageList.seatIds());
+        assertTrue(messageList.seatIds().isEmpty());
+
+        SeatStatusUpdateMessage messageSingle = SeatStatusUpdateMessage.of(eventId, (UUID) null, SeatStatus.AVAILABLE);
+        assertNotNull(messageSingle.seatIds());
+        assertTrue(messageSingle.seatIds().isEmpty());
+    }
 }
 ```
 
@@ -415,9 +429,9 @@ To verify this task, run:
 ```bash
 mvn clean test -pl backend/services/realtime-service -Dtest=SeatStatusUpdateMessageTest,SeatStatusBroadcasterTest
 ```
-- [ ] `SeatStatus` enum accurately defines `AVAILABLE`, `HELD`, and `SOLD`.
-- [ ] `SeatStatusUpdateMessage` supports batch seat updates, hold expiration timestamps, and creation timestamps.
-- [ ] `SeatStatusBroadcasterImpl` formats STOMP destinations as `/topic/events/{eventId}/seats`.
-- [ ] Argument validation rejects null messages, null `eventId`, empty `seatIds`, and null `status`.
-- [ ] All unit tests pass with zero warnings.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/003-realtime-broadcasting-service-and-event-dtos.md`.
+- [x] `SeatStatus` enum accurately defines `AVAILABLE`, `HELD`, and `SOLD`.
+- [x] `SeatStatusUpdateMessage` supports batch seat updates, hold expiration timestamps, and creation timestamps.
+- [x] `SeatStatusBroadcasterImpl` formats STOMP destinations as `/topic/events/{eventId}/seats`.
+- [x] Argument validation rejects null messages, null `eventId`, empty `seatIds`, and null `status`.
+- [x] All unit tests pass with zero warnings.
+- [x] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/003-realtime-broadcasting-service-and-event-dtos.md`.
