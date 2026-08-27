@@ -25,6 +25,7 @@
         <module>reservation-service</module>
         <module>payment-service</module>
         <module>ticket-service</module>
+        <module>realtime-service</module>
     </modules>
 
     <!-- Additional microservice modules are added here as they are created

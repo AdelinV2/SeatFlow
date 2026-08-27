@@ -7,7 +7,7 @@
 - **Phase:** `Phase 07 - Realtime WebSocket Service`
 - **Related Specs:** `.ai/architecture/01-common-modules.md`, `.ai/architecture/02-microservices-spec.md` (Section 9: Port 8087), `.ai/architecture/05-messaging-and-outbox.md`, `.ai/architecture/08-observability-and-deployment.md`
 - **Related ADRs:** `None`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,18 +15,18 @@
 Bootstrap the independent `realtime-service` microservice module, its Maven POM dependency graph, runtime configuration profiles (`application.yaml`, `application-local.yaml`, `application-docker.yaml`, `application-prod.yaml`, `application-test.yaml`), `.env.example` template, structured Logstash logging configuration, and the Spring WebSocket STOMP message broker configuration. This service acts as a stateless, high-throughput WebSocket proxy and broker translating Kafka domain events into real-time STOMP topic broadcasts for connected Angular frontend clients.
 
 ### Critical Invariants to Enforce:
-- [ ] **Service Coordinates & Port Invariant:** Service name is `realtime-service` and HTTP/WebSocket port is strictly `8087`.
-- [ ] **Stateless Broker Invariant:** `realtime-service` contains no relational database or JPA persistence (no PostgreSQL / Flyway / Hibernate dependencies). State coordination is handled in memory via Spring WebSocket STOMP broker.
-- [ ] **Shared Common Modules Reuse:** Must inherit from `seatflow-services` parent POM and depend on all four shared common modules (`common-domain`, `common-events`, `common-observability`, `common-security`); never duplicate shared error responses, exceptions, event envelopes, or security utilities.
-- [ ] **Global Exception Handler Invariant:** Do NOT declare `@RestControllerAdvice` or custom global exception handlers in this service; all HTTP exception handling is auto-configured via `common-observability`.
-- [ ] **Eureka Service Discovery:** Must register with Eureka Service Discovery via `@EnableDiscoveryClient` and `spring-cloud-starter-netflix-eureka-client`.
-- [ ] **STOMP Broker Topology:**
+- [x] **Service Coordinates & Port Invariant:** Service name is `realtime-service` and HTTP/WebSocket port is strictly `8087`.
+- [x] **Stateless Broker Invariant:** `realtime-service` contains no relational database or JPA persistence (no PostgreSQL / Flyway / Hibernate dependencies). State coordination is handled in memory via Spring WebSocket STOMP broker.
+- [x] **Shared Common Modules Reuse:** Must inherit from `seatflow-services` parent POM and depend on all four shared common modules (`common-domain`, `common-events`, `common-observability`, `common-security`); never duplicate shared error responses, exceptions, event envelopes, or security utilities.
+- [x] **Global Exception Handler Invariant:** Do NOT declare `@RestControllerAdvice` or custom global exception handlers in this service; all HTTP exception handling is auto-configured via `common-observability`.
+- [x] **Eureka Service Discovery:** Must register with Eureka Service Discovery via `@EnableDiscoveryClient` and `spring-cloud-starter-netflix-eureka-client`.
+- [x] **STOMP Broker Topology:**
   - WebSocket handshake endpoint: `/ws` with SockJS fallback enabled and configurable CORS allowed origin patterns.
   - Secondary direct WebSocket endpoint: `/ws` (without SockJS) to support native WebSocket clients and STOMP test runners.
   - In-memory message broker destination prefix: `/topic` (for client subscriptions such as `/topic/events/{eventId}/seats`).
   - Application destination prefix: `/app` (for client-to-server messages if needed).
-- [ ] **CORS Configuration:** Allowed origins configured via `seatflow.cors.allowed-origins` with default `http://localhost:4200` for Angular dev server.
-- [ ] **Environment Isolation:** Local `.env.example` contains dummy version-controlled defaults; real `.env` is `.gitignore`d and never committed.
+- [x] **CORS Configuration:** Allowed origins configured via `seatflow.cors.allowed-origins` with default `http://localhost:4200` for Angular dev server.
+- [x] **Environment Isolation:** Local `.env.example` contains dummy version-controlled defaults; real `.env` is `.gitignore`d and never committed.
 
 ---
 
@@ -251,8 +251,7 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   jackson:
-    serialization:
-      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
     time-zone: UTC
   security:
     oauth2:
@@ -550,7 +549,6 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -616,9 +614,9 @@ To verify this task, run:
 ```bash
 mvn clean test -pl backend/services/realtime-service -Dtest=RealtimeServiceApplicationTests,WebSocketConfigTest
 ```
-- [ ] `backend/services/pom.xml` contains `<module>realtime-service</module>`.
-- [ ] `realtime-service` compiles cleanly with zero warnings.
-- [ ] Spring application context loads without JPA or database dependencies.
-- [ ] `WebSocketConfig` correctly enables `/topic` simple broker, `/app` application prefix, and registers `/ws` endpoints with CORS patterns.
-- [ ] All unit and context tests pass.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/001-module-setup-pom-and-websocket-stomp-configuration.md`.
+- [x] `backend/services/pom.xml` contains `<module>realtime-service</module>`.
+- [x] `realtime-service` compiles cleanly with zero warnings.
+- [x] Spring application context loads without JPA or database dependencies.
+- [x] `WebSocketConfig` correctly enables `/topic` simple broker, `/app` application prefix, and registers `/ws` endpoints with CORS patterns.
+- [x] All unit and context tests pass.
+- [x] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/001-module-setup-pom-and-websocket-stomp-configuration.md`.
