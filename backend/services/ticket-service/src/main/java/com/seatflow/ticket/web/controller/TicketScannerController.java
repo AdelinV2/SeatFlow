@@ -18,10 +18,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/tickets")
+@RequestMapping("/api/scanner/tickets")
 @RequiredArgsConstructor
-@Tag(name = "Admin Tickets", description = "Venue gate scanner check-in APIs")
-public class TicketAdminController {
+@Tag(name = "Scanner Tickets", description = "Venue gate scanner check-in APIs for operational staff and admins (ADR-005)")
+public class TicketScannerController {
 
     private final TicketService ticketService;
 
@@ -30,7 +30,7 @@ public class TicketAdminController {
     @ApiResponse(responseCode = "200", description = "Validation result returned")
     @ApiResponse(responseCode = "400", description = "Invalid request payload", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    @ApiResponse(responseCode = "403", description = "Forbidden — requires ROLE_ADMIN", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Forbidden — requires ROLE_STAFF or ROLE_ADMIN", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<ValidationResultResponse> validateTicket(
             @Valid @RequestBody ValidateTicketRequest request) {
         ValidationResultResponse response = ticketService.validateTicket(request);

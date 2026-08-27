@@ -34,7 +34,7 @@ spring:
         - id: ticket-service
           uri: lb://ticket-service
           predicates:
-            - Path=/api/tickets/**, /api/admin/tickets/**
+            - Path=/api/tickets/**, /api/scanner/tickets/**, /api/admin/tickets/**
         - id: realtime-service
           uri: lb://realtime-service
           predicates:
