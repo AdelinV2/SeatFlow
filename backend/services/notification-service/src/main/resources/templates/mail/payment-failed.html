@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeatFlow Payment Issue</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f9; color: #1e293b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f4f6f9; padding: 30px 10px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #dc2626; padding: 28px 32px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">SeatFlow</h1>
+                            <p style="color: #fecaca; margin: 6px 0 0 0; font-size: 14px;">Payment Processing Alert</p>
+                        </td>
+                    </tr>
+
+                    <!-- Body Content -->
+                    <tr>
+                        <td style="padding: 32px;">
+                            <p style="font-size: 16px; margin: 0 0 16px 0;">Hello <strong th:text="${customerEmail}">Valued Customer</strong>,</p>
+                            <p style="font-size: 15px; line-height: 1.6; color: #475569; margin: 0 0 24px 0;">
+                                We were unable to process your payment for your recent seat reservation. Your seat hold may expire soon if payment is not completed.
+                            </p>
+
+                            <!-- Alert Box -->
+                            <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                                <div style="font-size: 14px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">Failure Details</div>
+                                <div style="font-size: 14px; color: #b91c1c; line-height: 1.5;" th:text="${failureReason ?: 'Your transaction could not be authorized by your payment provider.'}">
+                                    Card was declined by issuing bank.
+                                </div>
+                            </div>
+
+                            <!-- Payment Details Table -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 24px; border-collapse: collapse;">
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px; width: 35%;">Reservation ID</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-family: monospace;" th:text="${reservationId}">123e4567-e89b-12d3-a456-426614174000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Amount Attempted</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;" th:text="${amount != null ? ('$' + #numbers.formatDecimal(amount, 1, 2) + ' ' + (currency ?: 'USD')) : '$0.00 USD'}">$50.00 USD</td>
+                                </tr>
+                                <tr th:if="${stripePaymentId != null}">
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Reference ID</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-family: monospace;" th:text="${stripePaymentId}">pi_1234567890</td>
+                                </tr>
+                            </table>
+
+                            <p style="font-size: 14px; color: #475569; line-height: 1.5; margin: 0 0 24px 0;">
+                                Please check your payment details or try a different payment method to secure your seats before the hold expires.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 32px; text-align: center;">
+                            <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                                &copy; 2026 SeatFlow Ticketing System. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
