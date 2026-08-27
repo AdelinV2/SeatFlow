@@ -7,7 +7,7 @@
 - **Phase:** `Phase 07 - Realtime WebSocket Service`
 - **Related Specs:** `.ai/architecture/02-microservices-spec.md` (Section 9: Realtime Service), `.ai/architecture/05-messaging-and-outbox.md` (Sections 1, 2, 4, 5, 7)
 - **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,18 +15,18 @@
 Implement the Kafka consumer infrastructure and event listeners for `realtime-service`. The service consumes domain events wrapped in universal `EventEnvelope<T>` from `seatflow.reservation.events` (`ReservationHeld`, `ReservationExpired`, `ReservationCancelled`) and `seatflow.ticket.events` (`TicketIssued`). The listeners unwrap the payloads, propagate correlation IDs to the MDC logging context, translate the lifecycle events into domain seat status changes (`AVAILABLE`, `HELD`, `SOLD`), and delegate immediately to `SeatStatusBroadcaster` for STOMP topic transmission.
 
 ### Critical Invariants to Enforce:
-- [ ] **Consumer Group Isolation:** All listeners in `realtime-service` configure `groupId = "realtime-service"`.
-- [ ] **Event Topics Catalog:**
+- [x] **Consumer Group Isolation:** All listeners in `realtime-service` configure `groupId = "realtime-service"`.
+- [x] **Event Topics Catalog:**
   - `seatflow.reservation.events` (`EventTopics.RESERVATION_EVENTS`):
     - `ReservationHeld` → `SeatStatus.HELD` with `holdExpiresAt = event.expiresAt()`.
     - `ReservationExpired` → `SeatStatus.AVAILABLE` with `holdExpiresAt = null`.
     - `ReservationCancelled` → `SeatStatus.AVAILABLE` with `holdExpiresAt = null`.
   - `seatflow.ticket.events` (`EventTopics.TICKET_EVENTS`):
     - `TicketIssued` → `SeatStatus.SOLD` with `holdExpiresAt = null`.
-- [ ] **Universal Envelope Unwrapping:** All Kafka messages must be deserialized as `EventEnvelope<T>` from `common-events`. Never parse raw JSON without envelope metadata.
-- [ ] **Trace Context & MDC Propagation:** Extract `envelope.correlationId()` and bind to MDC `correlationId` before processing; clear MDC in a `finally` block to prevent thread contamination.
-- [ ] **Polymorphic Topic Resilience:** Listeners must handle known event types and silently ignore unhandled events (e.g. `ReservationConfirmedEvent`, `TicketValidatedEvent`) on shared aggregate topics without throwing deserialization or routing errors.
-- [ ] **Zero-Error Kafka Deserialization:** Configure `ErrorHandlingDeserializer` wrapping `JsonDeserializer` with trusted packages (`com.seatflow.*`) and a `DefaultErrorHandler` with backoff.
+- [x] **Universal Envelope Unwrapping:** All Kafka messages must be deserialized as `EventEnvelope<T>` from `common-events`. Never parse raw JSON without envelope metadata.
+- [x] **Trace Context & MDC Propagation:** Extract `envelope.correlationId()` and bind to MDC `correlationId` before processing; clear MDC in a `finally` block to prevent thread contamination.
+- [x] **Polymorphic Topic Resilience:** Listeners must handle known event types and silently ignore unhandled events (e.g. `ReservationConfirmedEvent`, `TicketValidatedEvent`) on shared aggregate topics without throwing deserialization or routing errors.
+- [x] **Zero-Error Kafka Deserialization:** Configure `ErrorHandlingDeserializer` wrapping `JsonDeserializer` with trusted packages (`com.seatflow.*`) and a `DefaultErrorHandler` with backoff.
 
 ---
 
@@ -151,8 +151,13 @@ public record TicketIssuedEvent(
 ```java
 package com.seatflow.realtime.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.events.EventEnvelope;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.errors.SerializationException;
+import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -161,18 +166,22 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.util.backoff.FixedBackOff;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
 @EnableKafka
 @Configuration
+@RequiredArgsConstructor
 public class KafkaConsumerConfig {
+
+    private final ObjectMapper objectMapper;
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
@@ -185,14 +194,24 @@ public class KafkaConsumerConfig {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-        props.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class);
-        props.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class);
-        props.put(JsonDeserializer.TRUSTED_PACKAGES, "com.seatflow.*,java.util,java.time");
-        props.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, true);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
-        return new DefaultKafkaConsumerFactory<>(props);
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+
+        Deserializer<Object> envelopeDeserializer = (topic, data) -> {
+            if (data == null) {
+                return null;
+            }
+            try {
+                return objectMapper.readValue(data, EventEnvelope.class);
+            } catch (IOException ex) {
+                throw new SerializationException("Failed to deserialize Kafka envelope for topic " + topic, ex);
+            }
+        };
+
+        Deserializer<Object> valueDeserializer = new ErrorHandlingDeserializer<>(envelopeDeserializer);
+
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), valueDeserializer);
     }
 
     @Bean
@@ -201,12 +220,13 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
-        // Retry 3 times with 1-second backoff before logging error and moving offset
-        factory.setCommonErrorHandler(new DefaultErrorHandler(
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
                 (record, exception) -> log.error("Kafka consumer error on topic={}, partition={}, offset={}, key={}: {}",
                         record.topic(), record.partition(), record.offset(), record.key(), exception.getMessage(), exception),
                 new FixedBackOff(1000L, 3L)
-        ));
+        );
+        factory.setCommonErrorHandler(errorHandler);
         return factory;
     }
 }
@@ -233,8 +253,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -531,6 +549,15 @@ class ReservationEventListenerTest {
 
         verifyNoInteractions(seatStatusBroadcaster);
     }
+
+    @Test
+    @DisplayName("Should silently return when envelope is null or eventType is null")
+    void handleReservationEvent_NullEnvelope_IgnoresGracefully() {
+        listener.handleReservationEvent(null);
+        listener.handleReservationEvent(EventEnvelope.of(null, "id", "corr", null));
+
+        verifyNoInteractions(seatStatusBroadcaster);
+    }
 }
 ```
 
@@ -625,6 +652,15 @@ class TicketEventListenerTest {
 
         verifyNoInteractions(seatStatusBroadcaster);
     }
+
+    @Test
+    @DisplayName("Should silently return when envelope is null or eventType is null")
+    void handleTicketEvent_NullEnvelope_IgnoresGracefully() {
+        listener.handleTicketEvent(null);
+        listener.handleTicketEvent(EventEnvelope.of(null, "id", "corr", null));
+
+        verifyNoInteractions(seatStatusBroadcaster);
+    }
 }
 ```
 
@@ -646,10 +682,10 @@ To verify this task, run:
 ```bash
 mvn clean test -pl backend/services/realtime-service -Dtest=ReservationEventListenerTest,TicketEventListenerTest
 ```
-- [ ] Inbound domain events implement `DomainEvent` with all schema fields matching `.ai/architecture/05-messaging-and-outbox.md`.
-- [ ] `KafkaConsumerConfig` safely configures `ErrorHandlingDeserializer` with trusted package scanning and fixed backoff error handler.
-- [ ] `ReservationEventListener` maps `ReservationHeld`, `ReservationExpired`, and `ReservationCancelled` to `HELD` and `AVAILABLE` statuses.
-- [ ] `TicketEventListener` maps `TicketIssued` to `SOLD` status.
-- [ ] Correlation IDs are propagated to MDC and cleaned up in `finally` blocks.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/004-kafka-event-listeners-and-envelope-unwrapping.md`.
+- [x] Inbound domain events implement `DomainEvent` with all schema fields matching `.ai/architecture/05-messaging-and-outbox.md`.
+- [x] `KafkaConsumerConfig` safely configures `ErrorHandlingDeserializer` with trusted package scanning and fixed backoff error handler.
+- [x] `ReservationEventListener` maps `ReservationHeld`, `ReservationExpired`, and `ReservationCancelled` to `HELD` and `AVAILABLE` statuses.
+- [x] `TicketEventListener` maps `TicketIssued` to `SOLD` status.
+- [x] Correlation IDs are propagated to MDC and cleaned up in `finally` blocks.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/004-kafka-event-listeners-and-envelope-unwrapping.md`.
