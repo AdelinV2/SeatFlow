@@ -465,6 +465,18 @@ class RealtimeServiceIntegrationTest {
         assertTrue(session.isConnected(), "STOMP session should be connected with valid JWT");
         session.disconnect();
     }
+
+    @Test
+    @DisplayName("Should fail STOMP connect when invalid or expired Bearer token is provided")
+    void testInvalidTokenConnect_FailsConnection() {
+        String token = "invalid.expired.jwt.token";
+        when(jwtDecoder.decode(eq(token))).thenThrow(new org.springframework.security.oauth2.jwt.BadJwtException("Token has expired"));
+
+        StompHeaders headers = new StompHeaders();
+        headers.add("Authorization", "Bearer " + token);
+
+        assertThrows(Exception.class, () -> testClientHelper.connect(wsUrl, headers));
+    }
 }
 ```
 

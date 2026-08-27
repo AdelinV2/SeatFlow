@@ -189,12 +189,15 @@ public class KafkaConsumerConfig {
     @Value("${spring.kafka.consumer.group-id:realtime-service}")
     private String groupId;
 
+    @Value("${spring.kafka.consumer.auto-offset-reset:latest}")
+    private String autoOffsetReset;
+
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
 
@@ -226,6 +229,8 @@ public class KafkaConsumerConfig {
                         record.topic(), record.partition(), record.offset(), record.key(), exception.getMessage(), exception),
                 new FixedBackOff(1000L, 3L)
         );
+        errorHandler.setRetryListeners((record, ex, deliveryAttempt) ->
+                log.warn("Retrying realtime-service consumer record. attempt={}, topic={}", deliveryAttempt, record.topic()));
         factory.setCommonErrorHandler(errorHandler);
         return factory;
     }
@@ -243,6 +248,7 @@ package com.seatflow.realtime.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.context.CorrelationContext;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
@@ -268,13 +274,17 @@ public class ReservationEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleReservationEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null) {
-            log.warn("Received null envelope or missing eventType, skipping message");
+        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
             return;
         }
 
         String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
+        CorrelationContext.setCorrelationId(correlationId);
         MDC.put("correlationId", correlationId);
+        if (envelope.eventId() != null) {
+            MDC.put("traceId", envelope.eventId());
+        }
 
         try {
             log.info("Received reservation event: type={}, eventId={}, aggregateId={}",
@@ -316,6 +326,8 @@ public class ReservationEventListener {
             throw ex;
         } finally {
             MDC.remove("correlationId");
+            MDC.remove("traceId");
+            CorrelationContext.clear();
         }
     }
 
@@ -335,6 +347,7 @@ package com.seatflow.realtime.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.context.CorrelationContext;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
 import com.seatflow.realtime.service.SeatStatusBroadcaster;
@@ -343,8 +356,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Slf4j
 @Component
@@ -360,13 +371,17 @@ public class TicketEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleTicketEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null) {
-            log.warn("Received null envelope or missing eventType, skipping message");
+        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
             return;
         }
 
         String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
+        CorrelationContext.setCorrelationId(correlationId);
         MDC.put("correlationId", correlationId);
+        if (envelope.eventId() != null) {
+            MDC.put("traceId", envelope.eventId());
+        }
 
         try {
             log.info("Received ticket event: type={}, eventId={}, aggregateId={}",
@@ -376,9 +391,8 @@ public class TicketEventListener {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
                 seatStatusBroadcaster.broadcastSeatStatus(
                         event.eventId(),
-                        List.of(event.seatId()),
-                        SeatStatus.SOLD,
-                        null
+                        event.seatId(),
+                        SeatStatus.SOLD
                 );
             } else {
                 log.debug("Ignoring ticket event type: {}", envelope.eventType());
@@ -389,6 +403,8 @@ public class TicketEventListener {
             throw ex;
         } finally {
             MDC.remove("correlationId");
+            MDC.remove("traceId");
+            CorrelationContext.clear();
         }
     }
 

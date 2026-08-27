@@ -70,7 +70,7 @@ class TicketEventListenerTest {
 
         listener.handleTicketEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, List.of(seatId), SeatStatus.SOLD, null);
+        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatId, SeatStatus.SOLD);
     }
 
     @Test

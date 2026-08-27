@@ -135,6 +135,8 @@ package com.seatflow.realtime.security;
 import com.seatflow.common.security.converter.JwtRoleConverter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -156,6 +158,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 99)
 @RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
@@ -167,16 +170,24 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-        if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+        if (accessor != null && (StompCommand.CONNECT.equals(accessor.getCommand()) || StompCommand.STOMP.equals(accessor.getCommand()))) {
             String authHeader = accessor.getFirstNativeHeader(HttpHeaders.AUTHORIZATION);
+            if (authHeader == null || authHeader.isBlank()) {
+                authHeader = accessor.getFirstNativeHeader("authorization");
+            }
 
             if (authHeader != null && !authHeader.isBlank()) {
-                if (!authHeader.startsWith(BEARER_PREFIX)) {
+                if (!authHeader.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
                     log.warn("STOMP CONNECT rejected: Malformed Authorization header format");
                     throw new BadCredentialsException("Malformed Authorization header: Must start with 'Bearer '");
                 }
 
                 String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+                if (token.isEmpty()) {
+                    log.warn("STOMP CONNECT rejected: Bearer token is empty");
+                    throw new BadCredentialsException("Bearer token must not be blank");
+                }
+
                 try {
                     Jwt jwt = jwtDecoder.decode(token);
                     var authorities = jwtRoleConverter.convert(jwt);

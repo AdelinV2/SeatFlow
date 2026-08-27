@@ -91,7 +91,7 @@ public record SeatStatusUpdateMessage(
                 seatIds != null ? List.copyOf(seatIds) : List.of(),
                 status,
                 Instant.now(),
-                holdExpiresAt
+                status == SeatStatus.HELD ? holdExpiresAt : null
         );
     }
 

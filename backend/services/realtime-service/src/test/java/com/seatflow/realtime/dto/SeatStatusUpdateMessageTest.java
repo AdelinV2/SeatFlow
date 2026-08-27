@@ -69,4 +69,28 @@ class SeatStatusUpdateMessageTest {
 
         assertEquals(List.of(seat1), message.seatIds());
     }
+
+    @Test
+    @DisplayName("Factory method 'of' should force holdExpiresAt to null if status is not HELD")
+    void of_WithNonHeldStatusAndHoldExpiresAt_ResetsHoldExpiresAtToNull() {
+        UUID eventId = UUID.randomUUID();
+        UUID seat1 = UUID.randomUUID();
+        Instant expiresAt = Instant.now().plusSeconds(900);
+
+        SeatStatusUpdateMessage availableMessage = SeatStatusUpdateMessage.of(
+                eventId,
+                List.of(seat1),
+                SeatStatus.AVAILABLE,
+                expiresAt
+        );
+        assertNull(availableMessage.holdExpiresAt(), "holdExpiresAt must be null for AVAILABLE status");
+
+        SeatStatusUpdateMessage soldMessage = SeatStatusUpdateMessage.of(
+                eventId,
+                List.of(seat1),
+                SeatStatus.SOLD,
+                expiresAt
+        );
+        assertNull(soldMessage.holdExpiresAt(), "holdExpiresAt must be null for SOLD status");
+    }
 }

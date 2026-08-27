@@ -36,7 +36,7 @@ public record SeatStatusUpdateMessage(
                 seatIds != null ? seatIds.stream().filter(Objects::nonNull).toList() : List.of(),
                 status,
                 Instant.now(),
-                holdExpiresAt
+                status == SeatStatus.HELD ? holdExpiresAt : null
         );
     }
 

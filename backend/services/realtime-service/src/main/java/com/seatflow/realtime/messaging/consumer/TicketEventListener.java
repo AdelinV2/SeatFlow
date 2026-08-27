@@ -6,13 +6,12 @@ import com.seatflow.common.events.EventTopics;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
 import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.common.observability.context.CorrelationContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Slf4j
 @Component
@@ -34,7 +33,11 @@ public class TicketEventListener {
         }
 
         String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
+        CorrelationContext.setCorrelationId(correlationId);
         MDC.put("correlationId", correlationId);
+        if (envelope.eventId() != null) {
+            MDC.put("traceId", envelope.eventId());
+        }
 
         try {
             log.info("Received ticket event: type={}, eventId={}, aggregateId={}",
@@ -44,9 +47,8 @@ public class TicketEventListener {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
                 seatStatusBroadcaster.broadcastSeatStatus(
                         event.eventId(),
-                        List.of(event.seatId()),
-                        SeatStatus.SOLD,
-                        null
+                        event.seatId(),
+                        SeatStatus.SOLD
                 );
             } else {
                 log.debug("Ignoring ticket event type: {}", envelope.eventType());
@@ -57,6 +59,8 @@ public class TicketEventListener {
             throw ex;
         } finally {
             MDC.remove("correlationId");
+            MDC.remove("traceId");
+            CorrelationContext.clear();
         }
     }
 

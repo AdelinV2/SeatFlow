@@ -164,6 +164,81 @@ class StompAuthChannelInterceptorTest {
     }
 
     @Test
+    @DisplayName("Should authenticate user and set JwtAuthenticationToken when STOMP command frame is used (STOMP 1.2)")
+    void preSend_StompCommand_AuthenticatesUser() {
+        String rawToken = "valid.jwt.token";
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.STOMP);
+        accessor.setLeaveMutable(true);
+        accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "Bearer " + rawToken);
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        Jwt jwt = new Jwt(
+                rawToken,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", "user-uuid-456", "email", "stomp12@example.com")
+        );
+        Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+
+        when(jwtDecoder.decode(rawToken)).thenReturn(jwt);
+        when(jwtRoleConverter.convert(jwt)).thenReturn(authorities);
+
+        Message<?> result = interceptor.preSend(message, messageChannel);
+
+        assertNotNull(result);
+        StompHeaderAccessor resultAccessor = StompHeaderAccessor.wrap(result);
+        assertNotNull(resultAccessor.getUser());
+        assertInstanceOf(JwtAuthenticationToken.class, resultAccessor.getUser());
+        verify(jwtDecoder).decode(rawToken);
+    }
+
+    @Test
+    @DisplayName("Should authenticate user when lowercase bearer prefix is provided")
+    void preSend_LowercaseBearerPrefix_AuthenticatesUser() {
+        String rawToken = "valid.jwt.token";
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
+        accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "bearer " + rawToken);
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        Jwt jwt = new Jwt(
+                rawToken,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", "user-uuid-123", "email", "alex@example.com")
+        );
+        Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+
+        when(jwtDecoder.decode(rawToken)).thenReturn(jwt);
+        when(jwtRoleConverter.convert(jwt)).thenReturn(authorities);
+
+        Message<?> result = interceptor.preSend(message, messageChannel);
+
+        assertNotNull(result);
+        StompHeaderAccessor resultAccessor = StompHeaderAccessor.wrap(result);
+        assertNotNull(resultAccessor.getUser());
+        assertInstanceOf(JwtAuthenticationToken.class, resultAccessor.getUser());
+    }
+
+    @Test
+    @DisplayName("Should throw BadCredentialsException when Authorization header has empty Bearer token")
+    void preSend_EmptyBearerToken_ThrowsBadCredentialsException() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
+        accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "Bearer   ");
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        BadCredentialsException exception = assertThrows(
+                BadCredentialsException.class,
+                () -> interceptor.preSend(message, messageChannel)
+        );
+        assertTrue(exception.getMessage().contains("must not be blank"));
+        verifyNoInteractions(jwtDecoder, jwtRoleConverter);
+    }
+
+    @Test
     @DisplayName("Should pass non-CONNECT STOMP frames through without re-decoding")
     void preSend_SubscribeFrame_PassesThrough() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);

@@ -38,12 +38,15 @@ public class KafkaConsumerConfig {
     @Value("${spring.kafka.consumer.group-id:realtime-service}")
     private String groupId;
 
+    @Value("${spring.kafka.consumer.auto-offset-reset:latest}")
+    private String autoOffsetReset;
+
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
 
@@ -75,6 +78,8 @@ public class KafkaConsumerConfig {
                         record.topic(), record.partition(), record.offset(), record.key(), exception.getMessage(), exception),
                 new FixedBackOff(1000L, 3L)
         );
+        errorHandler.setRetryListeners((record, ex, deliveryAttempt) ->
+                log.warn("Retrying realtime-service consumer record. attempt={}, topic={}", deliveryAttempt, record.topic()));
         factory.setCommonErrorHandler(errorHandler);
         return factory;
     }
