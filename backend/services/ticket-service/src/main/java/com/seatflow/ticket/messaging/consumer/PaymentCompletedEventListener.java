@@ -11,9 +11,9 @@ import com.seatflow.ticket.repository.TicketRepository;
 import com.seatflow.ticket.service.TicketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -33,10 +33,9 @@ public class PaymentCompletedEventListener {
 
     @KafkaListener(
         topics = EventTopics.PAYMENT_EVENTS,
-        groupId = "ticket-service",
+        groupId = "ticket-service-payment",
         containerFactory = "kafkaListenerContainerFactory"
     )
-    @Transactional
     public void onPaymentCompleted(EventEnvelope<Object> envelope) {
         if (!"PaymentCompleted".equals(envelope.eventType())) {
             log.debug("Ignoring irrelevant payment event type: {}", envelope.eventType());
@@ -89,7 +88,7 @@ public class PaymentCompletedEventListener {
             ));
         }
 
-        // 3. Issue digital tickets
+        // 3. Issue digital tickets (idempotent via paymentId unique guard + DB constraints)
         IssueTicketsCommand command = new IssueTicketsCommand(
                 payload.paymentId(),
                 payload.reservationId(),
@@ -101,7 +100,16 @@ public class PaymentCompletedEventListener {
                 payload.currency()
         );
 
-        ticketService.issueTickets(command);
+        try {
+            ticketService.issueTickets(command);
+        } catch (DataIntegrityViolationException ex) {
+            // Concurrent duplicate delivery: another instance already issued for this payment
+            if (ticketRepository.existsByPaymentId(paymentId)) {
+                log.info("Duplicate PaymentCompleted handled via constraint: paymentId={} already issued, suppressing error", paymentId);
+                return;
+            }
+            throw ex;
+        }
 
         log.info("Digital tickets issued successfully for paymentId={}, seatCount={}", paymentId, seatCount);
     }

@@ -72,9 +72,6 @@ public class TicketServiceImpl implements TicketService {
             String ticketCode = TICKET_CODE_PREFIX + generateSecureRandomString(SECURE_CODE_LENGTH);
             String qrPayload = QR_PAYLOAD_BASE + ticketCode;
 
-            // Pre-generate the QR code image (used by downstream PDF/email flows).
-            qrCodeGeneratorService.generateQrCodeBase64(qrPayload, 300, 300);
-
             Ticket ticket = Ticket.builder()
                     .reservationId(command.reservationId())
                     .paymentId(command.paymentId())
@@ -199,7 +196,7 @@ public class TicketServiceImpl implements TicketService {
     @Transactional
     public ValidationResultResponse validateTicket(ValidateTicketRequest request) {
         Instant scanTime = Instant.now();
-        Optional<Ticket> ticketOpt = ticketRepository.findByTicketCode(request.ticketCode());
+        Optional<Ticket> ticketOpt = ticketRepository.findByTicketCodeForUpdate(request.ticketCode());
 
         if (ticketOpt.isEmpty()) {
             validationRepository.save(TicketValidation.builder()
@@ -258,9 +255,21 @@ public class TicketServiceImpl implements TicketService {
     @Override
     @Transactional
     public int claimGuestTickets(UUID userId, String customerEmail) {
-        int updatedCount = ticketRepository.updateUserIdByCustomerEmailAndUserIdIsNull(userId, customerEmail);
-        log.info("Claimed {} historical guest tickets for userId={}, email={}", updatedCount, userId, customerEmail);
+        String normalizedEmail = normalizeEmail(customerEmail);
+        if (normalizedEmail == null) {
+            log.warn("Cannot claim guest tickets: email is null or blank for userId={}", userId);
+            return 0;
+        }
+        int updatedCount = ticketRepository.updateUserIdByNormalizedEmail(userId, normalizedEmail);
+        log.info("Claimed {} historical guest tickets for userId={}, normalizedEmail={}", updatedCount, userId, normalizedEmail);
         return updatedCount;
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return email.trim().toLowerCase();
     }
 
     private EventEnrichment enrichEvent(UUID eventId, UUID seatId) {

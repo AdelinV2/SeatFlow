@@ -18,6 +18,7 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
+import java.util.Currency;
 import java.util.Locale;
 
 @Slf4j
@@ -35,6 +36,8 @@ public class PdfTicketGeneratorServiceImpl implements PdfTicketGeneratorService 
         try {
             PdfWriter.getInstance(document, baos);
             document.open();
+            // Ensure document is closed even on exception to release resources
+            try {
 
             Font titleFont = new Font(Font.HELVETICA, 20, Font.BOLD, Color.BLACK);
             Font subtitleFont = new Font(Font.HELVETICA, 12, Font.NORMAL, Color.DARK_GRAY);
@@ -78,8 +81,11 @@ public class PdfTicketGeneratorServiceImpl implements PdfTicketGeneratorService 
             qr.scaleToFit(QR_SIZE, QR_SIZE);
             document.add(qr);
             document.add(new Paragraph("Scan this QR code at entry gate", labelFont));
-
-            document.close();
+            } finally {
+                if (document.isOpen()) {
+                    document.close();
+                }
+            }
             return baos.toByteArray();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to render PDF ticket for code " + ticketData.ticketCode(), e);
@@ -98,6 +104,16 @@ public class PdfTicketGeneratorServiceImpl implements PdfTicketGeneratorService 
     private String formatMoney(BigDecimal amount, String currency) {
         if (amount == null) {
             return "";
+        }
+        try {
+            if (currency != null && !currency.isBlank()) {
+                Currency cur = Currency.getInstance(currency.trim().toUpperCase(Locale.ROOT));
+                NumberFormat formatter = NumberFormat.getCurrencyInstance(Locale.US);
+                formatter.setCurrency(cur);
+                return formatter.format(amount);
+            }
+        } catch (Exception ignored) {
+            // Fallback to default US formatting if currency code is invalid
         }
         NumberFormat formatter = NumberFormat.getCurrencyInstance(Locale.US);
         return formatter.format(amount);
