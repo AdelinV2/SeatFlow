@@ -12,14 +12,15 @@
 ---
 
 ## 2. Objective & Invariants
-Implement the complete authentication and core HTTP infrastructure for the SeatFlow frontend. This includes OIDC / Microsoft Entra External ID token integration (`AuthService`), reactive user context (`UserContextService`), functional HTTP interceptors (`authInterceptor`, `correlationInterceptor`, `errorInterceptor`), functional route authorization guards (`authGuard`, `adminGuard`, `staffGuard`), and the responsive glassmorphic navigation header, mobile drawer, and footer shell.
+Implement the complete authentication and core HTTP infrastructure for the SeatFlow frontend. This includes OIDC / Microsoft Entra External ID token integration (`AuthService`), reactive user context (`UserContextService`), functional HTTP interceptors (`authInterceptor`, `correlationInterceptor`, `errorInterceptor`), functional route authorization guards (`authGuard`, `adminGuard`, `staffGuard`), and the responsive glassmorphic navigation header, mobile slide-out drawer, and the rich multi-column footer shell.
 
 ### Critical Invariants to Enforce:
 - [ ] **Reactive User Context with Signals:** `UserContextService` must expose user identity and roles via Angular Signals (`currentUser`, `roles`, `isAuthenticated`, `isAdmin`, `isStaff`). No `BehaviorSubject` in component/service public state.
 - [ ] **Distributed Tracing & Correlation Header:** Every outgoing HTTP request must attach a unique `X-Correlation-Id` UUID header if not already present.
 - [ ] **ApiErrorResponse Standard Mapping:** The `errorInterceptor` must parse backend `ApiErrorResponse` envelopes (`errorCode`, `message`, `validationErrors`) and display contextual feedback via `MatSnackBar` without crashing the application state.
 - [ ] **Role-Based Functional Route Guards:** Enforce `authGuard` (any authenticated user), `adminGuard` (requires `ROLE_ADMIN`), and `staffGuard` (requires `ROLE_STAFF` or `ROLE_ADMIN` per ADR-005).
-- [ ] **Glassmorphic Navigation Shell:** Navigation header must feature responsive glassmorphism (`backdrop-blur-md bg-opacity-80 border-b border-[var(--color-border)]`), live theme switcher toggle, responsive mobile drawer, and role-conditioned route links (Catalog, My Tickets, Staff Scanner, Admin Portal).
+- [ ] **Responsive Glassmorphic Navigation Shell:** Navigation header must feature responsive glassmorphism (`backdrop-blur-md bg-opacity-80 border-b border-[var(--color-border)]`), live theme switcher toggle, mobile hamburger drawer menu with safe-area spacing, and role-conditioned route links (Catalog, My Tickets, Staff Scanner, Admin Portal).
+- [ ] **Rich Multi-Column Footer:** Footer must include 4 structured columns: Brand & Mission, Quick Explore Links, Support & Guest Ticket Lookup, Legal & Compliance (Terms & Conditions, Privacy Policy, Stripe Tax/VAT disclosure, Refund Policy), Live Platform Status indicator (`🟢 All Systems Operational`), and dynamic copyright year.
 
 ---
 
@@ -179,7 +180,6 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       const message = apiError?.message || error.statusText || 'An unexpected error occurred';
 
       if (error.status === 401) {
-        // Redirect to login on unauthenticated protected request
         router.navigate(['/auth/login'], { queryParams: { returnUrl: router.url } });
       } else if (error.status === 403) {
         snackBar.open(`Access Denied: You do not have permission for this action.`, 'Close', {
@@ -204,42 +204,95 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 };
 ```
 
-### 4.4 Functional Route Guards (`src/app/core/guards/`)
+### 4.4 Rich Multi-Column Footer Component (`src/app/shared/layout/footer/`)
 
 ```typescript
-// staff.guard.ts (ADR-005)
-import { CanActivateFn, Router } from '@angular/router';
-import { inject } from '@angular/core';
-import { UserContextService } from '../auth/user-context.service';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 
-export const staffGuard: CanActivateFn = (route, state) => {
-  const userContext = inject(UserContextService);
-  const router = inject(Router);
-
-  if (userContext.isStaff()) {
-    return true;
-  }
-
-  return router.createUrlTree(['/auth/login'], { queryParams: { returnUrl: state.url } });
-};
+@Component({
+  selector: 'app-footer',
+  standalone: true,
+  imports: [CommonModule, RouterLink],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './footer.component.html',
+  styleUrl: './footer.component.scss',
+})
+export class FooterComponent {
+  readonly currentYear = new Date().getFullYear();
+}
 ```
 
-```typescript
-// admin.guard.ts
-import { CanActivateFn, Router } from '@angular/router';
-import { inject } from '@angular/core';
-import { UserContextService } from '../auth/user-context.service';
+```html
+<footer class="mt-20 border-t border-[var(--color-border)] bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
+      <!-- Column 1: Brand & Mission -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-black text-base shadow-md">
+            S
+          </div>
+          <span class="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">SeatFlow</span>
+        </div>
+        <p class="text-xs text-muted leading-relaxed">
+          Premium live event ticketing and real-time interactive seat booking. Zero double-booking guarantee with instant cryptographic ticket delivery.
+        </p>
+        <div class="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+          <span>All Systems Operational</span>
+        </div>
+      </div>
 
-export const adminGuard: CanActivateFn = (route, state) => {
-  const userContext = inject(UserContextService);
-  const router = inject(Router);
+      <!-- Column 2: Explore Events -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-primary)] mb-3">Explore Events</h4>
+        <ul class="space-y-2 text-xs text-muted">
+          <li><a routerLink="/events" class="hover:text-indigo-400 transition-colors">All Events Catalog</a></li>
+          <li><a routerLink="/events" [queryParams]="{ category: 'CONCERT' }" class="hover:text-indigo-400 transition-colors">Concerts & Live Music</a></li>
+          <li><a routerLink="/events" [queryParams]="{ category: 'THEATRE' }" class="hover:text-indigo-400 transition-colors">Theatre & Opera</a></li>
+          <li><a routerLink="/events" [queryParams]="{ category: 'SPORTS' }" class="hover:text-indigo-400 transition-colors">Sports Arenas</a></li>
+          <li><a routerLink="/events" [queryParams]="{ category: 'FESTIVAL' }" class="hover:text-indigo-400 transition-colors">Festivals & Electronic</a></li>
+        </ul>
+      </div>
 
-  if (userContext.isAdmin()) {
-    return true;
-  }
+      <!-- Column 3: Customer Support -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-primary)] mb-3">Support & Tools</h4>
+        <ul class="space-y-2 text-xs text-muted">
+          <li><a routerLink="/profile/tickets" class="hover:text-indigo-400 transition-colors">My Digital Tickets</a></li>
+          <li><a routerLink="/auth/login" class="hover:text-indigo-400 transition-colors">Guest Ticket Lookup</a></li>
+          <li><a routerLink="/scanner" class="hover:text-indigo-400 transition-colors">Staff Gate Scanner</a></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Help Center & FAQ</span></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Contact Event Organizers</span></li>
+        </ul>
+      </div>
 
-  return router.createUrlTree(['/']);
-};
+      <!-- Column 4: Legal & Compliance -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-primary)] mb-3">Legal & Fiscal</h4>
+        <ul class="space-y-2 text-xs text-muted">
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Terms & Conditions</span></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Privacy Policy (GDPR)</span></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Stripe Tax & VAT Policy</span></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Refund & Cancellation Rules</span></li>
+          <li><span class="hover:text-indigo-400 transition-colors cursor-pointer">Cookie Preferences</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="mt-12 pt-6 border-t border-[var(--color-border)] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted">
+      <p>© {{ currentYear }} SeatFlow Inc. All rights reserved. Powered by Angular 22 & Spring Boot.</p>
+      <div class="flex items-center gap-4">
+        <span class="hover:text-[var(--color-text-primary)] cursor-pointer">Security</span>
+        <span class="hover:text-[var(--color-text-primary)] cursor-pointer">Status</span>
+        <span class="hover:text-[var(--color-text-primary)] cursor-pointer">API Docs</span>
+      </div>
+    </div>
+  </div>
+</footer>
 ```
 
 ---
@@ -252,16 +305,15 @@ export const adminGuard: CanActivateFn = (route, state) => {
    - Create `src/app/core/auth/auth.service.ts` managing token extraction, MSAL/OIDC login/logout flow, local JWT claim decoding, and syncing with `UserContextService`.
 3. **Implement Functional HTTP Interceptors:**
    - Implement `correlationInterceptor`, `authInterceptor`, and `errorInterceptor`.
-   - Register them in `src/app/app.config.ts` via `provideHttpClient(withInterceptors([...]))`.
 4. **Implement Functional Route Guards:**
    - Create `authGuard`, `adminGuard`, `staffGuard`, and `pendingChangesGuard`.
-5. **Implement Glassmorphic Navigation Shell & Footer:**
-   - Create `src/app/shared/layout/header/` standalone component with theme toggle button, role-aware desktop navigation links, and mobile slide-out drawer.
-   - Create `src/app/shared/layout/footer/` standalone component with branding, links, and system status indicator.
+5. **Implement Glassmorphic Navigation Shell & Rich Footer:**
+   - Create `src/app/shared/layout/header/` standalone component with theme toggle button, role-aware desktop navigation links, and mobile slide-out drawer with backdrop blur.
+   - Create `src/app/shared/layout/footer/` standalone component with the 4 structured columns (Brand, Explore, Support, Legal & Terms) and system status badge.
    - Embed `<app-header />` and `<app-footer />` into `src/app/app.component.html`.
 6. **Develop Comprehensive Unit Tests:**
    - Test `UserContextService` role computations.
-   - Test interceptors with `HttpClientTestingModule` / `HttpTestingController`.
+   - Test interceptors with `HttpTestingController`.
    - Test `staffGuard` and `adminGuard` redirection rules.
 
 ---
@@ -276,5 +328,6 @@ cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 - [ ] `errorInterceptor` captures backend error envelopes and renders `MatSnackBar` alerts.
 - [ ] `staffGuard` permits `ROLE_STAFF` & `ROLE_ADMIN` and blocks unauthorized users.
 - [ ] Responsive navigation shell renders cleanly with live theme toggle and mobile navigation drawer.
+- [ ] Rich multi-column footer renders Terms, Privacy, Support, and live operational status.
 - [ ] All unit tests pass cleanly.
 - [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/002-core-auth-oidc-interceptors-and-nav-shell.md`.

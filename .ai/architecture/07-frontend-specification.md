@@ -11,6 +11,7 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 - **Signals for State:** `signal()`, `computed()`, `input()`, `output()`, and `model()`. Never use `BehaviorSubject` for component state.
 - **Dependency Injection:** Modern `inject()` function in field initializers.
 - **Routing:** Lazy-loaded feature routes with View Transitions enabled (`withViewTransitions()`).
+- **100% Mobile & Desktop Responsive:** Fluid layout breakpoints, safe-area mobile paddings, and touch target minimums ($44\times 44\text{px}$).
 
 ---
 
@@ -47,11 +48,12 @@ The design system is crafted to provide a luxurious, modern, and tactile user ex
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Tactile Buttons & Sensory Micro-Interactions
+### 2.2 Tactile Buttons, Scroll Reveals & Sensory Micro-Interactions
 - **Tactile Button Press Physics:** Primary and secondary buttons implement physical spring damping (`active:scale-[0.97] transition-all duration-150 ease-out`).
 - **Sheen Sweep & Glow Effect:** Primary CTA buttons feature a continuous subtle sheen sweep gradient on hover and an ambient radial glow.
 - **Seat Spring Animation:** Selecting/deselecting seats on the interactive map triggers an elastic spring keyframe bounce (`scale-125` -> `scale-100`) and glowing focus halo.
 - **15-Min Hold Pulse Ring:** Hold countdown timer uses dynamic circular progress indicators that pulse vigorously in amber and rose when remaining time drops below 120 seconds.
+- **Scroll-Driven Reveal Animations:** Event cards, calendar views, and sections use smooth scroll-reveal fade-ins (`animate-fade-in-up`).
 - **Skeleton Shimmer Loaders:** Fluid animated gradient shimmer waves for all loading states.
 
 ---
@@ -59,7 +61,7 @@ The design system is crafted to provide a luxurious, modern, and tactile user ex
 ## 3. Feature Domains & 14 Complete Application Pages
 
 ```text
-/                                    --> EventListComponent (Featured hero carousel, category pills, date picker, search)
+/                                    --> EventListComponent (Featured hero carousel, calendar, category pills, date picker, search)
 /events/:id                         --> EventDetailComponent (Hero banner, details, pricing tiers, Leaflet interactive map, CTA)
 /events/:id/seats                   --> SeatSelectionComponent (Interactive SVG seat map, live WS updates, hold dock)
 /checkout/:reservationId            --> CheckoutComponent (15-min countdown, guest email/name form, Stripe Elements, tax breakdown)
@@ -110,7 +112,7 @@ The design system is crafted to provide a luxurious, modern, and tactile user ex
 - **Manual Input Fallback:** Alphanumeric ticket code entry field for damaged or unreadable screens.
 
 ### 4.5 Interactive SVG Seat Map Component (`SeatMapComponent`)
-- **Layout Engine:** Scalable SVG / CSS Grid seat matrix supporting pan, pinch-to-zoom, and section isolation.
+- **Layout Engine:** Scalable SVG / CSS Grid seat matrix supporting pan, pinch-to-zoom, and section isolation on both desktop and mobile touch.
 - **Seat Status Visual Encoding:**
   - `AVAILABLE` — Subtle slate pill with price tag on hover.
   - `SELECTING` (Local user) — Electric Indigo with checkmark, spring bounce keyframe animation.
@@ -139,6 +141,21 @@ The design system is crafted to provide a luxurious, modern, and tactile user ex
 - **Hybrid Checkout (ADR-001):** Auto-fills for authenticated users, renders email/name fields for guest checkout.
 - Manages 3D Secure simulation and redirects to `/order-confirmation/:paymentId`.
 
+### 4.9 Interactive Monthly Event Calendar (`EventCalendarComponent`)
+- Rendered on `/` and `/events` directly below the featured hero carousel.
+- **Dual Responsive Layout:**
+  - *Desktop ($\ge 768\text{px}$):* Full 7-column month grid (LUN, MAR, MIE, J, VIN, S, D) displaying scheduled event chips per day.
+  - *Mobile ($< 768\text{px}$):* Compact monthly view with blue event indicator dots under dates that have events.
+- **Month Browsing & Day Selection:** `<` and `>` controls for navigating months; clicking a day applies a reactive date filter to the event catalog.
+
+### 4.10 Rich Multi-Column Footer (`FooterComponent`) & Scroll Reveal Animations
+- **4 Structured Columns:**
+  1. *Brand & Mission:* Logo, tagline, live status badge (`🟢 All Systems Operational`).
+  2. *Explore Events:* Quick category links (Concerts, Theatre, Sports, Festivals).
+  3. *Support & Tools:* My Tickets, Guest Ticket Lookup, Staff Scanner, FAQ.
+  4. *Legal & Compliance:* Terms & Conditions, Privacy Policy (GDPR), Stripe Tax/VAT Policy, Refund Rules.
+- **Scroll-Driven Animation:** Smooth entrance animations (`animate-fade-in-up`) for cards, calendar, and sections as the user scrolls.
+
 ---
 
 ## 5. Directory Layout
@@ -163,7 +180,7 @@ frontend/
     │   │   └── directives/            # ripple.directive.ts, spring-press.directive.ts
     │   ├── features/                  # Lazy-loaded domain routes
     │   │   ├── auth/                  # Login, callback, logout
-    │   │   ├── events/                # Catalog, hero carousel, event details with Leaflet map
+    │   │   ├── events/                # Catalog, hero carousel, event calendar, event details with Leaflet map
     │   │   ├── booking/               # SVG seat map, hold dock, countdown timer, Stripe checkout
     │   │   ├── tickets/               # Multi-ticket guest viewer, my tickets, digital wallet pass
     │   │   ├── scanner/               # Gate camera QR scanner with 3-color verification

@@ -12,13 +12,14 @@
 ---
 
 ## 2. Objective & Invariants
-Establish the foundational frontend application repository for **SeatFlow** using **Angular 22**, **TailwindCSS v4**, and **Angular Material 22**. Implement the core application shell, responsive layout scaffold, configuration files, and the nuanced sensory design system with full Dark/Light theme switching powered by Angular Signals and CSS custom properties.
+Establish the foundational frontend application repository for **SeatFlow** using **Angular 22**, **TailwindCSS v4**, and **Angular Material 22**. Implement the core application shell, responsive layout scaffold, configuration files, scroll-reveal animation utilities, and the nuanced sensory design system with full Dark/Light theme switching powered by Angular Signals and CSS custom properties.
 
 ### Critical Invariants to Enforce:
 - [ ] **Zero Flat Pure #000000 or #FFFFFF:** Dark theme must use "Obsidian & Midnight Slate" (Canvas `#0B0F19`, Card Surface `#111827`, Elevated `#1E293B`, Borders `rgba(255, 255, 255, 0.08)`). Light theme must use "Warm Alabaster & Pearl Slate" (Canvas `#F8FAFC` to `#F1F5F9`, Card Surface `#FFFFFF`, Borders `#E2E8F0`).
+- [ ] **100% Mobile & Desktop Responsive Design:** Fluid layout breakpoints (`sm: 640px`, `md: 768px`, `lg: 1024px`, `xl: 1280px`), touch target minimums ($44 \times 44\text{px}$), and safe-area insets for mobile devices.
 - [ ] **Angular 22 Reactivity Standards:** 100% Standalone components (`standalone: true`), `ChangeDetectionStrategy.OnPush` on all components, Signals-first (`signal()`, `computed()`), and field-level `inject()`. Zero `NgModule` or `BehaviorSubject` for component state.
 - [ ] **TailwindCSS v4 CSS-First Architecture:** Configure styling via `@import "tailwindcss";` in `src/styles.scss`. Material components must not have conflicting Tailwind utility overrides applied directly to internal DOM classes.
-- [ ] **Sensory Motion & Tactile Physics:** Global CSS tokens and animation utilities for button spring press (`active:scale-[0.97] transition-all duration-150 ease-out`), sheen sweep gradients (`@keyframes sheen`), and seat spring bounce.
+- [ ] **Sensory Motion, Tactile Physics & Scroll Reveals:** Global CSS tokens and animation utilities for button spring press (`active:scale-[0.97] transition-all duration-150 ease-out`), sheen sweep gradients (`@keyframes sheen`), seat spring bounce, and scroll-down reveal animations (`animate-fade-in-up`, `animate-slide-in`).
 - [ ] **Environment Template (.env.example):** Version-controlled `.env.example` defining API Gateway base URL, WebSocket URL, and Microsoft Entra client/tenant ID.
 
 ---
@@ -138,7 +139,7 @@ export class ThemeService {
 }
 ```
 
-### 4.2 Sensory CSS Theme Tokens & Keyframes (`src/styles.scss`)
+### 4.2 Sensory CSS Theme Tokens, Keyframes & Scroll Animations (`src/styles.scss`)
 
 ```scss
 @import "tailwindcss";
@@ -192,7 +193,7 @@ export class ThemeService {
   }
 }
 
-/* Sensory Micro-Interactions & Animation Utilities */
+/* Sensory Micro-Interactions, Scroll Reveals & Animation Utilities */
 @keyframes sheen-sweep {
   0% { transform: translateX(-100%) rotate(25deg); }
   100% { transform: translateX(250%) rotate(25deg); }
@@ -205,9 +206,22 @@ export class ThemeService {
   100% { transform: scale(1); }
 }
 
-@keyframes pulse-ring {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.75; }
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(24px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-sheen {
@@ -243,44 +257,22 @@ export class ThemeService {
 }
 ```
 
-### 4.3 App Configuration (`src/app/app.config.ts`)
-
-```typescript
-import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
-import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
-import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/http';
-import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { routes } from './app.routes';
-
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideZoneChangeDetection({ eventCoalescing: true }),
-    provideRouter(routes, withComponentInputBinding(), withViewTransitions()),
-    provideHttpClient(withFetch()),
-    provideAnimationsAsync(),
-  ],
-};
-```
-
 ---
 
 ## 5. Step-by-Step Implementation Sequence
 1. **Initialize Frontend Repository Scaffold:**
-   - Create `package.json` with dependencies (`@angular/core`, `@angular/common`, `@angular/router`, `@angular/material`, `@angular/cdk`, `tailwindcss`, `@stomp/stompjs`, `sockjs-client`, `leaflet`, `html5-qrcode`, `canvas-confetti`).
-   - Create `tsconfig.json`, `tsconfig.app.json`, `tsconfig.spec.json`, and `angular.json` configured for Standalone architecture and Tailwind v4.
-   - Create `.env.example` with `NG_APP_API_BASE_URL=http://localhost:8080`, `NG_APP_WS_URL=http://localhost:8080/ws`, `NG_APP_ENTRA_CLIENT_ID=00000000-0000-0000-0000-000000000000`.
-2. **Implement Theme Tokens and Global Styles:**
-   - Write `src/styles.scss` incorporating CSS custom properties for Obsidian/Midnight Slate (Dark) and Warm Alabaster (Light), spring physics utilities, and keyframe animations.
-   - Write `src/index.html` referencing the Inter Google Font and pre-setting the dark class to prevent initial theme flash.
+   - Verify `package.json` with dependencies (`@angular/core`, `@angular/material`, `tailwindcss`, `@stomp/stompjs`, `leaflet`, `html5-qrcode`, `canvas-confetti`).
+   - Create `tsconfig.json`, `angular.json` configured for Standalone architecture and Tailwind v4.
+   - Create `.env.example` with `NG_APP_API_BASE_URL`, `NG_APP_WS_URL`, `NG_APP_ENTRA_CLIENT_ID`.
+2. **Implement Theme Tokens, Responsive Rules and Global Styles:**
+   - Write `src/styles.scss` incorporating CSS custom properties for Obsidian/Midnight Slate (Dark) and Warm Alabaster (Light), spring physics utilities, scroll reveal keyframes (`animate-fade-in-up`), and mobile touch optimizations.
 3. **Implement Theme Engine Service:**
    - Write `src/app/core/theme/theme.model.ts` and `src/app/core/theme/theme.service.ts` using Angular Signals.
    - Support `mode` signal (`'dark' | 'light' | 'system'`), `computed` active theme, `localStorage` persistence, and `prefers-color-scheme` listener.
 4. **Implement Root Shell Component:**
    - Write `src/app/app.component.ts`, `app.component.html`, and `app.component.scss` rendering `<router-outlet />` with theme-aware container classes.
-   - Configure `src/app/app.config.ts` and `src/app/app.routes.ts`.
 5. **Develop Unit Tests:**
-   - Create `src/app/core/theme/theme.service.spec.ts` testing mode switching, active theme computation, and `localStorage` persistence.
-   - Create `src/app/app.component.spec.ts` testing root component rendering.
+   - Create `theme.service.spec.ts` and `app.component.spec.ts`.
 
 ---
 
