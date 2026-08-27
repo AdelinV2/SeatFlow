@@ -1,10 +1,12 @@
 package com.seatflow.realtime.config;
 
+import com.seatflow.realtime.security.StompAuthChannelInterceptor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -17,6 +19,9 @@ import static org.mockito.Mockito.*;
 class WebSocketConfigTest {
 
     @Mock
+    private StompAuthChannelInterceptor stompAuthChannelInterceptor;
+
+    @Mock
     private MessageBrokerRegistry messageBrokerRegistry;
 
     @Mock
@@ -25,10 +30,13 @@ class WebSocketConfigTest {
     @Mock
     private StompWebSocketEndpointRegistration endpointRegistration;
 
+    @Mock
+    private ChannelRegistration channelRegistration;
+
     @Test
     @DisplayName("Should configure message broker prefixes correctly")
     void configureMessageBroker_ConfiguresPrefixes() {
-        WebSocketConfig config = new WebSocketConfig();
+        WebSocketConfig config = new WebSocketConfig(stompAuthChannelInterceptor);
 
         config.configureMessageBroker(messageBrokerRegistry);
 
@@ -39,7 +47,7 @@ class WebSocketConfigTest {
     @Test
     @DisplayName("Should register /ws endpoints with SockJS fallback and CORS origins")
     void registerStompEndpoints_RegistersEndpointsWithCors() {
-        WebSocketConfig config = new WebSocketConfig();
+        WebSocketConfig config = new WebSocketConfig(stompAuthChannelInterceptor);
         ReflectionTestUtils.setField(config, "allowedOrigins", "http://localhost:4200, https://seatflow.com");
 
         when(stompEndpointRegistry.addEndpoint("/ws")).thenReturn(endpointRegistration);
@@ -50,5 +58,15 @@ class WebSocketConfigTest {
         verify(stompEndpointRegistry, times(2)).addEndpoint("/ws");
         verify(endpointRegistration, times(1)).withSockJS();
         verify(endpointRegistration, times(2)).setAllowedOriginPatterns(new String[]{"http://localhost:4200", "https://seatflow.com"});
+    }
+
+    @Test
+    @DisplayName("Should register StompAuthChannelInterceptor on client inbound channel")
+    void configureClientInboundChannel_RegistersInterceptor() {
+        WebSocketConfig config = new WebSocketConfig(stompAuthChannelInterceptor);
+
+        config.configureClientInboundChannel(channelRegistration);
+
+        verify(channelRegistration).interceptors(stompAuthChannelInterceptor);
     }
 }

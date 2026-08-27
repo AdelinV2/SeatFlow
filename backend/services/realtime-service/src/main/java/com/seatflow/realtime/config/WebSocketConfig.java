@@ -1,8 +1,11 @@
 package com.seatflow.realtime.config;
 
+import com.seatflow.realtime.security.StompAuthChannelInterceptor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -13,7 +16,10 @@ import java.util.Arrays;
 @Slf4j
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
 
     @Value("${seatflow.cors.allowed-origins:http://localhost:4200}")
     private String allowedOrigins;
@@ -44,5 +50,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 2. Direct WebSocket endpoint for non-SockJS STOMP clients and testing harnesses
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns(origins);
+    }
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        // Register the authentication interceptor on the inbound client message channel
+        registration.interceptors(stompAuthChannelInterceptor);
     }
 }

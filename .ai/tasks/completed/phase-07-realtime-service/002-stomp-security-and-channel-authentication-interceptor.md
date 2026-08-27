@@ -7,7 +7,7 @@
 - **Phase:** `Phase 07 - Realtime WebSocket Service`
 - **Related Specs:** `.ai/architecture/01-common-modules.md` (Section 4: `common-security`), `.ai/architecture/02-microservices-spec.md` (Section 9: Realtime Service), `.ai/architecture/04-authentication-security.md`, `.ai/architecture/08-observability-and-deployment.md`
 - **Related ADRs:** `.ai/decisions/ADR-001-guest-checkout-and-ticketing-flow.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,12 +15,12 @@
 Establish transport and protocol security for `realtime-service`. Configure the HTTP `SecurityFilterChain` permitting public handshake and actuator endpoints while securing STOMP frame communication via an inbound `ChannelInterceptor` (`StompAuthChannelInterceptor`). The interceptor intercepts STOMP `CONNECT` frames, extracts Bearer JWT tokens from native headers, decodes and validates them via `JwtDecoder`, extracts roles using `JwtRoleConverter` from `common-security`, and binds the authenticated principal to the WebSocket session. In accordance with ADR-001 (Guest Checkout & Public Seat Views), unauthenticated guest connections are permitted as anonymous principals so guests can observe real-time seat availability without logging in.
 
 ### Critical Invariants to Enforce:
-- [ ] **Stateless HTTP Filter Chain:** Disable CSRF, set session creation policy to `STATELESS`, and permit all `/ws/**` handshake endpoints and `/actuator/health`, `/actuator/info`, `/actuator/prometheus`.
-- [ ] **Frame-Level STOMP Authentication:** Validate authentication inside `StompAuthChannelInterceptor` on `StompCommand.CONNECT` frames via native headers rather than relying on HTTP cookie/session handshakes.
-- [ ] **ADR-001 Guest Support (Anonymous Mode):** If the `Authorization` header is absent during `CONNECT`, permit the connection under an `AnonymousAuthenticationToken` (or guest principal) to enable real-time public seat map viewing.
-- [ ] **Strict Invalid Token Rejection:** If an `Authorization` header is present but malformed, expired, or cryptographically invalid (fails `JwtDecoder.decode()`), immediately throw `BadCredentialsException` / `AuthenticationCredentialsNotFoundException` to terminate the connection.
-- [ ] **Common-Security Integration:** Use `JwtRoleConverter` from `common-security` to map Entra ID roles/claims to Spring Security `GrantedAuthority` instances on the resulting `JwtAuthenticationToken`.
-- [ ] **Zero `@RestControllerAdvice` Rule:** Do NOT add `@RestControllerAdvice` in this service; all HTTP error mapping is inherited from `common-observability`.
+- [x] **Stateless HTTP Filter Chain:** Disable CSRF, set session creation policy to `STATELESS`, and permit all `/ws/**` handshake endpoints and `/actuator/health`, `/actuator/info`, `/actuator/prometheus`.
+- [x] **Frame-Level STOMP Authentication:** Validate authentication inside `StompAuthChannelInterceptor` on `StompCommand.CONNECT` frames via native headers rather than relying on HTTP cookie/session handshakes.
+- [x] **ADR-001 Guest Support (Anonymous Mode):** If the `Authorization` header is absent during `CONNECT`, permit the connection under an `AnonymousAuthenticationToken` (or guest principal) to enable real-time public seat map viewing.
+- [x] **Strict Invalid Token Rejection:** If an `Authorization` header is present but malformed, expired, or cryptographically invalid (fails `JwtDecoder.decode()`), immediately throw `BadCredentialsException` / `AuthenticationCredentialsNotFoundException` to terminate the connection.
+- [x] **Common-Security Integration:** Use `JwtRoleConverter` from `common-security` to map Entra ID roles/claims to Spring Security `GrantedAuthority` instances on the resulting `JwtAuthenticationToken`.
+- [x] **Zero `@RestControllerAdvice` Rule:** Do NOT add `@RestControllerAdvice` in this service; all HTTP error mapping is inherited from `common-observability`.
 
 ---
 
@@ -292,6 +292,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -299,11 +300,11 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -330,6 +331,7 @@ class StompAuthChannelInterceptorTest {
     void preSend_ValidBearerToken_AuthenticatesUser() {
         String rawToken = "valid.jwt.token";
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
         accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "Bearer " + rawToken);
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
@@ -340,7 +342,7 @@ class StompAuthChannelInterceptorTest {
                 Map.of("alg", "RS256"),
                 Map.of("sub", "user-uuid-123", "email", "alex@example.com")
         );
-        var authorities = List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+        Collection<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
 
         when(jwtDecoder.decode(rawToken)).thenReturn(jwt);
         when(jwtRoleConverter.convert(jwt)).thenReturn(authorities);
@@ -362,6 +364,7 @@ class StompAuthChannelInterceptorTest {
     @DisplayName("Should allow anonymous connection with AnonymousAuthenticationToken when no Authorization header")
     void preSend_NoAuthorizationHeader_AllowsAnonymousConnection() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
         Message<?> result = interceptor.preSend(message, messageChannel);
@@ -377,6 +380,7 @@ class StompAuthChannelInterceptorTest {
     @DisplayName("Should throw BadCredentialsException when Authorization header does not start with Bearer")
     void preSend_MalformedHeader_ThrowsBadCredentialsException() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
         accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "Basic dXNlcjpwYXNz");
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
@@ -393,6 +397,7 @@ class StompAuthChannelInterceptorTest {
     void preSend_ExpiredOrInvalidToken_ThrowsBadCredentialsException() {
         String rawToken = "expired.jwt.token";
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
         accessor.addNativeHeader(HttpHeaders.AUTHORIZATION, "Bearer " + rawToken);
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
@@ -410,6 +415,7 @@ class StompAuthChannelInterceptorTest {
     @DisplayName("Should pass non-CONNECT STOMP frames through without re-decoding")
     void preSend_SubscribeFrame_PassesThrough() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        accessor.setLeaveMutable(true);
         accessor.setDestination("/topic/events/event-123/seats");
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
@@ -425,37 +431,35 @@ class StompAuthChannelInterceptorTest {
 ```java
 package com.seatflow.realtime.config;
 
-import com.seatflow.common.security.converter.JwtRoleConverter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest
-@Import(SecurityConfig.class)
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 class SecurityConfigTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private JwtDecoder jwtDecoder;
-
-    @MockBean
-    private JwtRoleConverter jwtRoleConverter;
 
     @Test
     @DisplayName("Should permit unauthenticated access to /ws endpoint handshake")
     void wsHandshakeEndpoint_PermittedWithoutAuth() throws Exception {
         mockMvc.perform(get("/ws/info"))
-                .andExpect(status().isNotFound()); // 404 implies endpoint permitted by security filter
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -489,10 +493,10 @@ To verify this task, run:
 ```bash
 mvn clean test -pl backend/services/realtime-service -Dtest=StompAuthChannelInterceptorTest,SecurityConfigTest
 ```
-- [ ] `SecurityConfig` permits `/ws/**` and actuator endpoints while configuring stateless OAuth2 resource server security.
-- [ ] `StompAuthChannelInterceptor` successfully authenticates valid JWT tokens and assigns `JwtAuthenticationToken` on `CONNECT`.
-- [ ] `StompAuthChannelInterceptor` allows anonymous guest connections with `AnonymousAuthenticationToken` per ADR-001.
-- [ ] `StompAuthChannelInterceptor` rejects malformed and expired tokens with `BadCredentialsException`.
-- [ ] `WebSocketConfig` registers `StompAuthChannelInterceptor` on the client inbound channel.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/002-stomp-security-and-channel-authentication-interceptor.md`.
+- [x] `SecurityConfig` permits `/ws/**` and actuator endpoints while configuring stateless OAuth2 resource server security.
+- [x] `StompAuthChannelInterceptor` successfully authenticates valid JWT tokens and assigns `JwtAuthenticationToken` on `CONNECT`.
+- [x] `StompAuthChannelInterceptor` allows anonymous guest connections with `AnonymousAuthenticationToken` per ADR-001.
+- [x] `StompAuthChannelInterceptor` rejects malformed and expired tokens with `BadCredentialsException`.
+- [x] `WebSocketConfig` registers `StompAuthChannelInterceptor` on the client inbound channel.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-07-realtime-service/002-stomp-security-and-channel-authentication-interceptor.md`.
