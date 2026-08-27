@@ -97,7 +97,6 @@ public class TicketServiceImpl implements TicketService {
             TicketIssuedEvent event = new TicketIssuedEvent(
                     savedTicket.getId(),
                     command.reservationId(),
-                    command.paymentId(),
                     command.userId(),
                     command.customerEmail(),
                     command.attendeeName(),
@@ -107,7 +106,7 @@ public class TicketServiceImpl implements TicketService {
                     seat.taxAmount(),
                     seat.netAmount(),
                     ticketCode,
-                    TicketStatus.VALID.name(),
+                    qrPayload,
                     Instant.now()
             );
 
