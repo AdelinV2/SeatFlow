@@ -27,9 +27,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = TicketAdminController.class)
+@WebMvcTest(controllers = TicketScannerController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
-class TicketAdminControllerTest {
+class TicketScannerControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,13 +51,29 @@ class TicketAdminControllerTest {
             """;
 
     @Test
+    void validateTicket_withStaffRole_returns200() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        when(ticketService.validateTicket(any(ValidateTicketRequest.class)))
+                .thenReturn(new ValidationResultResponse(true, ticketId, "SF-TKT-1234", ValidationResult.SUCCESS,
+                        "Concert", Instant.now(), "Jane Doe", "A", "1", 12, Instant.now(), "Entry granted"));
+
+        mockMvc.perform(post("/api/scanner/tickets/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(VALID_BODY)
+                        .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_STAFF))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.result").value("SUCCESS"));
+    }
+
+    @Test
     void validateTicket_withAdminRole_returns200() throws Exception {
         UUID ticketId = UUID.randomUUID();
         when(ticketService.validateTicket(any(ValidateTicketRequest.class)))
                 .thenReturn(new ValidationResultResponse(true, ticketId, "SF-TKT-1234", ValidationResult.SUCCESS,
                         "Concert", Instant.now(), "Jane Doe", "A", "1", 12, Instant.now(), "Entry granted"));
 
-        mockMvc.perform(post("/api/admin/tickets/validate")
+        mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY)
                         .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))))
@@ -68,7 +84,7 @@ class TicketAdminControllerTest {
 
     @Test
     void validateTicket_withCustomerRole_returns403() throws Exception {
-        mockMvc.perform(post("/api/admin/tickets/validate")
+        mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY)
                         .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_CUSTOMER))))
@@ -77,7 +93,7 @@ class TicketAdminControllerTest {
 
     @Test
     void validateTicket_unauthenticated_returns401() throws Exception {
-        mockMvc.perform(post("/api/admin/tickets/validate")
+        mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY))
                 .andExpect(status().isUnauthorized());
@@ -92,10 +108,10 @@ class TicketAdminControllerTest {
                 }
                 """;
 
-        mockMvc.perform(post("/api/admin/tickets/validate")
+        mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(blankBody)
-                        .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))))
+                        .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_STAFF))))
                 .andExpect(status().isBadRequest());
     }
 }

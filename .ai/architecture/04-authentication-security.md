@@ -48,6 +48,7 @@ SeatFlow externalizes user authentication and credential management to **Microso
 
 ### 2.2 Role Hierarchy (`SecurityRoles`)
 - `ROLE_CUSTOMER` — Default role assigned to standard authenticated users (can hold seats, create payments, view own tickets).
+- `ROLE_STAFF` — Assigned to venue entrance staff and gate stewards (can validate and scan tickets at entrance gates per ADR-005).
 - `ROLE_ADMIN` — Assigned to platform administrators (can create events, modify venues, view platform sales metrics).
 
 ### 2.3 JWT Converter (`JwtRoleConverter`)
@@ -109,6 +110,8 @@ public class ResourceServerConfig {
                 // Guest ticket verification & download
                 .requestMatchers("/api/tickets/guest/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
+                // Gate scanner check-in endpoints (ADR-005)
+                .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority("ROLE_STAFF", "ROLE_ADMIN")
                 // WebSockets & Docs
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()

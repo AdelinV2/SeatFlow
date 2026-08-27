@@ -44,7 +44,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/tickets/guest/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
 
-                // Gate scanner admin verification
+                // Gate scanner verification (ADR-005: operational staff and admins)
+                .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority(SecurityRoles.ROLE_STAFF, SecurityRoles.ROLE_ADMIN)
                 .requestMatchers("/api/admin/tickets/**").hasAuthority(SecurityRoles.ROLE_ADMIN)
 
                 // Customer authenticated endpoints

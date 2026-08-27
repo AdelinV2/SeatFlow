@@ -29,7 +29,7 @@ The SeatFlow frontend is an **Angular 22** single-page application built with mo
 /auth/logout                        --> Redirects to Entra logout endpoint
 /admin/events                       --> AdminEventListComponent (Event CRUD, venue assignment, pricing manager)
 /admin/venues                       --> AdminVenueListComponent (Venue layout designer, section builder)
-/admin/scanner                      --> AdminScannerComponent (Camera-based QR code entry validator)
+/scanner                            --> StaffScannerComponent (Camera-based QR code entry validator, guarded by staff.guard.ts, ADR-005)
 ```
 
 ---
