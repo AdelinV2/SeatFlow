@@ -173,7 +173,7 @@ public class TicketServiceImpl implements TicketService {
                 ticket.getTicketCode(),
                 ticket.getStatus().name(),
                 enrichment.eventTitle(),
-                null,
+                enrichment.eventCategory(),
                 enrichment.eventDate(),
                 enrichment.venueName(),
                 enrichment.venueCity(),
@@ -185,7 +185,7 @@ public class TicketServiceImpl implements TicketService {
                 ticket.getPrice(),
                 ticket.getTaxAmount(),
                 ticket.getNetAmount(),
-                null,
+                "USD",
                 qrBytes
         );
 
@@ -274,9 +274,15 @@ public class TicketServiceImpl implements TicketService {
 
     private EventEnrichment enrichEvent(UUID eventId, UUID seatId) {
         Optional<EventSeatMapClientResponse> seatMapOpt = eventServiceClient.getEventSeatMap(eventId);
+        Optional<com.seatflow.ticket.client.dto.EventClientResponse> eventOpt = eventServiceClient.getEventById(eventId);
 
-        String eventTitle = seatMapOpt.map(EventSeatMapClientResponse::eventTitle).orElse(null);
-        Instant eventDate = seatMapOpt.map(EventSeatMapClientResponse::eventDate).orElse(null);
+        String eventTitle = seatMapOpt.map(EventSeatMapClientResponse::eventTitle)
+                .or(() -> eventOpt.map(com.seatflow.ticket.client.dto.EventClientResponse::title))
+                .orElse(null);
+        String eventCategory = eventOpt.map(com.seatflow.ticket.client.dto.EventClientResponse::category).orElse(null);
+        Instant eventDate = seatMapOpt.map(EventSeatMapClientResponse::eventDate)
+                .or(() -> eventOpt.map(com.seatflow.ticket.client.dto.EventClientResponse::eventDate))
+                .orElse(null);
         String venueName = seatMapOpt.map(EventSeatMapClientResponse::venueName).orElse(null);
         String venueCity = null;
         String sectionName = null;
@@ -285,13 +291,17 @@ public class TicketServiceImpl implements TicketService {
 
         if (seatMapOpt.isPresent()) {
             EventSeatMapClientResponse esm = seatMapOpt.get();
-            for (EventSeatMapClientResponse.SeatMapSectionClientDto section : esm.sections()) {
-                for (EventSeatMapClientResponse.SeatMapSeatClientDto seat : section.seats()) {
-                    if (seat.seatId().equals(seatId)) {
-                        sectionName = section.name();
-                        rowLabel = seat.rowLabel();
-                        seatNumber = seat.seatNumber();
-                        break;
+            if (esm.sections() != null) {
+                for (EventSeatMapClientResponse.SeatMapSectionClientDto section : esm.sections()) {
+                    if (section.seats() != null) {
+                        for (EventSeatMapClientResponse.SeatMapSeatClientDto seat : section.seats()) {
+                            if (seat.seatId() != null && seat.seatId().equals(seatId)) {
+                                sectionName = section.name();
+                                rowLabel = seat.rowLabel();
+                                seatNumber = seat.seatNumber();
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -300,9 +310,13 @@ public class TicketServiceImpl implements TicketService {
                         .map(VenueClientResponse::city)
                         .orElse(null);
             }
+        } else if (eventOpt.isPresent() && eventOpt.get().venueId() != null) {
+            Optional<VenueClientResponse> venueOpt = seatMapServiceClient.getVenueById(eventOpt.get().venueId());
+            venueName = venueOpt.map(VenueClientResponse::name).orElse(null);
+            venueCity = venueOpt.map(VenueClientResponse::city).orElse(null);
         }
 
-        return new EventEnrichment(eventTitle, eventDate, venueName, venueCity, sectionName, rowLabel, seatNumber);
+        return new EventEnrichment(eventTitle, eventCategory, eventDate, venueName, venueCity, sectionName, rowLabel, seatNumber);
     }
 
     private String generateSecureRandomString(int length) {
@@ -323,6 +337,7 @@ public class TicketServiceImpl implements TicketService {
 
     private record EventEnrichment(
         String eventTitle,
+        String eventCategory,
         Instant eventDate,
         String venueName,
         String venueCity,

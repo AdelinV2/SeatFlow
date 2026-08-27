@@ -1,5 +1,6 @@
 package com.seatflow.ticket.client.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +29,9 @@ public record EventSeatMapClientResponse(
         Integer seatNumber,
         Integer gridX,
         Integer gridY,
-        String status
+        @JsonAlias({"status", "isActive"})
+        String status,
+        @JsonAlias({"isActive", "status"})
+        Boolean isActive
     ) {}
 }

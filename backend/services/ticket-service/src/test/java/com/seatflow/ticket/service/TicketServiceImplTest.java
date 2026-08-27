@@ -191,6 +191,8 @@ class TicketServiceImplTest {
         EventSeatMapClientResponse esm = new EventSeatMapClientResponse(eventId, UUID.randomUUID(), "Concert",
                 Instant.now(), "Sky Arena", 5000, 100L, List.of());
         when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.of(esm));
+        when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
+                new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Concert", "CONCERT", Instant.now(), "ACTIVE", "http://banner")));
         when(seatMapServiceClient.getVenueById(any())).thenReturn(Optional.of(new VenueClientResponse(UUID.randomUUID(), "Sky Arena", "Main St", "Berlin", "DE", 5000)));
         when(ticketMapper.toDetailResponse(any())).thenReturn(mock(TicketDetailResponse.class));
 
@@ -203,7 +205,32 @@ class TicketServiceImplTest {
         assertThat(data.price()).isEqualByComparingTo("100.00");
         assertThat(data.taxAmount()).isEqualByComparingTo("19.00");
         assertThat(data.netAmount()).isEqualByComparingTo("81.00");
+        assertThat(data.eventCategory()).isEqualTo("CONCERT");
         assertThat(data.venueCity()).isEqualTo("Berlin");
+        assertThat(data.currency()).isEqualTo("USD");
+    }
+
+    @Test
+    void shouldGeneratePdfTicketForGuestUserWithoutUserId() {
+        Ticket guestTicket = sampleTicket(TicketStatus.VALID, null);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(guestTicket));
+        when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.empty());
+        when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
+                new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Festival", "FESTIVAL", Instant.now(), "ACTIVE", "http://banner")));
+
+        byte[] pdf = ticketService.generateTicketPdf(ticketId, null, false);
+
+        assertThat(pdf).isNotNull().isNotEmpty();
+    }
+
+    @Test
+    void shouldThrowForbiddenWhenNonOwnerGeneratesPdf() {
+        Ticket userTicket = sampleTicket(TicketStatus.VALID, otherUserId);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(userTicket));
+
+        assertThatThrownBy(() -> ticketService.generateTicketPdf(ticketId, userId, false))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
     }
 
     @Test
