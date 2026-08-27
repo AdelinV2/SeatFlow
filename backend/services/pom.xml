@@ -26,6 +26,7 @@
         <module>payment-service</module>
         <module>ticket-service</module>
         <module>realtime-service</module>
+        <module>notification-service</module>
     </modules>
 
     <!-- Additional microservice modules are added here as they are created

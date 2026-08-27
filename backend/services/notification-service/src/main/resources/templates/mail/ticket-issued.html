@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your SeatFlow Ticket Confirmation</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f9; color: #1e293b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f4f6f9; padding: 30px 10px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #4f46e5; padding: 28px 32px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">SeatFlow</h1>
+                            <p style="color: #c7d2fe; margin: 6px 0 0 0; font-size: 14px;">Official Ticket Confirmation &amp; Receipt</p>
+                        </td>
+                    </tr>
+
+                    <!-- Body Content -->
+                    <tr>
+                        <td style="padding: 32px;">
+                            <p style="font-size: 16px; margin: 0 0 16px 0;">Hello <strong th:text="${attendeeName}">Valued Guest</strong>,</p>
+                            <p style="font-size: 15px; line-height: 1.6; color: #475569; margin: 0 0 24px 0;">
+                                Your digital ticket is confirmed! Please find your official ticket receipt and details below. Your printable ticket PDF is also attached to this email.
+                            </p>
+
+                            <!-- Ticket Code Card -->
+                            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
+                                <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 1px;">Ticket Code</span>
+                                <div style="font-size: 22px; font-weight: 800; color: #4f46e5; font-family: monospace; margin-top: 4px;" th:text="${ticketCode}">SF-TKT-12345678</div>
+                            </div>
+
+                            <!-- Event Details Table -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 24px; border-collapse: collapse;">
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px; width: 35%;">Event</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;" th:text="${eventName ?: 'SeatFlow Event'}">Concert Live 2026</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Ticket ID</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-family: monospace;" th:text="${ticketId}">123e4567-e89b-12d3-a456-426614174000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Seat Information</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;" th:text="${seatInfo ?: 'Reserved Seat'}">Section A, Row 5, Seat 12</td>
+                                </tr>
+                            </table>
+
+                            <!-- ADR-004 Fiscal Tax Breakdown -->
+                            <h3 style="font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 12px 0;">Payment Breakdown (VAT / Tax-Inclusive)</h3>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                                <tr>
+                                    <td style="padding: 6px 12px; color: #64748b; font-size: 14px;">Net Base Price</td>
+                                    <td align="right" style="padding: 6px 12px; color: #1e293b; font-size: 14px; font-weight: 600;" th:text="${netAmount != null ? ('$' + #numbers.formatDecimal(netAmount, 1, 2)) : '$0.00'}">$80.00</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 6px 12px; color: #64748b; font-size: 14px;">Tax / VAT</td>
+                                    <td align="right" style="padding: 6px 12px; color: #1e293b; font-size: 14px; font-weight: 600;" th:text="${taxAmount != null ? ('$' + #numbers.formatDecimal(taxAmount, 1, 2)) : '$0.00'}">$20.00</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 12px; border-top: 1px solid #e2e8f0; color: #0f172a; font-size: 15px; font-weight: 700;">Total Paid</td>
+                                    <td align="right" style="padding: 8px 12px; border-top: 1px solid #e2e8f0; color: #4f46e5; font-size: 16px; font-weight: 800;" th:text="${totalAmount != null ? ('$' + #numbers.formatDecimal(totalAmount, 1, 2)) : '$0.00'}">$100.00</td>
+                                </tr>
+                            </table>
+
+                            <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+                                Please present the attached PDF ticket or your digital QR code at the venue gate for admission scanning.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 32px; text-align: center;">
+                            <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                                &copy; 2026 SeatFlow Ticketing System. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
