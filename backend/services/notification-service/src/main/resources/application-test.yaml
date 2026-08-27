@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///seatflow_notification_test
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${spring.kafka.bootstrap-servers:localhost:9092}
+    consumer:
+      group-id: notification-service-test
+      auto-offset-reset: earliest
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://test-issuer.example.com
+
+ticket-service:
+  base-url: http://localhost:8086
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+logging:
+  level:
+    com.seatflow: WARN
