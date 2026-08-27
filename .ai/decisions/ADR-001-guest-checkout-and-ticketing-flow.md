@@ -31,6 +31,7 @@ We adopt a **Hybrid Guest Checkout** model across all relevant microservices and
 
 4. **Digital Ticket Delivery & Guest Access:**
    - `notification-service` dispatches an HTML confirmation email containing the rendered PDF ticket(s) and a secure, time-stamped / cryptographically signed guest access link (`/tickets/guest/{ticketCode}`).
+   - **Multi-Ticket Transactions:** If a guest purchase includes multiple seats, the guest ticket viewer (`/tickets/guest/{ticketCode}`) provides a tabbed multi-ticket switcher ("Biletul 1 din N"), distinct QR codes for each seat, individual/bundle PDF downloads, and an account linking prompt to associate all tickets to an account.
    - Registered users can additionally access their tickets via `GET /api/tickets/my-tickets` in the Angular portal.
 
 5. **Bot Protection & Abuse Prevention:**

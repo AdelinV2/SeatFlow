@@ -16,6 +16,8 @@ Always check `frontend/package.json` for exact dependency versions. If you are u
 | **Angular Material** | 22.x | https://material.angular.io/ |
 | **TailwindCSS** | v4.x | https://tailwindcss.com/docs |
 | **@stomp/stompjs** | latest | https://stomp-js.github.io/stomp-websocket/ |
+| **Leaflet & CartoDB** | 1.9.x | https://leafletjs.com/ |
+| **HTML5-QRCode** | 2.3.x | https://github.com/mebjas/html5-qrcode |
 | **TypeScript** | 5.x | https://www.typescriptlang.org/docs/ |
 | **RxJS** | 7.x | https://rxjs.dev/ |
 
