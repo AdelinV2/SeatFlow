@@ -1,0 +1,12 @@
+spring:
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: realtime-service
+      auto-offset-reset: latest
+      enable-auto-commit: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka

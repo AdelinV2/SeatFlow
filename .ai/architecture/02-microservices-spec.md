@@ -105,7 +105,7 @@ This document details the responsibilities, dependencies, internal architecture,
 - **Database:** None (Redis for state coordination).
 - **Responsibilities:**
   - WebSocket server using **STOMP** over SockJS.
-  - Listens to Kafka topic `seatflow.seat.status.events` (events published by Reservation & Payment services).
+  - Listens to Kafka topics `seatflow.reservation.events` and `seatflow.ticket.events` (events published by Reservation and Ticket services).
   - Broadcasts seat status updates (`AVAILABLE`, `HELD`, `SOLD`) in real time to connected Angular clients subscribing to `/topic/events/{eventId}/seats`.
 - **Dependencies:** `common-domain`, `common-events`, `common-observability`, `common-security`, Spring WebSocket STOMP.
 
