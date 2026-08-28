@@ -61,7 +61,9 @@ export class VenueGridDesignerComponent implements OnInit {
   readonly venue = signal<VenueLayout | null>(null);
   readonly isLoading = signal<boolean>(true);
   readonly isCreatingSection = signal<boolean>(false);
+  readonly isDeletingSection = signal<boolean>(false);
   readonly showAddSectionModal = signal<boolean>(false);
+  readonly showDeleteSectionConfirm = signal<boolean>(false);
   readonly selectedSectionId = signal<string | null>(null);
   readonly zoomLevel = signal<number>(100);
 
@@ -221,7 +223,7 @@ export class VenueGridDesignerComponent implements OnInit {
         this.snackBar.open(
           `Section "${newSection.name}" created with ${newSection.rowCount * newSection.colCount} seats!`,
           'Close',
-          { duration: 4000, panelClass: 'bg-emerald-600' }
+          { duration: 4000, panelClass: 'snack-success' }
         );
         // Reload full venue layout and select the new section
         this.loadVenueLayout(this.venueId());
@@ -232,7 +234,43 @@ export class VenueGridDesignerComponent implements OnInit {
         this.snackBar.open(
           err?.error?.message || 'Failed to create section.',
           'Close',
-          { duration: 4000, panelClass: 'bg-rose-600' }
+          { duration: 4000, panelClass: 'snack-error' }
+        );
+      },
+    });
+  }
+
+  openDeleteSectionConfirm(): void {
+    this.showDeleteSectionConfirm.set(true);
+  }
+
+  closeDeleteSectionConfirm(): void {
+    this.showDeleteSectionConfirm.set(false);
+  }
+
+  confirmDeleteSection(): void {
+    const sec = this.currentSection();
+    if (!sec || !this.venueId()) return;
+
+    this.isDeletingSection.set(true);
+    this.venueApi.deleteSection(this.venueId(), sec.sectionId).subscribe({
+      next: () => {
+        this.isDeletingSection.set(false);
+        this.showDeleteSectionConfirm.set(false);
+        this.snackBar.open(
+          `Section "${sec.name}" deleted successfully!`,
+          'Close',
+          { duration: 4000, panelClass: 'snack-success' }
+        );
+        this.selectedSectionId.set(null);
+        this.loadVenueLayout(this.venueId());
+      },
+      error: (err) => {
+        this.isDeletingSection.set(false);
+        this.snackBar.open(
+          err?.error?.message || 'Failed to delete section.',
+          'Close',
+          { duration: 4000, panelClass: 'snack-error' }
         );
       },
     });
@@ -260,7 +298,7 @@ export class VenueGridDesignerComponent implements OnInit {
           this.snackBar.open(
             err?.error?.message || 'Failed to update seat status. Reverted.',
             'Close',
-            { duration: 4000, panelClass: 'bg-rose-600' }
+            { duration: 4000, panelClass: 'snack-error' }
           );
         },
       });

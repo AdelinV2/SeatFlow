@@ -58,6 +58,7 @@ describe('VenueGridDesignerComponent', () => {
       venueApiSpy = jasmine.createSpyObj('AdminVenueApiService', [
         'getVenueLayout',
         'createSection',
+        'deleteSection',
         'toggleSeat',
       ]);
       snackBarSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
@@ -205,6 +206,26 @@ describe('VenueGridDesignerComponent', () => {
 
       component.resetZoom();
       expect(component.zoomLevel()).toBe(100);
+    });
+
+    it('should open and close delete section confirm modal', () => {
+      component.openDeleteSectionConfirm();
+      expect(component.showDeleteSectionConfirm()).toBeTrue();
+
+      component.closeDeleteSectionConfirm();
+      expect(component.showDeleteSectionConfirm()).toBeFalse();
+    });
+
+    it('should delete section successfully and reload layout', () => {
+      venueApiSpy.deleteSection.and.returnValue(of(undefined));
+      component.openDeleteSectionConfirm();
+
+      component.confirmDeleteSection();
+
+      expect(venueApiSpy.deleteSection).toHaveBeenCalledWith('v-100', 'sec-1');
+      expect(component.showDeleteSectionConfirm()).toBeFalse();
+      expect(snackBarSpy.open).toHaveBeenCalled();
+      expect(venueApiSpy.getVenueLayout).toHaveBeenCalledWith('v-100');
     });
   });
 });

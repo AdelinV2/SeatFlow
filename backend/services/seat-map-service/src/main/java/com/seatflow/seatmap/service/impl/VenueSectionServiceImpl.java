@@ -131,6 +131,26 @@ public class VenueSectionServiceImpl implements VenueSectionService {
         return seatMapper.toResponse(seat);
     }
 
+    @Override
+    @Transactional
+    public void deleteSection(UUID venueId, UUID sectionId) {
+        // 1. Validate venue exists
+        if (!venueRepository.existsById(venueId)) {
+            throw new ResourceNotFoundException("Venue not found: " + venueId);
+        }
+
+        // 2. Validate section exists and belongs to venue
+        VenueSection section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Section not found: " + sectionId));
+        if (!section.getVenue().getId().equals(venueId)) {
+            throw new ResourceNotFoundException("Section %s does not belong to venue %s".formatted(sectionId, venueId));
+        }
+
+        // 3. Delete section (cascades to seats)
+        sectionRepository.delete(section);
+        log.info("Section deleted. venueId={}, sectionId={}, name={}", venueId, sectionId, section.getName());
+    }
+
     // ---- Private Helpers ----
 
     /**

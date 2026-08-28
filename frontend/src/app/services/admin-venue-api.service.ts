@@ -80,4 +80,10 @@ export class AdminVenueApiService {
       payload
     );
   }
+
+  deleteSection(venueId: string, sectionId: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.adminVenuesUrl}/${venueId}/sections/${sectionId}`
+    );
+  }
 }

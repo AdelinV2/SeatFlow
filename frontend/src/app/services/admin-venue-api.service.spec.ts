@@ -227,4 +227,12 @@ describe('AdminVenueApiService', () => {
     expect(req.request.body).toEqual({ isActive: false });
     req.flush(mockUpdatedSeat);
   });
+
+  it('should delete section via DELETE /api/admin/venues/{vId}/sections/{sId}', () => {
+    service.deleteSection('v-1', 'sec-1').subscribe();
+
+    const req = httpMock.expectOne('/api/admin/venues/v-1/sections/sec-1');
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+  });
 });

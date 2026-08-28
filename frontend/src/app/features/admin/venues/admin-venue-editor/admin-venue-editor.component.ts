@@ -70,9 +70,9 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
     capacity: [500, [Validators.required, Validators.min(1), Validators.max(500000)]],
     address: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(255)]],
     city: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-    country: ['Romania', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
-    latitude: [44.4323, [Validators.required]],
-    longitude: [26.1063, [Validators.required]],
+    country: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
+    latitude: [51.5074, [Validators.required]],
+    longitude: [-0.1278, [Validators.required]],
   });
 
   ngOnInit(): void {
@@ -132,8 +132,8 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
   selectAddressSuggestion(suggestion: GeocodingResult): void {
     this.venueForm.patchValue({
       address: suggestion.street || suggestion.displayName,
-      city: suggestion.city || this.venueForm.value.city || 'Bucharest',
-      country: suggestion.country || this.venueForm.value.country || 'Romania',
+      city: suggestion.city || this.venueForm.value.city || '',
+      country: suggestion.country || this.venueForm.value.country || '',
       latitude: suggestion.lat,
       longitude: suggestion.lon,
     });
@@ -151,7 +151,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
           capacity: venue.capacity,
           address: venue.address,
           city: venue.city,
-          country: venue.country || 'Romania',
+          country: venue.country || '',
         });
         this.isLoading.set(false);
       },
@@ -299,7 +299,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
       capacity: Number(formVal.capacity),
       address: formVal.address!,
       city: formVal.city!,
-      country: formVal.country || 'Romania',
+      country: formVal.country || '',
       latitude: Number(formVal.latitude),
       longitude: Number(formVal.longitude),
     };
@@ -310,7 +310,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
           this.isSaving.set(false);
           this.snackBar.open(`Venue "${venue.name}" updated successfully!`, 'Close', {
             duration: 4000,
-            panelClass: 'bg-emerald-600',
+            panelClass: 'snack-success',
           });
           this.router.navigate(['/admin/venues']);
         },
@@ -325,7 +325,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
           this.isSaving.set(false);
           this.snackBar.open(`Venue "${venue.name}" created successfully!`, 'Close', {
             duration: 4000,
-            panelClass: 'bg-emerald-600',
+            panelClass: 'snack-success',
           });
           // Redirect to 2D Seat Grid designer for this new venue
           this.router.navigate(['/admin/venues', venue.id, 'designer']);

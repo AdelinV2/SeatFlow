@@ -104,16 +104,32 @@
         }
       </div>
 
-      <button
-        type="button"
-        (click)="openAddSectionModal()"
-        class="btn-spring shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed border-indigo-400/50 text-indigo-600 hover:bg-indigo-500/10 flex items-center gap-1.5"
-      >
-        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        <span>Add Section</span>
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        @if (currentSection()) {
+          <button
+            type="button"
+            (click)="openDeleteSectionConfirm()"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-rose-500/30 text-rose-600 dark:text-rose-400 bg-rose-500/5 hover:bg-rose-500/15 flex items-center gap-1.5 transition-colors"
+            title="Delete current section"
+          >
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+            <span>Delete "{{ currentSection()?.name }}"</span>
+          </button>
+        }
+
+        <button
+          type="button"
+          (click)="openAddSectionModal()"
+          class="btn-spring shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed border-indigo-400/50 text-indigo-600 hover:bg-indigo-500/10 flex items-center gap-1.5"
+        >
+          <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>Add Section</span>
+        </button>
+      </div>
     </div>
 
     <!-- Designer Control Bar (Bulk Actions, Zoom, Stats) -->
@@ -240,7 +256,7 @@
       <div class="stage-banner max-w-xl mx-auto mb-10 py-2.5 px-6 rounded-full bg-gradient-to-r from-indigo-500/10 via-indigo-500/20 to-violet-500/10 border border-indigo-500/30 text-center">
         <span class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-2">
           <span>▲</span>
-          STAGE / SCREEN DIRECTION (SCENĂ)
+          STAGE / SCREEN DIRECTION
           <span>▲</span>
         </span>
       </div>
@@ -421,6 +437,52 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  }
+
+  <!-- Delete Section Confirmation Modal -->
+  @if (showDeleteSectionConfirm()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in-up">
+      <div class="w-full max-w-md rounded-3xl border border-rose-500/30 bg-[var(--color-surface)] p-6 shadow-2xl space-y-5">
+        <div class="flex items-center gap-3">
+          <div class="size-10 rounded-xl bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-[var(--color-text-primary)]">Delete Section</h3>
+            <p class="text-xs text-[var(--color-text-muted)]">This action will remove all seats in this section.</p>
+          </div>
+        </div>
+
+        <p class="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+          Are you sure you want to delete <strong class="text-[var(--color-text-primary)]">"{{ currentSection()?.name }}"</strong> ({{ currentSectionTotalCount() }} seats)? This action cannot be undone.
+        </p>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button
+            type="button"
+            (click)="closeDeleteSectionConfirm()"
+            [disabled]="isDeletingSection()"
+            class="btn-spring px-4 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            (click)="confirmDeleteSection()"
+            [disabled]="isDeletingSection()"
+            class="btn-spring px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white shadow-md hover:bg-rose-500 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            @if (isDeletingSection()) {
+              <span>Deleting...</span>
+            } @else {
+              <span>Delete Section</span>
+            }
+          </button>
+        </div>
       </div>
     </div>
   }

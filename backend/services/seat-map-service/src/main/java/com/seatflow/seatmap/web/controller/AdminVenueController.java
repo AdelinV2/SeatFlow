@@ -123,4 +123,23 @@ public class AdminVenueController {
         SeatResponse response = sectionService.updateSeatStatus(venueId, sectionId, seatId, request);
         return ResponseEntity.ok(response);
     }
+
+    @DeleteMapping("/{venueId}/sections/{sectionId}")
+    @Operation(
+        summary = "Delete a venue section",
+        description = "Deletes a section and all its associated seats from the venue."
+    )
+    @ApiResponse(responseCode = "204", description = "Section deleted successfully")
+    @ApiResponse(responseCode = "404", description = "Venue or section not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Admin role required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<Void> deleteSection(
+            @PathVariable UUID venueId,
+            @PathVariable UUID sectionId) {
+        sectionService.deleteSection(venueId, sectionId);
+        return ResponseEntity.noContent().build();
+    }
 }
