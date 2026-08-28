@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/04-authentication-security.md`, `.ai/architecture/06-api-contracts.md`, `.ai/architecture/07-frontend-specification.md`, `frontend/AGENTS.md`
 - **Related ADRs:** `ADR-001` (Hybrid Guest Checkout), `ADR-005` (Staff Scanner Authorization)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,12 +15,12 @@
 Implement the complete authentication and core HTTP infrastructure for the SeatFlow frontend. This includes OIDC / Microsoft Entra External ID token integration (`AuthService`), reactive user context (`UserContextService`), functional HTTP interceptors (`authInterceptor`, `correlationInterceptor`, `errorInterceptor`), functional route authorization guards (`authGuard`, `adminGuard`, `staffGuard`), and the responsive glassmorphic navigation header, mobile slide-out drawer, and the rich multi-column footer shell.
 
 ### Critical Invariants to Enforce:
-- [ ] **Reactive User Context with Signals:** `UserContextService` must expose user identity and roles via Angular Signals (`currentUser`, `roles`, `isAuthenticated`, `isAdmin`, `isStaff`). No `BehaviorSubject` in component/service public state.
-- [ ] **Distributed Tracing & Correlation Header:** Every outgoing HTTP request must attach a unique `X-Correlation-Id` UUID header if not already present.
-- [ ] **ApiErrorResponse Standard Mapping:** The `errorInterceptor` must parse backend `ApiErrorResponse` envelopes (`errorCode`, `message`, `validationErrors`) and display contextual feedback via `MatSnackBar` without crashing the application state.
-- [ ] **Role-Based Functional Route Guards:** Enforce `authGuard` (any authenticated user), `adminGuard` (requires `ROLE_ADMIN`), and `staffGuard` (requires `ROLE_STAFF` or `ROLE_ADMIN` per ADR-005).
-- [ ] **Responsive Glassmorphic Navigation Shell:** Navigation header must feature responsive glassmorphism (`backdrop-blur-md bg-opacity-80 border-b border-[var(--color-border)]`), live theme switcher toggle, mobile hamburger drawer menu with safe-area spacing, and role-conditioned route links (Catalog, My Tickets, Staff Scanner, Admin Portal).
-- [ ] **Rich Multi-Column Footer:** Footer must include 4 structured columns: Brand & Mission, Quick Explore Links, Support & Guest Ticket Lookup, Legal & Compliance (Terms & Conditions, Privacy Policy, Stripe Tax/VAT disclosure, Refund Policy), Live Platform Status indicator (`🟢 All Systems Operational`), and dynamic copyright year.
+- [x] **Reactive User Context with Signals:** `UserContextService` must expose user identity and roles via Angular Signals (`currentUser`, `roles`, `isAuthenticated`, `isAdmin`, `isStaff`). No `BehaviorSubject` in component/service public state.
+- [x] **Distributed Tracing & Correlation Header:** Every outgoing HTTP request must attach a unique `X-Correlation-Id` UUID header if not already present.
+- [x] **ApiErrorResponse Standard Mapping:** The `errorInterceptor` must parse backend `ApiErrorResponse` envelopes (`errorCode`, `message`, `validationErrors`) and display contextual feedback via `MatSnackBar` without crashing the application state.
+- [x] **Role-Based Functional Route Guards:** Enforce `authGuard` (any authenticated user), `adminGuard` (requires `ROLE_ADMIN`), and `staffGuard` (requires `ROLE_STAFF` or `ROLE_ADMIN` per ADR-005).
+- [x] **Responsive Glassmorphic Navigation Shell:** Navigation header must feature responsive glassmorphism (`backdrop-blur-md bg-opacity-80 border-b border-[var(--color-border)]`), live theme switcher toggle, mobile hamburger drawer menu with safe-area spacing, and role-conditioned route links (Catalog, My Tickets, Staff Scanner, Admin Portal).
+- [x] **Rich Multi-Column Footer:** Footer must include 4 structured columns: Brand & Mission, Quick Explore Links, Support & Guest Ticket Lookup, Legal & Compliance (Terms & Conditions, Privacy Policy, Stripe Tax/VAT disclosure, Refund Policy), Live Platform Status indicator (`🟢 All Systems Operational`), and dynamic copyright year.
 
 ---
 
@@ -324,11 +324,11 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] `AuthService` and `UserContextService` accurately parse and expose JWT roles via reactive Signals.
-- [ ] `correlationInterceptor` injects `X-Correlation-Id` on all outgoing requests.
-- [ ] `errorInterceptor` captures backend error envelopes and renders `MatSnackBar` alerts.
-- [ ] `staffGuard` permits `ROLE_STAFF` & `ROLE_ADMIN` and blocks unauthorized users.
-- [ ] Responsive navigation shell renders cleanly with live theme toggle and mobile navigation drawer.
-- [ ] Rich multi-column footer renders Terms, Privacy, Support, and live operational status.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/002-core-auth-oidc-interceptors-and-nav-shell.md`.
+- [x] `AuthService` and `UserContextService` accurately parse and expose JWT roles via reactive Signals.
+- [x] `correlationInterceptor` injects `X-Correlation-Id` on all outgoing requests.
+- [x] `errorInterceptor` captures backend error envelopes and renders `MatSnackBar` alerts.
+- [x] `staffGuard` permits `ROLE_STAFF` & `ROLE_ADMIN` and blocks unauthorized users.
+- [x] Responsive navigation shell renders cleanly with live theme toggle and mobile navigation drawer.
+- [x] Rich multi-column footer renders Terms, Privacy, Support, and live operational status.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/002-core-auth-oidc-interceptors-and-nav-shell.md`.

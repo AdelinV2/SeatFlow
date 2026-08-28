@@ -1,0 +1,54 @@
+:host {
+  display: contents;
+}
+
+.glass-header {
+  background-color: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  padding-top: env(safe-area-inset-top);
+}
+
+.nav-link,
+.mobile-nav-link {
+  border-radius: 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.nav-link {
+  min-height: 2.75rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.mobile-nav-link {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+}
+
+.nav-link:hover,
+.mobile-nav-link:hover,
+.nav-link--active {
+  background: var(--color-primary-glow);
+  color: var(--color-primary-hover);
+}
+
+.mobile-backdrop {
+  border: 0;
+  border-radius: 0;
+}
+
+.mobile-drawer {
+  color: var(--color-text-primary);
+}
+
+svg {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}

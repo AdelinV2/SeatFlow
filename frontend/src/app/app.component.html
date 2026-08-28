@@ -1,7 +1,9 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 
 <div class="app-shell" [attr.data-theme]="theme.activeTheme()">
+  <app-header />
   <main id="main-content" class="app-shell__content" tabindex="-1">
     <router-outlet />
   </main>
+  <app-footer />
 </div>

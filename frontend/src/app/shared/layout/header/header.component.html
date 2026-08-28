@@ -1,0 +1,220 @@
+<header
+  class="glass-header sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-surface)] bg-opacity-80 backdrop-blur-md"
+>
+  <nav
+    class="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8"
+    aria-label="Primary navigation"
+  >
+    <a
+      routerLink="/"
+      class="btn-spring flex min-h-11 items-center gap-2.5 rounded-xl text-[var(--color-text-primary)]"
+      aria-label="SeatFlow home"
+      (click)="closeMobileMenu()"
+    >
+      <span
+        class="flex size-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-base font-black text-slate-50 shadow-lg shadow-indigo-600/20"
+        aria-hidden="true"
+        >S</span
+      >
+      <span class="text-lg font-bold tracking-tight sm:text-xl">SeatFlow</span>
+    </a>
+
+    <div class="hidden items-center gap-1 md:flex">
+      <a
+        routerLink="/events"
+        routerLinkActive="nav-link--active"
+        class="nav-link"
+        (click)="closeMobileMenu()"
+        >Catalog</a
+      >
+
+      @if (userContext.isAuthenticated()) {
+        <a routerLink="/profile/tickets" routerLinkActive="nav-link--active" class="nav-link"
+          >My Tickets</a
+        >
+      }
+
+      @if (userContext.isStaff()) {
+        <a routerLink="/scanner" routerLinkActive="nav-link--active" class="nav-link"
+          >Staff Scanner</a
+        >
+      }
+
+      @if (userContext.isAdmin()) {
+        <a routerLink="/admin/events" routerLinkActive="nav-link--active" class="nav-link"
+          >Admin Portal</a
+        >
+      }
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="btn-spring touch-target inline-flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] text-[var(--color-text-secondary)] hover:text-[var(--color-primary-hover)]"
+        [attr.aria-label]="theme.isDark() ? 'Switch to light theme' : 'Switch to dark theme'"
+        (click)="theme.toggleTheme()"
+      >
+        @if (theme.isDark()) {
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            class="size-5"
+            fill="none"
+            stroke="currentColor"
+          >
+            <circle cx="12" cy="12" r="4"></circle>
+            <path
+              d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"
+            ></path>
+          </svg>
+        } @else {
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            class="size-5"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path>
+          </svg>
+        }
+      </button>
+
+      <div class="hidden items-center gap-2 md:flex">
+        @if (userContext.isAuthenticated()) {
+          <span
+            class="max-w-40 truncate rounded-full bg-[var(--color-primary-glow)] px-3 py-2 text-sm font-semibold text-[var(--color-text-primary)]"
+            [title]="userContext.userEmail()"
+            >{{ userContext.userName() }}</span
+          >
+          <button
+            type="button"
+            class="btn-spring min-h-11 rounded-xl px-4 text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-primary-glow)] hover:text-[var(--color-primary-hover)]"
+            (click)="signOut()"
+          >
+            Sign out
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="animate-sheen btn-spring min-h-11 rounded-xl bg-[var(--color-primary)] px-4 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-600/20 hover:bg-[var(--color-primary-hover)]"
+            (click)="signIn()"
+          >
+            Sign in
+          </button>
+        }
+      </div>
+
+      <button
+        type="button"
+        class="btn-spring touch-target inline-flex items-center justify-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-primary)] md:hidden"
+        aria-label="Toggle navigation menu"
+        aria-controls="mobile-navigation"
+        [attr.aria-expanded]="mobileMenuOpen()"
+        (click)="toggleMobileMenu()"
+      >
+        @if (mobileMenuOpen()) {
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            class="size-6"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="m6 6 12 12M18 6 6 18"></path>
+          </svg>
+        } @else {
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            class="size-6"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        }
+      </button>
+    </div>
+  </nav>
+</header>
+
+@if (mobileMenuOpen()) {
+  <button
+    type="button"
+    class="mobile-backdrop fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm md:hidden"
+    aria-label="Close navigation menu"
+    (click)="closeMobileMenu()"
+  ></button>
+
+  <aside
+    id="mobile-navigation"
+    class="mobile-drawer animate-slide-in fixed inset-y-0 right-0 z-50 flex w-[min(22rem,88vw)] flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] shadow-2xl md:hidden"
+    aria-label="Mobile navigation"
+  >
+    <div class="mb-8 flex items-center justify-between gap-4">
+      <span class="text-lg font-bold text-[var(--color-text-primary)]">Menu</span>
+      <button
+        type="button"
+        class="btn-spring touch-target inline-flex items-center justify-center rounded-xl border border-[var(--color-border)]"
+        aria-label="Close navigation menu"
+        (click)="closeMobileMenu()"
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          class="size-6"
+          fill="none"
+          stroke="currentColor"
+        >
+          <path d="m6 6 12 12M18 6 6 18"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="flex flex-1 flex-col gap-2">
+      <a routerLink="/events" class="mobile-nav-link" (click)="closeMobileMenu()">Catalog</a>
+
+      @if (userContext.isAuthenticated()) {
+        <a routerLink="/profile/tickets" class="mobile-nav-link" (click)="closeMobileMenu()"
+          >My Tickets</a
+        >
+      }
+
+      @if (userContext.isStaff()) {
+        <a routerLink="/scanner" class="mobile-nav-link" (click)="closeMobileMenu()"
+          >Staff Scanner</a
+        >
+      }
+
+      @if (userContext.isAdmin()) {
+        <a routerLink="/admin/events" class="mobile-nav-link" (click)="closeMobileMenu()"
+          >Admin Portal</a
+        >
+      }
+    </div>
+
+    <div class="border-t border-[var(--color-border)] pt-5">
+      @if (userContext.isAuthenticated()) {
+        <p class="mb-3 truncate text-sm text-[var(--color-text-secondary)]">
+          Signed in as <strong>{{ userContext.userEmail() }}</strong>
+        </p>
+        <button
+          type="button"
+          class="btn-spring min-h-11 w-full rounded-xl border border-[var(--color-border)] px-4 text-sm font-semibold"
+          (click)="signOut()"
+        >
+          Sign out
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="animate-sheen btn-spring min-h-11 w-full rounded-xl bg-[var(--color-primary)] px-4 text-sm font-semibold text-slate-50"
+          (click)="signIn()"
+        >
+          Sign in to SeatFlow
+        </button>
+      }
+    </div>
+  </aside>
+}

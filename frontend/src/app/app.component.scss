@@ -4,6 +4,8 @@
 }
 
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   background:
     radial-gradient(circle at 15% 0%, var(--color-primary-glow), transparent 32rem),
@@ -12,8 +14,9 @@
 }
 
 .app-shell__content {
-  min-height: 100dvh;
-  padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+  flex: 1;
+  min-height: 50vh;
+  padding-block-end: env(safe-area-inset-bottom);
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 

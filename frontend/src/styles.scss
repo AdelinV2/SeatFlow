@@ -281,6 +281,18 @@ html {
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 
+.snack-error {
+  --mat-snack-bar-container-color: var(--color-accent-rose);
+  --mat-snack-bar-supporting-text-color: #f8fafc;
+  --mat-snack-bar-button-color: #f8fafc;
+}
+
+.snack-warning {
+  --mat-snack-bar-container-color: var(--color-accent-amber);
+  --mat-snack-bar-supporting-text-color: #0f172a;
+  --mat-snack-bar-button-color: #0f172a;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
