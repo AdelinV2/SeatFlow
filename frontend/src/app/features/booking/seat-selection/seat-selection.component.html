@@ -49,6 +49,7 @@
               "
               (input)="updateGuestEmail($event)"
               (blur)="guestEmailTouched.set(true)"
+              (keydown.enter)="createHold()"
             />
             @if (guestEmailTouched() && !guestEmailIsValid()) {
               <small id="guest-email-error">Enter a valid email address.</small>

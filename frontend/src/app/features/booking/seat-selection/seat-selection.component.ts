@@ -248,11 +248,11 @@ export class SeatSelectionComponent implements OnInit {
   }
 
   private flattenSeats(response: EventSeatMapResponse): Seat[] {
-    return response.sections.flatMap((section) => {
+    return (response.sections ?? []).flatMap((section) => {
       const tier = section.pricingTiers?.[0];
       const price = Number(tier?.price ?? 0);
       const hasValidPrice = Number.isFinite(price) && price > 0;
-      return section.seats.map((seat) => ({
+      return (section.seats ?? []).map((seat) => ({
         id: seat.seatId,
         sectionId: section.sectionId,
         sectionName: section.name,
@@ -274,7 +274,6 @@ export class SeatSelectionComponent implements OnInit {
     }
 
     const conflictingSeat = this.seats().find((seat) => seat.id === seatId);
-    const liveUpdateAlreadyApplied = conflictingSeat?.status !== 'AVAILABLE';
     this.selectedSeatIds.update((current) => {
       const updated = new Set(current);
       updated.delete(seatId);
@@ -282,16 +281,14 @@ export class SeatSelectionComponent implements OnInit {
     });
     this.resetPendingAttempt();
 
-    if (liveUpdateAlreadyApplied) {
-      const label = conflictingSeat
-        ? `${conflictingSeat.rowLabel}-${conflictingSeat.seatNumber}`
-        : seatId;
-      this.snackBar.open(`Seat ${label} was just reserved by another user.`, 'Close', {
-        duration: 5000,
-        panelClass: 'snack-warning',
-        politeness: 'assertive',
-      });
-    }
+    const label = conflictingSeat
+      ? `${conflictingSeat.rowLabel}-${conflictingSeat.seatNumber}`
+      : seatId;
+    this.snackBar.open(`Seat ${label} was just reserved by another user.`, 'Close', {
+      duration: 5000,
+      panelClass: 'snack-warning',
+      politeness: 'assertive',
+    });
   }
 
   private resetPendingAttempt(): void {

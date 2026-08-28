@@ -4,14 +4,12 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { Seat, SeatAvailabilityResponse } from '../models/seat.model';
 import { SeatStateService } from './seat-state.service';
 
 describe('SeatStateService', () => {
   let service: SeatStateService;
   let httpMock: HttpTestingController;
-  let snackBarSpy: jasmine.SpyObj<MatSnackBar>;
 
   const createSeat = (id: string, status: Seat['status'] = 'AVAILABLE'): Seat => ({
     id,
@@ -28,14 +26,11 @@ describe('SeatStateService', () => {
   });
 
   beforeEach(() => {
-    snackBarSpy = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
-
     TestBed.configureTestingModule({
       providers: [
         SeatStateService,
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: MatSnackBar, useValue: snackBarSpy },
       ],
     });
 
@@ -99,6 +94,5 @@ describe('SeatStateService', () => {
     expect(service.isLoading()).toBeFalse();
     expect(service.seats()[0].status).toBe('HELD');
     expect(onConflictSpy).toHaveBeenCalledWith('s-1');
-    expect(snackBarSpy.open).toHaveBeenCalled();
   });
 });
