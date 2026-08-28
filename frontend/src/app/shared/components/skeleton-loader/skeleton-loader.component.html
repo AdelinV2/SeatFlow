@@ -1,0 +1,23 @@
+<div class="skeleton-group" role="status" [attr.aria-label]="label()">
+  @if (shape() === 'text') {
+    <div class="flex flex-col gap-2.5" aria-hidden="true">
+      @for (_ of lineItems(); track $index) {
+        <span
+          class="skeleton-shimmer block rounded-md"
+          [style.width]="$last && lineItems().length > 1 ? '72%' : width()"
+          [style.height]="height()"
+        ></span>
+      }
+    </div>
+  } @else {
+    <span
+      class="skeleton-shimmer block"
+      [class.rounded-full]="shape() === 'circle'"
+      [class.rounded-2xl]="shape() === 'rectangle'"
+      [style.width]="width()"
+      [style.height]="height()"
+      aria-hidden="true"
+    ></span>
+  }
+  <span class="sr-only">{{ label() }}</span>
+</div>
