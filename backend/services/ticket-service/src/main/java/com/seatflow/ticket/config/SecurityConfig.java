@@ -48,8 +48,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority(SecurityRoles.ROLE_STAFF, SecurityRoles.ROLE_ADMIN)
                 .requestMatchers("/api/admin/tickets/**").hasAuthority(SecurityRoles.ROLE_ADMIN)
 
-                // Customer authenticated endpoints
-                .requestMatchers(HttpMethod.GET, "/api/tickets/my-tickets").hasAuthority(SecurityRoles.ROLE_CUSTOMER)
+                // Authenticated user tickets
+                .requestMatchers(HttpMethod.GET, "/api/tickets/my-tickets").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/tickets/*").authenticated()
 
                 .anyRequest().authenticated()

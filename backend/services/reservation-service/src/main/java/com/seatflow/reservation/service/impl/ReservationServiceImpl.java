@@ -405,14 +405,19 @@ public class ReservationServiceImpl implements ReservationService {
         if (UserContext.hasRole(SecurityRoles.ROLE_ADMIN)) {
             return true;
         }
-        if (authenticatedUserId != null && authenticatedUserId.equals(reservation.getUserId())) {
-            return true;
+        if (reservation.getUserId() != null) {
+            // Registered reservation: only the owner may access it
+            return authenticatedUserId != null && authenticatedUserId.equals(reservation.getUserId());
         }
-        if (reservation.getUserId() == null) {
+        // Guest reservation (userId == null):
+        // Accessible anonymously (guest checkout flow, ADR-001) or by an authenticated caller whose email matches.
+        String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
+        boolean anonymous = authenticatedUserId == null && callerEmail == null;
+        if (anonymous) {
             String proof = normalizeEmail(customerEmailProof);
-            return proof != null && proof.equals(normalizeEmail(reservation.getCustomerEmail()));
+            return proof == null || proof.equalsIgnoreCase(reservation.getCustomerEmail());
         }
-        return false;
+        return callerEmail != null && callerEmail.equalsIgnoreCase(reservation.getCustomerEmail());
     }
 
     private String normalizeEmail(String email) {

@@ -271,6 +271,43 @@ class ReservationServiceImplTest {
     }
 
     @Test
+    void getReservationByIdReturnsForAnonymousGuest() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, res.getEventId()));
+
+        ReservationResponse result = service.getReservationById(id, null, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(id);
+    }
+
+    @Test
+    void getReservationByIdReturnsForAnonymousGuestWithValidProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, res.getEventId()));
+
+        ReservationResponse result = service.getReservationById(id, null, "guest@example.com");
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void getReservationByIdThrowsForAnonymousGuestWithInvalidProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, null, "wrong@example.com"));
+    }
+
+    @Test
     void cancelReservationReleasesSeatsAndPublishesOutbox() throws Exception {
         UUID id = UUID.randomUUID();
         UUID userId = UUID.randomUUID();

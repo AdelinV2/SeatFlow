@@ -66,6 +66,20 @@ class TicketControllerTest {
     }
 
     @Test
+    void getMyTickets_withAdminRole_returns200() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(ticketService.getMyTickets(any(UUID.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(PagedResult.of(List.of(org.mockito.Mockito.mock(TicketResponse.class)), 0, 10, 1));
+
+        mockMvc.perform(get("/api/tickets/my-tickets")
+                        .with(jwt().jwt(j -> j.subject(userId.toString()))
+                                .authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void getMyTickets_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/tickets/my-tickets"))
                 .andExpect(status().isUnauthorized());
