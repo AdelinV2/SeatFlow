@@ -59,7 +59,7 @@ describe('core HTTP interceptors', () => {
     request.flush([]);
   });
 
-  it('adds the bearer token only to SeatFlow API requests and isolates external APIs', () => {
+  it('adds the bearer token only to SeatFlow protected API requests and isolates external APIs', () => {
     const http = TestBed.inject(HttpClient);
     authService.getToken.and.returnValue('access-token');
 
@@ -68,10 +68,16 @@ describe('core HTTP interceptors', () => {
     expect(apiRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
     apiRequest.flush({});
 
+    http.get('/api/admin/events').subscribe();
+    const adminRequest = httpTesting.expectOne('/api/admin/events');
+    expect(adminRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
+    adminRequest.flush([]);
+
+    // Purely public anonymous endpoints omit Authorization header to prevent stale token 401s
     http.get('/api/events').subscribe();
-    const relativeRequest = httpTesting.expectOne('/api/events');
-    expect(relativeRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
-    relativeRequest.flush([]);
+    const publicRequest = httpTesting.expectOne('/api/events');
+    expect(publicRequest.request.headers.has('Authorization')).toBeFalse();
+    publicRequest.flush([]);
 
     // External service that happens to contain /api/ in URL
     http.get('https://api.stripe.com/v1/tokens').subscribe();
