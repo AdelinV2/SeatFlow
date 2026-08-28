@@ -151,7 +151,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   const token = authService.getToken();
 
-  if (token && req.url.startsWith('/api')) {
+  // Support both relative (/api/...) and absolute (http://localhost:8080/api/...) API URLs
+  if (token && (req.url.startsWith('/api') || req.url.includes('/api/'))) {
     const authReq = req.clone({
       setHeaders: { Authorization: `Bearer ${token}` },
     });

@@ -74,20 +74,30 @@ export interface EventSummary {
   category: EventCategory;
   bannerUrl: string;
   eventDate: string;
-  venueId: string;
-  venueName: string;
+  venueName?: string;
   status: EventStatus;
   minPrice: number;
   maxPrice: number;
 }
 
-export interface EventDetail extends EventSummary {
-  venueAddress: string;
+export interface EventDetail {
+  id: string;
+  venueId: string;
+  title: string;
+  description: string;
+  category: EventCategory;
+  bannerUrl: string;
+  eventDate: string;
+  status: EventStatus;
+  pricingTiers: EventPricingTier[];
+  createdAt: string;
+  updatedAt?: string;
+  // Enriched venue fields (fetched via VenueApiService.getVenueById(venueId))
+  venueName?: string;
+  venueAddress?: string;
+  venueCity?: string;
   latitude?: number;
   longitude?: number;
-  pricingTiers: EventPricingTier[];
-  totalCapacity?: number;
-  availableSeatsCount?: number;
 }
 
 export interface PagedResult<T> {
@@ -314,7 +324,7 @@ export class EventCalendarComponent {
    - Category pill bar and debounced search bar.
    - Responsive event grid with scroll-reveal entrance.
 6. **Implement EventDetailComponent:**
-   - Hero banner, pricing tiers grid, Leaflet venue map, sticky CTA bar.
+   - Load event details (`GET /api/events/:id`), fetch venue address/location via `VenueApiService.getVenueById(event.venueId)`, render hero banner, pricing tiers grid, Leaflet venue map, and sticky CTA bar.
 7. **Write Unit Tests:**
    - Test calendar month transitions, date selection toggle, and Leaflet map tile-switching.
 

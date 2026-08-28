@@ -80,8 +80,9 @@ export interface VenueLayout {
 export interface CreateVenueRequest {
   name: string;
   address: string;
-  latitude: number;
-  longitude: number;
+  city: string;
+  country?: string;
+  capacity: number;
 }
 
 export interface CreateSectionRequest {
@@ -118,8 +119,8 @@ export class AdminVenueApiService {
     return this.http.post<VenueLayout>(`${this.baseUrl}/${venueId}/sections`, req);
   }
 
-  toggleSeat(venueId: string, sectionId: string, seatId: string): Observable<void> {
-    return this.http.patch<void>(`${this.baseUrl}/${venueId}/sections/${sectionId}/seats/${seatId}`, {});
+  toggleSeat(venueId: string, sectionId: string, seatId: string, isActive: boolean): Observable<void> {
+    return this.http.patch<void>(`${this.baseUrl}/${venueId}/sections/${sectionId}/seats/${seatId}`, { isActive });
   }
 }
 ```

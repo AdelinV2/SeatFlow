@@ -51,39 +51,34 @@ Implement the post-purchase customer and guest experience. This includes the cel
 ### 4.1 Models (`src/app/models/ticket.model.ts`)
 
 ```typescript
-export type TicketStatus = 'ISSUED' | 'USED' | 'CANCELLED';
+import { PagedResult } from './event.model';
+
+export type TicketStatus = 'VALID' | 'USED' | 'CANCELLED';
 
 export interface TicketItem {
   id: string;
   ticketCode: string;
   reservationId: string;
+  paymentId?: string;
+  userId?: string;
   eventId: string;
-  eventTitle: string;
-  eventDate: string;
+  seatId: string;
+  eventTitle?: string;
+  eventDate?: string;
   bannerUrl?: string;
-  venueName: string;
+  venueName?: string;
   venueAddress?: string;
-  section: string;
-  rowNumber: string;
-  seatNumber: number;
+  section?: string;
+  rowNumber?: string;
+  seatNumber?: number;
   price: number;
   taxAmount: number;
   netAmount: number;
   attendeeName?: string;
   customerEmail: string;
   status: TicketStatus;
-  qrCodeUrl?: string;
-  issuedAt: string;
-}
-
-export interface GuestTicketBundleResponse {
-  primaryTicketCode: string;
-  customerEmail: string;
-  eventTitle: string;
-  eventDate: string;
-  venueName: string;
-  venueAddress: string;
-  tickets: TicketItem[];
+  qrCodeData: string;
+  createdAt: string;
 }
 ```
 
@@ -91,21 +86,27 @@ export interface GuestTicketBundleResponse {
 
 ```typescript
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { TicketItem, GuestTicketBundleResponse } from '../models/ticket.model';
+import { TicketItem, TicketStatus } from '../models/ticket.model';
+import { PagedResult } from '../models/event.model';
 
 @Injectable({ providedIn: 'root' })
 export class TicketApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/tickets';
 
-  getMyTickets(): Observable<TicketItem[]> {
-    return this.http.get<TicketItem[]>(`${this.baseUrl}/my-tickets`);
+  getMyTickets(page = 0, size = 10): Observable<PagedResult<TicketItem>> {
+    const params = new HttpParams().set('page', page.toString()).set('size', size.toString());
+    return this.http.get<PagedResult<TicketItem>>(`${this.baseUrl}/my-tickets`, { params });
   }
 
-  getGuestTicket(ticketCode: string): Observable<GuestTicketBundleResponse> {
-    return this.http.get<GuestTicketBundleResponse>(`${this.baseUrl}/guest/${ticketCode}`);
+  getGuestTicket(ticketCode: string): Observable<TicketItem> {
+    return this.http.get<TicketItem>(`${this.baseUrl}/guest/${ticketCode}`);
+  }
+
+  getTicketById(ticketId: string): Observable<TicketItem> {
+    return this.http.get<TicketItem>(`${this.baseUrl}/${ticketId}`);
   }
 
   downloadTicketPdf(ticketId: string): Observable<Blob> {
@@ -148,22 +149,15 @@ export class GuestTicketComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly ticketService = inject(TicketApiService);
 
-  readonly bundle = signal<GuestTicketBundleResponse | null>(null);
-  readonly selectedIndex = signal<number>(0);
+  readonly ticket = signal<TicketItem | null>(null);
   readonly isLoading = signal<boolean>(true);
-
-  readonly activeTicket = computed<TicketItem | null>(() => {
-    const list = this.bundle()?.tickets ?? [];
-    const idx = this.selectedIndex();
-    return list[idx] ?? list[0] ?? null;
-  });
 
   ngOnInit(): void {
     const code = this.route.snapshot.paramMap.get('ticketCode');
     if (code) {
       this.ticketService.getGuestTicket(code).subscribe({
         next: (data) => {
-          this.bundle.set(data);
+          this.ticket.set(data);
           this.isLoading.set(false);
         },
         error: () => this.isLoading.set(false),
@@ -171,12 +165,8 @@ export class GuestTicketComponent implements OnInit {
     }
   }
 
-  selectTicket(index: number): void {
-    this.selectedIndex.set(index);
-  }
-
   downloadCurrentPdf(): void {
-    const ticket = this.activeTicket();
+    const ticket = this.ticket();
     if (!ticket) return;
     this.ticketService.downloadTicketPdf(ticket.id).subscribe((blob) => {
       const url = window.URL.createObjectURL(blob);
@@ -191,7 +181,7 @@ export class GuestTicketComponent implements OnInit {
 ```
 
 ```html
-@if (bundle(); as data) {
+@if (ticket(); as ticket) {
   <div class="max-w-4xl mx-auto px-4 py-8 space-y-6">
     <!-- Account Linking Banner -->
     <div class="p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -199,7 +189,7 @@ export class GuestTicketComponent implements OnInit {
         <span class="text-2xl">🎟️</span>
         <div>
           <h4 class="text-sm font-bold text-indigo-400">Keep all your tickets organized</h4>
-          <p class="text-xs text-muted">Create an account with <b>{{ data.customerEmail }}</b> to automatically save all your tickets to your digital wallet.</p>
+          <p class="text-xs text-muted">Create an account with <b>{{ ticket.customerEmail }}</b> to automatically save all your tickets to your digital wallet.</p>
         </div>
       </div>
       <a routerLink="/auth/login" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md transition-all whitespace-nowrap">
@@ -207,72 +197,58 @@ export class GuestTicketComponent implements OnInit {
       </a>
     </div>
 
-    <!-- Multi-Ticket Switcher Bar -->
-    @if (data.tickets.length > 1) {
-      <div class="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[var(--color-border)]">
-        @for (t of data.tickets; track t.id; let i = $index) {
-          <button
-            (click)="selectTicket(i)"
-            class="px-4 py-2 rounded-xl text-xs font-bold transition-all select-none cursor-pointer flex items-center gap-2"
-            [ngClass]="selectedIndex() === i ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30' : 'bg-[var(--color-surface-elevated)] text-muted hover:text-white border border-[var(--color-border)]'"
-          >
-            <span>Ticket {{ i + 1 }} of {{ data.tickets.length }}</span>
-            <span class="opacity-80">({{ t.section }} • {{ t.rowNumber }}-{{ t.seatNumber }})</span>
-          </button>
-        }
-      </div>
-    }
-
     <!-- Active Ticket Pass Card -->
-    @if (activeTicket(); as ticket) {
-      <app-glass-card elevation="elevated" class="p-6 md:p-8 space-y-6">
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-[var(--color-border)]">
-          <div>
-            <span class="text-xs uppercase tracking-wider text-indigo-400 font-bold">{{ data.venueName }}</span>
-            <h2 class="text-2xl font-bold mt-1">{{ data.eventTitle }}</h2>
-            <p class="text-sm text-muted mt-0.5">{{ data.eventDate | sfDate }}</p>
+    <app-glass-card elevation="elevated" class="p-6 md:p-8 space-y-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-[var(--color-border)]">
+        <div>
+          <span class="text-xs uppercase tracking-wider text-indigo-400 font-bold">{{ ticket.venueName || 'Venue' }}</span>
+          <h2 class="text-2xl font-bold mt-1">{{ ticket.eventTitle || 'Live Event' }}</h2>
+          <p class="text-sm text-muted mt-0.5">{{ ticket.eventDate ? (ticket.eventDate | sfDate) : (ticket.createdAt | sfDate) }}</p>
+        </div>
+        <app-status-badge [status]="ticket.status" />
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <!-- QR Code Display (Client-Rendered / High-Contrast) -->
+        <div class="flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-inner border border-slate-200 text-slate-900">
+          <div class="w-48 h-48 flex flex-col items-center justify-center bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
+            <span class="font-mono text-xs font-bold text-indigo-600 break-all select-all">{{ ticket.qrCodeData }}</span>
           </div>
-          <app-status-badge [status]="ticket.status" />
+          <span class="font-mono text-sm font-bold tracking-widest mt-3">{{ ticket.ticketCode }}</span>
+          <span class="text-[11px] text-slate-500 mt-1">Show this QR code at the venue gate</span>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-          <!-- QR Code Preview -->
-          <div class="flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-inner border border-slate-200 text-slate-900">
-            <img [src]="'/api/tickets/' + ticket.id + '/qr'" alt="Ticket QR Code" class="w-48 h-48 object-contain" />
-            <span class="font-mono text-sm font-bold tracking-widest mt-3">{{ ticket.ticketCode }}</span>
-            <span class="text-[11px] text-slate-500 mt-1">Show this QR code at the venue gate</span>
+        <!-- Ticket Details & Download -->
+        <div class="space-y-4">
+          <div class="grid grid-cols-3 gap-3 p-4 bg-[var(--color-canvas)] rounded-xl border border-[var(--color-border)] text-center">
+            <div>
+              <span class="text-[10px] text-muted uppercase tracking-wider block">Section</span>
+              <span class="text-sm font-bold">{{ ticket.section || '—' }}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-muted uppercase tracking-wider block">Row</span>
+              <span class="text-sm font-bold">{{ ticket.rowNumber || '—' }}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-muted uppercase tracking-wider block">Seat</span>
+              <span class="text-sm font-bold">{{ ticket.seatNumber || '—' }}</span>
+            </div>
           </div>
 
-          <!-- Ticket Details & Download -->
-          <div class="space-y-4">
-            <div class="grid grid-cols-3 gap-3 p-4 bg-[var(--color-canvas)] rounded-xl border border-[var(--color-border)] text-center">
-              <div>
-                <span class="text-[10px] text-muted uppercase tracking-wider block">Section</span>
-                <span class="text-sm font-bold">{{ ticket.section }}</span>
-              </div>
-              <div>
-                <span class="text-[10px] text-muted uppercase tracking-wider block">Row</span>
-                <span class="text-sm font-bold">{{ ticket.rowNumber }}</span>
-              </div>
-              <div>
-                <span class="text-[10px] text-muted uppercase tracking-wider block">Seat</span>
-                <span class="text-sm font-bold">{{ ticket.seatNumber }}</span>
-              </div>
-            </div>
-
-            <div class="text-xs space-y-1 text-muted">
-              <p><b>Attendee:</b> {{ ticket.attendeeName || data.customerEmail }}</p>
-              <p><b>Price:</b> {{ ticket.price | sfCurrency }} (Tax: {{ ticket.taxAmount | sfCurrency }})</p>
-              <p><b>Venue Address:</b> {{ data.venueAddress }}</p>
-            </div>
-
-            <app-tactile-button variant="primary" size="md" (clicked)="downloadCurrentPdf()" class="w-full">
-              📄 Download Ticket PDF
-            </app-tactile-button>
+          <div class="text-xs space-y-1 text-muted">
+            <p><b>Attendee:</b> {{ ticket.attendeeName || ticket.customerEmail }}</p>
+            <p><b>Price:</b> {{ ticket.price | sfCurrency }} (Tax: {{ ticket.taxAmount | sfCurrency }})</p>
+            @if (ticket.venueAddress) {
+              <p><b>Venue Address:</b> {{ ticket.venueAddress }}</p>
+            }
           </div>
+
+          <app-tactile-button variant="primary" size="md" (clicked)="downloadCurrentPdf()" class="w-full">
+            📄 Download Ticket PDF
+          </app-tactile-button>
         </div>
-      </app-glass-card>
-    }
+      </div>
+    </app-glass-card>
   </div>
 }
 ```

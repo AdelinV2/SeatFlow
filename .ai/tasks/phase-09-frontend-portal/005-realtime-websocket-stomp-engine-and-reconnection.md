@@ -67,6 +67,36 @@ export interface SeatAvailabilityResponse {
     status: SeatStatus;
   }[];
 }
+
+export interface SeatMapSectionResponse {
+  sectionId: string;
+  name: string;
+  rowCount: number;
+  colCount: number;
+  seats: {
+    seatId: string;
+    rowLabel: string;
+    seatNumber: number;
+    gridX: number;
+    gridY: number;
+    isActive: boolean;
+  }[];
+  pricingTiers?: {
+    sectionId: string;
+    price: number;
+  }[];
+}
+
+export interface EventSeatMapResponse {
+  eventId: string;
+  venueId: string;
+  eventTitle: string;
+  eventDate: string;
+  venueName: string;
+  venueCapacity: number;
+  totalConfiguredSeats: number;
+  sections: SeatMapSectionResponse[];
+}
 ```
 
 ### 4.2 Seat State Store Service (`src/app/services/seat-state.service.ts`)
