@@ -1,0 +1,77 @@
+<div class="venue-map-card overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+  <!-- Map Header / Info -->
+  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6">
+    <div class="flex items-center gap-2.5">
+      <div class="flex size-8 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500">
+        <svg viewBox="0 0 24 24" class="size-4.5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+          <circle cx="12" cy="9" r="2.5" />
+        </svg>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-[var(--color-text-primary)] sm:text-base">{{ venueName() }}</h4>
+        @if (venueAddress() || venueCity()) {
+          <p class="text-xs text-[var(--color-text-muted)]">
+            {{ venueAddress() }}{{ venueAddress() && venueCity() ? ', ' : '' }}{{ venueCity() }}
+          </p>
+        }
+      </div>
+    </div>
+
+    <!-- External Navigation Links -->
+    <div class="flex items-center gap-2">
+      <a
+        [href]="googleMapsUrl()"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-spring inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-indigo-500 transition-colors"
+        title="Open in Google Maps"
+      >
+        <span>Google Maps</span>
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
+
+      <a
+        [href]="appleMapsUrl()"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-spring inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-indigo-500 transition-colors"
+        title="Open in Apple Maps"
+      >
+        <span>Apple Maps</span>
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
+
+      <a
+        [href]="wazeUrl()"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-spring inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-indigo-500 transition-colors"
+        title="Open in Waze"
+      >
+        <span>Waze</span>
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- Leaflet Map Canvas Container -->
+  <div
+    #mapContainer
+    class="relative h-64 w-full sm:h-80 lg:h-96 z-0"
+    role="region"
+    [attr.aria-label]="'Interactive map for ' + venueName()"
+  ></div>
+</div>

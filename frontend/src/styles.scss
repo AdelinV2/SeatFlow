@@ -1,5 +1,6 @@
 @use '@angular/material' as mat;
 @import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
