@@ -26,6 +26,7 @@
 
 html {
   color-scheme: light;
+  background-color: var(--color-canvas);
   min-height: 100%;
 
   @include mat.theme(

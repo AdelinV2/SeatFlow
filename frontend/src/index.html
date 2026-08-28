@@ -9,7 +9,7 @@
       name="description"
       content="SeatFlow makes discovering events and reserving the right seats effortless."
     />
-    <meta name="theme-color" content="#0B0F19" />
+    <meta name="theme-color" content="#F8FAFC" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -29,6 +29,12 @@
             document.documentElement.classList.add('light');
             document.documentElement.classList.remove('dark');
           }
+
+          const themeColor = document.querySelector('meta[name="theme-color"]');
+          themeColor?.setAttribute(
+            'content',
+            document.documentElement.classList.contains('dark') ? '#0B0F19' : '#F8FAFC'
+          );
         } catch (_) {}
       })();
     </script>

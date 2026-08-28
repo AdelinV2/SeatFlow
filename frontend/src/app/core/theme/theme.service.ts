@@ -52,6 +52,9 @@ export class ThemeService {
 
       root.classList.toggle('dark', activeTheme === 'dark');
       root.classList.toggle('light', activeTheme === 'light');
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', activeTheme === 'dark' ? '#0B0F19' : '#F8FAFC');
       localStorage.setItem(this.storageKey, this.mode());
     });
   }
