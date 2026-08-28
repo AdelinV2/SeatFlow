@@ -1,0 +1,80 @@
+<div class="qr-dialog-shell" role="document">
+  <header class="flex items-start justify-between gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
+    <div>
+      <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-500">
+        SeatFlow pass
+      </p>
+      <h2 mat-dialog-title class="m-0 text-xl font-bold text-[var(--color-text-primary)]">
+        {{ title() }}
+      </h2>
+    </div>
+
+    <button
+      type="button"
+      class="touch-target -mr-2 -mt-2 inline-flex items-center justify-center rounded-full text-xl text-[var(--color-text-muted)] transition-colors hover:bg-slate-500/10 hover:text-[var(--color-text-primary)]"
+      aria-label="Close ticket QR code"
+      (click)="close()"
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  </header>
+
+  <mat-dialog-content class="qr-dialog-content">
+    <div class="mx-auto flex max-w-sm flex-col items-center">
+      <div
+        class="qr-code-frame flex aspect-square w-full max-w-72 items-center justify-center rounded-3xl border border-slate-200 bg-white p-4 shadow-inner sm:max-w-80 sm:p-5"
+      >
+        @if (qrImageUrl()) {
+          <img
+            class="block size-full [image-rendering:pixelated]"
+            [src]="qrImageUrl()"
+            [alt]="'QR code for ticket ' + ticketCode()"
+            width="384"
+            height="384"
+          />
+        } @else if (qrError()) {
+          <p class="max-w-56 text-center text-sm font-medium text-rose-700" role="alert">
+            {{ qrError() }}
+          </p>
+        } @else {
+          <div
+            class="size-full animate-pulse rounded-2xl bg-slate-100"
+            aria-label="Generating QR code"
+          ></div>
+        }
+      </div>
+
+      <p class="mt-5 text-center text-xs text-[var(--color-text-muted)]">
+        Maximize screen brightness and present this code at the venue gate.
+      </p>
+
+      <div
+        class="mt-4 w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas-subtle)] p-4 text-center"
+      >
+        <span
+          class="block text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--color-text-muted)]"
+        >
+          Alphanumeric ticket code
+        </span>
+        <code
+          class="mt-1 block break-all text-sm font-bold tracking-wider text-[var(--color-text-primary)]"
+        >
+          {{ ticketCode() || 'Unavailable' }}
+        </code>
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="center" class="qr-dialog-actions">
+    <button
+      type="button"
+      class="btn-spring inline-flex min-w-48 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all duration-150 ease-out active:scale-[0.97] hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+      [disabled]="!ticketCode().trim()"
+      (click)="copyTicketCode()"
+    >
+      <span aria-hidden="true">{{ copied() ? '✓' : '⧉' }}</span>
+      {{ copied() ? 'Copied to clipboard' : 'Copy ticket code' }}
+    </button>
+    <span class="sr-only" aria-live="polite">{{ copied() ? 'Ticket code copied' : '' }}</span>
+  </mat-dialog-actions>
+</div>
