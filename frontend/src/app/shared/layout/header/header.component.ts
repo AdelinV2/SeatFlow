@@ -7,7 +7,7 @@ import {
   PLATFORM_ID,
   signal,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
 import { ThemeService } from '../../../core/theme/theme.service';
@@ -26,6 +26,7 @@ import { ThemeService } from '../../../core/theme/theme.service';
 export class HeaderComponent {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly document = inject(DOCUMENT);
+  private readonly router = inject(Router);
 
   readonly auth = inject(AuthService);
   readonly userContext = inject(UserContextService);
@@ -49,7 +50,8 @@ export class HeaderComponent {
   }
 
   signIn(): void {
-    void this.auth.login().catch(() => undefined);
+    this.closeMobileMenu();
+    void this.router.navigate(['/auth/login']);
   }
 
   signOut(): void {

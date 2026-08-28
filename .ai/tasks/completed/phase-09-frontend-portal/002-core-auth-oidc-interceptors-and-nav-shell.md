@@ -1,4 +1,4 @@
-# TASK-P09-002: Core Auth (OIDC/Entra ID), HTTP Interceptors, Guards & Navigation Shell
+# TASK-P09-002: Core Auth (Supabase Auth / OIDC), HTTP Interceptors, Guards & Navigation Shell
 
 ## 1. Task Metadata
 - **Task ID:** `TASK-P09-002`
@@ -6,13 +6,13 @@
 - **Target Module:** `frontend/src/app/core/`, `frontend/src/app/shared/layout/`
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/04-authentication-security.md`, `.ai/architecture/06-api-contracts.md`, `.ai/architecture/07-frontend-specification.md`, `frontend/AGENTS.md`
-- **Related ADRs:** `ADR-001` (Hybrid Guest Checkout), `ADR-005` (Staff Scanner Authorization)
+- **Related ADRs:** `ADR-001` (Hybrid Guest Checkout), `ADR-005` (Staff Scanner Authorization), `ADR-006` (Supabase Auth Provider)
 - **Status:** `COMPLETED`
 
 ---
 
 ## 2. Objective & Invariants
-Implement the complete authentication and core HTTP infrastructure for the SeatFlow frontend. This includes OIDC / Microsoft Entra External ID token integration (`AuthService`), reactive user context (`UserContextService`), functional HTTP interceptors (`authInterceptor`, `correlationInterceptor`, `errorInterceptor`), functional route authorization guards (`authGuard`, `adminGuard`, `staffGuard`), and the responsive glassmorphic navigation header, mobile slide-out drawer, and the rich multi-column footer shell.
+Implement the complete authentication and core HTTP infrastructure for the SeatFlow frontend. This includes Supabase Auth / OIDC token integration (`AuthService`), reactive user context (`UserContextService`), functional HTTP interceptors (`authInterceptor`, `correlationInterceptor`, `errorInterceptor`), functional route authorization guards (`authGuard`, `adminGuard`, `staffGuard`), and the responsive glassmorphic navigation header, mobile slide-out drawer, and the rich multi-column footer shell.
 
 ### Critical Invariants to Enforce:
 - [x] **Reactive User Context with Signals:** `UserContextService` must expose user identity and roles via Angular Signals (`currentUser`, `roles`, `isAuthenticated`, `isAdmin`, `isStaff`). No `BehaviorSubject` in component/service public state.

@@ -1,21 +1,21 @@
 # 04 — Authentication & Security Architecture
 
-SeatFlow externalizes user authentication and credential management to **Microsoft Entra External ID** (with OIDC and Google/Email federation) and enforces stateless, claims-based authorization via **JWT tokens**.
+SeatFlow externalizes user authentication and credential management to **Supabase Auth** (with standard OIDC/JWT, email/password, and Google federation per ADR-006) and enforces stateless, claims-based authorization via **JWT tokens**.
 
 ---
 
 ## 1. Identity & Auth Architecture
 
 ```text
-┌────────────────┐          1. Authenticate (OIDC)          ┌─────────────────────────┐
-│  Angular SPA   │ ───────────────────────────────────────► │ Entra External ID (OIDC)│
-│                │ ◄─────────────────────────────────────── │                         │
-└───────┬────────┘          2. Access Token (JWT)           └─────────────────────────┘
+┌────────────────┐         1. Authenticate (Supabase)          ┌─────────────────────────┐
+│  Angular SPA   │ ──────────────────────────────────────────► │      Supabase Auth      │
+│                │ ◄────────────────────────────────────────── │ (https://xxx.supabase.co)│
+└───────┬────────┘          2. Access Token (JWT)              └─────────────────────────┘
         │
         │ 3. API Request + Authorization: Bearer <JWT>
         ▼
 ┌────────────────────────┐  4. Validate Signature (JWKS)
-│      API Gateway       │ ───────────────────────────────► [Microsoft JWKS Endpoint]
+│      API Gateway       │ ──────────────────────────────────────────► [Supabase JWKS Endpoint]
 │       Port 8080        │
 └───────┬────────────────┘
         │ 5. Token Relay (Forward Header)
@@ -33,16 +33,23 @@ SeatFlow externalizes user authentication and credential management to **Microso
 ### 2.1 Standard JWT Payload Structure
 ```json
 {
-  "iss": "https://seatflow.ciamlogin.com/.../v2.0",
+  "iss": "https://txyyirobwnomhxygbacq.supabase.co/auth/v1",
   "sub": "123e4567-e89b-12d3-a456-426614174000",
-  "aud": "api://seatflow-backend",
+  "aud": "authenticated",
   "exp": 1756000000,
   "iat": 1755996400,
   "email": "customer@seatflow.com",
-  "name": "Alex Smith",
-  "roles": [
-    "ROLE_CUSTOMER"
-  ]
+  "app_metadata": {
+    "provider": "email",
+    "providers": ["email"],
+    "roles": [
+      "ROLE_CUSTOMER"
+    ]
+  },
+  "user_metadata": {
+    "name": "Alex Smith"
+  },
+  "role": "authenticated"
 }
 ```
 
@@ -52,14 +59,14 @@ SeatFlow externalizes user authentication and credential management to **Microso
 - `ROLE_ADMIN` — Assigned to platform administrators (can create events, modify venues, view platform sales metrics).
 
 ### 2.3 JWT Converter (`JwtRoleConverter`)
-Located in `common-security`, automatically converts the `roles` JSON array into Spring Security `GrantedAuthority` instances:
+Located in `common-security`, automatically converts the `roles` (from `app_metadata.roles`, `user_metadata.roles`, or root `roles`) JSON array into Spring Security `GrantedAuthority` instances:
 ```java
 @Component
 public class JwtRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
     @Override
     public Collection<GrantedAuthority> convert(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null || roles.isEmpty()) {
+        List<String> roles = extractRoles(jwt);
+        if (roles.isEmpty()) {
             return List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
         }
         return roles.stream()

@@ -1,20 +1,21 @@
 import { inject, Injectable, InjectionToken, signal } from '@angular/core';
-import type {
-  AccountInfo,
-  AuthenticationResult,
-  Configuration,
-  IPublicClientApplication,
-} from '@azure/msal-browser';
+import {
+  createClient,
+  Session,
+  SupabaseClient,
+  User,
+} from '@supabase/supabase-js';
 import { JwtClaims, UserProfile } from '../../models/user.model';
 import { UserContextService } from './user-context.service';
 
-export interface AuthClientConfiguration {
-  clientId: string;
-  tenantSubdomain: string;
-  apiScope: string;
+export interface SupabaseAuthConfiguration {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
-const placeholderClientId = '00000000-0000-0000-0000-000000000000';
+const defaultSupabaseUrl = 'https://txyyirobwnomhxygbacq.supabase.co';
+const defaultSupabaseAnonKey =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR4eXlpcm9id25vbWh4eWdiYWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4OTA5NjIsImV4cCI6MjEwMzQ2Njk2Mn0.e6hzLPiDkCJSA9ZKp9y_TcCzrymmptvAd3ly2bbouNc';
 
 function readRuntimeValue(name: string, fallback: string): string {
   const globalObject = globalThis as Record<string, unknown>;
@@ -25,57 +26,44 @@ function readRuntimeValue(name: string, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-export const AUTH_CLIENT_CONFIG = new InjectionToken<AuthClientConfiguration>(
-  'AUTH_CLIENT_CONFIG',
+export const SUPABASE_AUTH_CONFIG = new InjectionToken<SupabaseAuthConfiguration>(
+  'SUPABASE_AUTH_CONFIG',
   {
     providedIn: 'root',
-    factory: () => {
-      const clientId = readRuntimeValue('NG_APP_ENTRA_CLIENT_ID', placeholderClientId);
-
-      return {
-        clientId,
-        tenantSubdomain: readRuntimeValue('NG_APP_ENTRA_TENANT_SUBDOMAIN', 'seatflow'),
-        apiScope: readRuntimeValue('NG_APP_ENTRA_API_SCOPE', `api://${clientId}/access_as_user`),
-      };
-    },
+    factory: () => ({
+      supabaseUrl: readRuntimeValue('SUPABASE_URL', defaultSupabaseUrl),
+      supabaseAnonKey: readRuntimeValue('SUPABASE_ANON_KEY', defaultSupabaseAnonKey),
+    }),
   },
 );
 
-export const MSAL_CLIENT = new InjectionToken<Promise<IPublicClientApplication>>('MSAL_CLIENT', {
+export const SUPABASE_CLIENT = new InjectionToken<SupabaseClient>('SUPABASE_CLIENT', {
   providedIn: 'root',
   factory: () => {
-    const authConfig = inject(AUTH_CLIENT_CONFIG);
-    const authorityHost = `${authConfig.tenantSubdomain}.ciamlogin.com`;
-    const configuration: Configuration = {
+    const config = inject(SUPABASE_AUTH_CONFIG);
+    return createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: {
-        clientId: authConfig.clientId,
-        authority: `https://${authorityHost}/`,
-        knownAuthorities: [authorityHost],
-        redirectUri: window.location.origin,
-        postLogoutRedirectUri: window.location.origin,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
       },
-      cache: {
-        cacheLocation: 'sessionStorage',
-      },
-    };
-
-    return import('@azure/msal-browser').then(
-      ({ PublicClientApplication }) => new PublicClientApplication(configuration),
-    );
+    });
   },
 });
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly userContext = inject(UserContextService);
-  private readonly msalClientPromise = inject(MSAL_CLIENT);
-  private readonly authConfig = inject(AUTH_CLIENT_CONFIG);
+  private readonly supabase = inject(SUPABASE_CLIENT);
   private readonly accessToken = signal<string | null>(null);
-  private readonly initialization = this.initializeSession();
-  private msalClient: IPublicClientApplication | null = null;
+  private readonly initialization: Promise<void>;
 
   readonly isReady = signal(false);
   readonly lastError = signal<string | null>(null);
+
+  constructor() {
+    this.initialization = this.initializeSession();
+  }
 
   initialize(): Promise<void> {
     return this.initialization;
@@ -97,116 +85,136 @@ export class AuthService {
     return token;
   }
 
-  async acquireAccessToken(): Promise<string | null> {
-    await this.initialization;
-    const account = this.getActiveAccount();
-    if (!account) {
-      return null;
-    }
-
-    return this.acquireAccessTokenForAccount(account);
-  }
-
-  private async acquireAccessTokenForAccount(account: AccountInfo): Promise<string | null> {
-    try {
-      const result = await this.client.acquireTokenSilent({
-        account,
-        scopes: [this.authConfig.apiScope],
-      });
-      this.syncAuthenticationResult(result);
-      return this.getToken();
-    } catch (error: unknown) {
-      this.lastError.set(this.getErrorMessage(error));
-      return null;
-    }
-  }
-
-  async login(): Promise<void> {
+  async login(email: string, password: string): Promise<void> {
     await this.initialization;
     this.lastError.set(null);
 
-    try {
-      await this.client.loginRedirect({
-        scopes: ['openid', 'profile', 'email', this.authConfig.apiScope],
-      });
-    } catch (error: unknown) {
-      this.lastError.set(this.getErrorMessage(error));
+    const { data, error } = await this.supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      this.lastError.set(error.message);
+      throw error;
+    }
+
+    if (data.session) {
+      this.syncSession(data.session);
+    }
+  }
+
+  async signUp(email: string, password: string, name?: string): Promise<void> {
+    await this.initialization;
+    this.lastError.set(null);
+
+    const { data, error } = await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: name ? { name } : undefined,
+      },
+    });
+
+    if (error) {
+      this.lastError.set(error.message);
+      throw error;
+    }
+
+    if (data.session) {
+      this.syncSession(data.session);
+    }
+  }
+
+  async signInWithOAuth(provider: 'google' | 'github'): Promise<void> {
+    await this.initialization;
+    this.lastError.set(null);
+
+    const { error } = await this.supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      this.lastError.set(error.message);
       throw error;
     }
   }
 
   async logout(): Promise<void> {
     await this.initialization;
-    const account = this.getActiveAccount();
     this.clearSession();
 
-    try {
-      await this.client.logoutRedirect({
-        account: account ?? undefined,
-        postLogoutRedirectUri: window.location.origin,
-      });
-    } catch (error: unknown) {
-      this.lastError.set(this.getErrorMessage(error));
+    const { error } = await this.supabase.auth.signOut();
+    if (error) {
+      this.lastError.set(error.message);
       throw error;
     }
   }
 
   private async initializeSession(): Promise<void> {
     try {
-      this.msalClient = await this.msalClientPromise;
-      await this.client.initialize();
-      const redirectResult = await this.client.handleRedirectPromise();
-      const account = redirectResult?.account ?? this.getActiveAccount();
-
-      if (!account) {
+      const { data, error } = await this.supabase.auth.getSession();
+      if (error) {
         this.clearSession();
-        return;
-      }
-
-      this.client.setActiveAccount(account);
-
-      if (redirectResult) {
-        this.syncAuthenticationResult(redirectResult);
-        if (!this.accessToken()) {
-          await this.acquireAccessTokenForAccount(account);
-        }
+        this.lastError.set(error.message);
+      } else if (data.session) {
+        this.syncSession(data.session);
       } else {
-        this.syncUserFromClaims(account.idTokenClaims as JwtClaims | undefined, account);
-        await this.acquireAccessTokenForAccount(account);
+        this.clearSession();
       }
+
+      this.supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          this.syncSession(session);
+        } else {
+          this.clearSession();
+        }
+      });
     } catch (error: unknown) {
       this.clearSession();
-      this.lastError.set(this.getErrorMessage(error));
+      this.lastError.set(error instanceof Error ? error.message : 'Session initialization failed');
     } finally {
       this.isReady.set(true);
     }
   }
 
-  private getActiveAccount(): AccountInfo | null {
-    return this.client.getActiveAccount() ?? this.client.getAllAccounts()[0] ?? null;
+  syncSession(session: Session): void {
+    const token = session.access_token;
+    this.accessToken.set(token);
+
+    const claims = token ? this.decodeJwt(token) : null;
+    const user = session.user;
+
+    this.syncUserFromSession(claims, user);
   }
 
-  private syncAuthenticationResult(result: AuthenticationResult): void {
-    if (result.account) {
-      this.client.setActiveAccount(result.account);
-    }
-
-    if (result.accessToken) {
-      this.accessToken.set(result.accessToken);
-    }
-
-    const accessClaims = result.accessToken ? this.decodeJwt(result.accessToken) : null;
-    const idClaims = result.idTokenClaims as JwtClaims | undefined;
-    this.syncUserFromClaims(accessClaims ?? idClaims, result.account);
-  }
-
-  private syncUserFromClaims(claims: JwtClaims | undefined | null, account: AccountInfo): void {
-    if (!claims?.sub && !account.localAccountId) {
+  private syncUserFromSession(claims: JwtClaims | null, user: User | null): void {
+    if (!user && !claims?.sub) {
       this.clearSession();
       return;
     }
 
-    let roles = (claims?.roles ?? []).map((role) =>
+    const rawRoles: string[] = [];
+
+    // 1. Check claims app_metadata
+    if (claims?.app_metadata && Array.isArray(claims.app_metadata.roles)) {
+      rawRoles.push(...claims.app_metadata.roles);
+    } else if (claims?.roles && Array.isArray(claims.roles)) {
+      rawRoles.push(...claims.roles);
+    }
+
+    // 2. Check user app_metadata / user_metadata from Supabase User object
+    if (user?.app_metadata && Array.isArray(user.app_metadata['roles'])) {
+      rawRoles.push(...(user.app_metadata['roles'] as string[]));
+    }
+    if (user?.user_metadata && Array.isArray(user.user_metadata['roles'])) {
+      rawRoles.push(...(user.user_metadata['roles'] as string[]));
+    }
+
+    let roles = Array.from(new Set(rawRoles)).map((role) =>
       role.startsWith('ROLE_') ? role : `ROLE_${role}`,
     );
 
@@ -214,14 +222,21 @@ export class AuthService {
       roles = ['ROLE_CUSTOMER'];
     }
 
-    const user: UserProfile = {
-      id: claims?.sub ?? account.localAccountId,
-      email: claims?.email ?? account.username,
-      name: claims?.name ?? account.name,
+    const userName =
+      (user?.user_metadata?.['name'] as string | undefined) ??
+      claims?.name ??
+      user?.email ??
+      claims?.email ??
+      'User';
+
+    const userProfile: UserProfile = {
+      id: user?.id ?? claims?.sub ?? '',
+      email: user?.email ?? claims?.email ?? '',
+      name: userName,
       roles,
     };
 
-    this.userContext.setUser(user);
+    this.userContext.setUser(userProfile);
   }
 
   private clearSession(): void {
@@ -229,15 +244,7 @@ export class AuthService {
     this.userContext.clearUser();
   }
 
-  private get client(): IPublicClientApplication {
-    if (!this.msalClient) {
-      throw new Error('The authentication client has not finished initializing.');
-    }
-
-    return this.msalClient;
-  }
-
-  private decodeJwt(token: string): JwtClaims | null {
+  decodeJwt(token: string): JwtClaims | null {
     const payload = token.split('.')[1];
     if (!payload) {
       return null;
@@ -251,9 +258,5 @@ export class AuthService {
     } catch {
       return null;
     }
-  }
-
-  private getErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : 'Authentication could not be completed.';
   }
 }

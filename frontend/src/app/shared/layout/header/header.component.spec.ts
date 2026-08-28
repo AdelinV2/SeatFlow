@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
 import { ThemeService } from '../../../core/theme/theme.service';
@@ -98,10 +98,13 @@ describe('HeaderComponent', () => {
     expect(themeButton.getAttribute('aria-label')).toBe('Switch to dark theme');
   });
 
-  it('delegates sign-in and sign-out to AuthService', () => {
+  it('delegates sign-in navigation and sign-out to AuthService', () => {
+    const router = TestBed.inject(Router);
+    spyOn(router, 'navigate');
+
     fixture.detectChanges();
     fixture.componentInstance.signIn();
-    expect(authService.login).toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/auth/login']);
 
     userContext.setUser({
       id: 'user-123',

@@ -7,7 +7,7 @@
 **Architecture:** Microservices, service discovery with Eureka, event-driven, REST + WebSocket  
 **Deployment target:** Google Cloud for production; Docker Compose for local development  
 **Service discovery:** Netflix Eureka Server + Spring Cloud Eureka Clients (Spring Cloud 2025.1.x — Oakwood)  
-**Authentication:** Microsoft Entra External ID with OIDC, Google federation, email/password  
+**Authentication:** Supabase Auth (OIDC / JWT, Google federation, email/password - ADR-006)  
 **AI:** Optional Phase 2 using Spring AI + MCP/tool calling  
 
 ---
@@ -1364,20 +1364,20 @@ Every Redis usage must answer the question: “What problem does Redis solve her
 
 ## 15.1 Identity provider
 
-Use **Microsoft Entra External ID** for customer identity.
+Use **Supabase Auth** (OIDC / JWT) for customer identity per ADR-006.
 
 Primary login options:
 
 1. Email + password.
-2. Google account sign-in.
+2. Google account sign-in / Social OAuth.
 
-The authentication system is delegated to Entra. SeatFlow does not manage raw user passwords.
+The authentication system is delegated to Supabase Auth. SeatFlow does not manage raw user passwords.
 
 ## 15.2 Angular
 
-Use the Microsoft-supported MSAL Angular/OIDC approach.
+Use `@supabase/supabase-js` or standard OIDC client approach.
 
-Use Authorization Code + PKCE for the SPA.
+Use Authorization Code + PKCE / Supabase token management for the SPA.
 
 ## 15.3 Backend
 
