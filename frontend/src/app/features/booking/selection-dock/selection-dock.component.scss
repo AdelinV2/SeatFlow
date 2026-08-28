@@ -1,0 +1,138 @@
+:host {
+  display: contents;
+}
+
+.selection-dock {
+  position: fixed;
+  z-index: 50;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 0.8rem max(1rem, env(safe-area-inset-right)) max(0.8rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  pointer-events: none;
+}
+
+.selection-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100%, 58rem);
+  margin: 0 auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, #6366f1 20%);
+  border-radius: 1.1rem;
+  background: color-mix(in srgb, var(--color-surface-elevated) 90%, transparent);
+  box-shadow: 0 24px 70px rgb(15 23 42 / 30%);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.seat-list,
+.seat-pills,
+.checkout-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.seat-list {
+  min-width: 0;
+}
+
+.seat-pills {
+  overflow-x: auto;
+  max-width: min(40vw, 27rem);
+  padding-block: 0.2rem;
+}
+
+.count-badge,
+.seat-pill {
+  white-space: nowrap;
+  border-radius: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.count-badge {
+  padding: 0.38rem 0.55rem;
+  border: 1px solid rgb(99 102 241 / 25%);
+  background: rgb(99 102 241 / 10%);
+  color: #6366f1;
+}
+
+.seat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.32rem 0.35rem 0.32rem 0.52rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.seat-pill button {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.seat-pill button:hover,
+.seat-pill button:focus-visible {
+  background: rgb(244 63 94 / 12%);
+  color: #f43f5e;
+  outline: none;
+}
+
+.checkout-summary {
+  flex: none;
+}
+
+.total {
+  text-align: right;
+}
+
+.total span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.total strong {
+  color: #6366f1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 760px) {
+  .selection-content {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .seat-list {
+    width: 100%;
+  }
+
+  .seat-pills {
+    max-width: none;
+    flex: 1;
+  }
+
+  .checkout-summary {
+    justify-content: space-between;
+    width: 100%;
+  }
+}

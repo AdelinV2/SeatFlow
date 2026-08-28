@@ -1,0 +1,217 @@
+:host {
+  display: block;
+}
+
+.selection-page {
+  min-height: calc(100vh - 4rem);
+  padding: clamp(1rem, 3vw, 2.5rem) clamp(1rem, 4vw, 4rem) 9rem;
+  background:
+    radial-gradient(circle at 8% 5%, rgb(99 102 241 / 10%), transparent 25rem),
+    var(--color-background);
+}
+
+.page-content {
+  width: min(100%, 76rem);
+  margin: 0 auto;
+}
+
+.back-link {
+  display: inline-flex;
+  margin-bottom: 1.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+  color: #6366f1;
+}
+
+.event-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.3rem;
+}
+
+.event-heading h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(1.8rem, 5vw, 3.2rem);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
+}
+
+.event-heading p {
+  margin: 0.45rem 0 0;
+  color: var(--color-text-secondary);
+}
+
+.event-heading .eyebrow {
+  margin-bottom: 0.35rem;
+  color: #6366f1;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.live-status i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.live-status.connected {
+  border-color: rgb(16 185 129 / 25%);
+  color: #059669;
+}
+
+.live-status.connected i {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgb(16 185 129 / 12%);
+}
+
+.guest-email-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgb(99 102 241 / 20%);
+  border-radius: 1rem;
+  background: rgb(99 102 241 / 6%);
+}
+
+.guest-email-card h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+}
+
+.guest-email-card p {
+  margin: 0.18rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.guest-email-card label {
+  display: grid;
+  width: min(100%, 21rem);
+  gap: 0.3rem;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.guest-email-card input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  outline: none;
+}
+
+.guest-email-card input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 15%);
+}
+
+.guest-email-card input[aria-invalid='true'] {
+  border-color: #f43f5e;
+}
+
+.guest-email-card small {
+  color: #e11d48;
+}
+
+.loading-panel,
+.error-panel {
+  min-height: 28rem;
+}
+
+.heading-skeleton {
+  width: min(32rem, 75%);
+  height: 4.5rem;
+  margin-bottom: 1.25rem;
+  border-radius: 1rem;
+}
+
+.map-skeleton {
+  height: 28rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.5rem;
+}
+
+.error-panel {
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.error-panel > span {
+  color: #6366f1;
+  font-size: 3rem;
+}
+
+.error-panel h1 {
+  margin: 0.5rem 0;
+  color: var(--color-text-primary);
+}
+
+.error-panel p {
+  margin: 0 0 1rem;
+  color: var(--color-text-secondary);
+}
+
+.error-panel button {
+  justify-self: center;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: #6366f1;
+  color: white;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+@media (max-width: 720px) {
+  .event-heading,
+  .guest-email-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .live-status {
+    align-self: flex-start;
+  }
+
+  .guest-email-card label {
+    width: 100%;
+  }
+}

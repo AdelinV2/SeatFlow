@@ -1,0 +1,109 @@
+<section class="seat-map-shell" aria-labelledby="seat-map-heading">
+  <div class="map-toolbar">
+    <div>
+      <p class="eyebrow">Interactive venue map</p>
+      <h2 id="seat-map-heading">Choose your seats</h2>
+    </div>
+
+    <div class="zoom-controls" aria-label="Seat map zoom controls">
+      <button type="button" (click)="zoomOut()" aria-label="Zoom out">−</button>
+      <input
+        type="range"
+        min="0.5"
+        max="2.5"
+        step="0.1"
+        [value]="zoomLevel()"
+        (input)="setZoomFromInput($event)"
+        aria-label="Zoom level"
+      />
+      <button type="button" (click)="zoomIn()" aria-label="Zoom in">+</button>
+      <button type="button" class="reset-button" (click)="resetView()">Reset view</button>
+    </div>
+  </div>
+
+  @if (sections().length > 1) {
+    <nav class="section-tabs" aria-label="Venue sections">
+      @for (section of sections(); track section.id) {
+        <button
+          type="button"
+          [class.active]="activeSectionId() === section.id"
+          [attr.aria-pressed]="activeSectionId() === section.id"
+          (click)="isolateSection(section.id)"
+        >
+          {{ section.name }}
+        </button>
+      }
+    </nav>
+  }
+
+  <div class="viewport-frame">
+    <svg
+      class="seat-viewport"
+      [class.is-dragging]="isDragging()"
+      [attr.viewBox]="viewBox()"
+      role="group"
+      aria-label="Interactive seat map. Drag to pan and use the zoom controls or mouse wheel to zoom."
+      (wheel)="onWheel($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerEnd($event)"
+      (pointercancel)="onPointerEnd($event)"
+      (lostpointercapture)="onPointerEnd($event)"
+    >
+      <defs>
+        <linearGradient id="stageGradient" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#6366f1" />
+          <stop offset="100%" stop-color="#8b5cf6" />
+        </linearGradient>
+      </defs>
+
+      <g [attr.transform]="transformMatrix()">
+        <rect class="stage" x="48" y="24" [attr.width]="mapWidth() - 96" height="40" rx="20" />
+        <text class="stage-label" [attr.x]="mapWidth() / 2" y="49" text-anchor="middle">STAGE</text>
+
+        @for (seat of visibleSeats(); track seat.id) {
+          <g
+            class="seat-node"
+            [attr.data-status]="seat.status"
+            [class.selected]="selectedSeatIds().has(seat.id)"
+            [attr.role]="'button'"
+            [attr.tabindex]="isUnavailable(seat) ? -1 : 0"
+            [attr.aria-label]="seatLabel(seat)"
+            [attr.aria-pressed]="selectedSeatIds().has(seat.id)"
+            [attr.aria-disabled]="isUnavailable(seat)"
+            [matTooltip]="seatTooltip(seat)"
+            [matTooltipTouchGestures]="'off'"
+            (click)="handleSeatClick(seat)"
+            (keydown)="handleSeatKeydown($event, seat)"
+          >
+            <circle
+              class="seat-shape"
+              [class.seat-spring-bounce]="animatingSeatIds().has(seat.id)"
+              [attr.cx]="seatX(seat)"
+              [attr.cy]="seatY(seat)"
+              r="13"
+              (animationend)="clearSeatAnimation(seat.id)"
+            />
+            <text
+              class="seat-number"
+              [attr.x]="seatX(seat)"
+              [attr.y]="seatY(seat) + 3"
+              text-anchor="middle"
+              aria-hidden="true"
+            >
+              {{ seat.seatNumber }}
+            </text>
+          </g>
+        }
+      </g>
+    </svg>
+  </div>
+
+  <div class="legend" aria-label="Seat status legend">
+    <span><i class="available"></i> Available</span>
+    <span><i class="selected"></i> Selected</span>
+    <span><i class="held"></i> Held</span>
+    <span><i class="sold"></i> Sold</span>
+    <span><i class="disabled"></i> Unavailable</span>
+  </div>
+</section>
