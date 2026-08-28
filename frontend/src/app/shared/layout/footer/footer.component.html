@@ -21,9 +21,16 @@
           Premium live-event ticketing with real-time interactive seat booking, instant digital
           ticket delivery, and a zero double-booking guarantee.
         </p>
-        <div class="flex items-center gap-2 text-xs font-semibold text-emerald-500">
-          <span class="status-indicator" aria-hidden="true"></span>
-          <span>All Systems Operational</span>
+        <div class="flex items-center gap-2 text-xs font-semibold" [ngClass]="health.statusColor()">
+          <span
+            class="status-indicator"
+            [class.bg-emerald-500]="health.status() === 'OPERATIONAL'"
+            [class.bg-amber-500]="health.status() === 'DEGRADED'"
+            [class.bg-rose-500]="health.status() === 'DOWN'"
+            [class.bg-indigo-400]="health.status() === 'CHECKING'"
+            aria-hidden="true"
+          ></span>
+          <span>{{ health.statusLabel() }}</span>
         </div>
       </section>
 

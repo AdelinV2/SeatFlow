@@ -1,0 +1,169 @@
+<div class="admin-venues max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Top Navigation / Breadcrumbs -->
+  <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] mb-4">
+    <a routerLink="/admin" class="hover:text-[var(--color-primary)] transition-colors">Admin Portal</a>
+    <span>/</span>
+    <span class="text-[var(--color-text-primary)]">Venues</span>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 pb-6 border-b border-[var(--color-border)]">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+        Venue Management & Layouts
+      </h1>
+      <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+        Configure stadium, theatre, and arena layouts, manage coordinates, and build 2D seat grid matrices.
+      </p>
+    </div>
+
+    <a
+      routerLink="/admin/venues/new"
+      class="btn-spring inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/20 transition-all self-start md:self-auto"
+    >
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      <span>Create New Venue</span>
+    </a>
+  </div>
+
+  <!-- Filters & Search Bar -->
+  <div class="flex flex-col sm:flex-row gap-4 mb-8">
+    <div class="relative flex-1">
+      <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--color-text-muted)]">
+        <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" x2="16.65" y1="21" y2="16.65"/>
+        </svg>
+      </div>
+      <input
+        type="text"
+        placeholder="Search venues by name, address, or city..."
+        [ngModel]="searchQuery()"
+        (ngModelChange)="onSearchChange($event)"
+        class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-xs"
+      />
+    </div>
+
+    <!-- City Filter Pills -->
+    @if (uniqueCities().length > 1) {
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        @for (city of uniqueCities(); track city) {
+          <button
+            type="button"
+            (click)="onCitySelect(city)"
+            [class.bg-indigo-600]="selectedCity() === city"
+            [class.text-white]="selectedCity() === city"
+            [class.border-indigo-600]="selectedCity() === city"
+            class="btn-spring px-3.5 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)] whitespace-nowrap transition-all"
+          >
+            {{ city }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Venue Cards Grid -->
+  @if (isLoading()) {
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (i of [1,2,3,4,5,6]; track i) {
+        <div class="p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] space-y-4">
+          <app-skeleton-loader height="28px" width="60%"/>
+          <app-skeleton-loader height="16px" width="90%"/>
+          <div class="pt-4 border-t border-[var(--color-border)] flex justify-between">
+            <app-skeleton-loader height="20px" width="40%"/>
+            <app-skeleton-loader height="32px" width="30%"/>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (filteredVenues().length === 0) {
+    <div class="text-center py-16 border border-dashed border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)]/50">
+      <div class="size-14 rounded-2xl bg-indigo-500/10 text-indigo-500 mx-auto flex items-center justify-center mb-3">
+        <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+      </div>
+      <h3 class="text-lg font-bold text-[var(--color-text-primary)]">No matching venues found</h3>
+      <p class="text-sm text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto">
+        @if (searchQuery() || selectedCity() !== 'ALL') {
+          Try clearing your search query or city filters.
+        } @else {
+          Get started by adding your first venue to the SeatFlow platform.
+        }
+      </p>
+      @if (!searchQuery() && selectedCity() === 'ALL') {
+        <a routerLink="/admin/venues/new" class="btn-spring inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-md">
+          <span>Create Venue</span>
+        </a>
+      }
+    </div>
+  } @else {
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (venue of filteredVenues(); track venue.id) {
+        <div class="venue-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs hover:border-indigo-500/40 hover:shadow-lg transition-all duration-200 flex flex-col justify-between">
+          <div>
+            <!-- Venue Header & Location Badge -->
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-snug">
+                {{ venue.name }}
+              </h3>
+              <span class="shrink-0 px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                {{ venue.city }}
+              </span>
+            </div>
+
+            <!-- Address Line -->
+            <div class="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] mb-4">
+              <svg class="size-4 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+              <span class="truncate">{{ venue.address }}, {{ venue.country }}</span>
+            </div>
+
+            <!-- Capacity Badges Matrix -->
+            <div class="grid grid-cols-2 gap-2 mb-6">
+              <div class="p-3 rounded-xl bg-[var(--color-canvas)] border border-[var(--color-border-subtle)]">
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Max Capacity</span>
+                <span class="text-base font-black text-[var(--color-text-primary)]">{{ venue.capacity | number }}</span>
+              </div>
+              <div class="p-3 rounded-xl bg-[var(--color-canvas)] border border-[var(--color-border-subtle)]">
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Configured Seats</span>
+                <span class="text-base font-black text-indigo-600 dark:text-indigo-400">
+                  {{ venue.totalConfiguredSeats !== undefined ? (venue.totalConfiguredSeats | number) : '—' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div class="pt-4 border-t border-[var(--color-border)] flex items-center gap-2">
+            <a
+              [routerLink]="['/admin/venues', venue.id, 'designer']"
+              class="btn-spring flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs transition-colors"
+            >
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="18" height="18" x="3" y="3" rx="2"/>
+                <path d="M3 9h18M9 21V9"/>
+              </svg>
+              <span>Seat Grid Designer</span>
+            </a>
+
+            <a
+              [routerLink]="['/admin/venues', venue.id, 'edit']"
+              class="btn-spring p-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)] hover:text-indigo-600 transition-colors"
+              title="Edit Venue Details & Map"
+            >
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { adminGuard } from './core/guards/admin.guard';
 import { guestGuard } from './core/guards/guest.guard';
 
 export const routes: Routes = [
@@ -55,6 +56,55 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/auth/callback/auth-callback.component').then(
         (m) => m.AuthCallbackComponent,
+      ),
+  },
+  // Admin Routes (Protected by adminGuard)
+  {
+    path: 'admin',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/admin-portal/admin-portal.component').then(
+        (m) => m.AdminPortalComponent,
+      ),
+  },
+  {
+    path: 'admin/venues',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/venues/admin-venue-list/admin-venue-list.component').then(
+        (m) => m.AdminVenueListComponent,
+      ),
+  },
+  {
+    path: 'admin/venues/new',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/venues/admin-venue-editor/admin-venue-editor.component').then(
+        (m) => m.AdminVenueEditorComponent,
+      ),
+  },
+  {
+    path: 'admin/venues/:id/edit',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/venues/admin-venue-editor/admin-venue-editor.component').then(
+        (m) => m.AdminVenueEditorComponent,
+      ),
+  },
+  {
+    path: 'admin/venues/:id/designer',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/venues/venue-grid-designer/venue-grid-designer.component').then(
+        (m) => m.VenueGridDesignerComponent,
+      ),
+  },
+  {
+    path: 'admin/users',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/users/admin-user-list/admin-user-list.component').then(
+        (m) => m.AdminUserListComponent,
       ),
   },
   {

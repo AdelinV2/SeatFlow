@@ -129,15 +129,13 @@ export class VenueMapViewComponent implements AfterViewInit, OnDestroy {
       this.map.removeLayer(this.tileLayer);
     }
 
-    const tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
     this.tileLayer = L.tileLayer(tileUrl, {
-      subdomains: 'abcd',
       maxZoom: 19,
+      className: isDark ? 'dark-map-tiles' : '',
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
     }).addTo(this.map);
   }
 

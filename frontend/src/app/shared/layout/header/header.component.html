@@ -87,7 +87,7 @@
 
         @if (userContext.isAdmin()) {
           <a
-            routerLink="/admin/events"
+            routerLink="/admin"
             routerLinkActive="nav-pill--active"
             class="nav-pill"
             (click)="closeMobileMenu()"
@@ -367,7 +367,7 @@
 
       @if (userContext.isAdmin()) {
         <a
-          routerLink="/admin/events"
+          routerLink="/admin"
           routerLinkActive="mobile-nav-link--active"
           class="mobile-nav-link"
           (click)="closeMobileMenu()"
