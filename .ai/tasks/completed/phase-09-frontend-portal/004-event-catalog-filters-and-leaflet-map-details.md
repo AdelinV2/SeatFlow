@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/06-api-contracts.md` (Section 2.3), `.ai/architecture/07-frontend-specification.md` (Section 3, 4.1), `frontend/AGENTS.md`
 - **Related ADRs:** `ADR-003` (Automated Event Completion & Lifecycle Reconciliation)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,20 +15,21 @@
 Implement the public event discovery experience. This includes the public catalog page (`EventListComponent` on `/` and `/events`) featuring a hero carousel, an **Interactive Monthly Event Calendar View (`EventCalendarComponent`)** supporting both a **full desktop month grid with event chips** and a **compact mobile dot matrix view** (with `<` `>` month navigation and 1-click day filtering), category pills, debounced search, scroll-down reveal animations, and the event details page (`EventDetailComponent` on `/events/:id`) featuring 16:9 hero media, pricing tier breakdowns, a sticky "Select Seats" CTA, and an interactive **Leaflet.js** map with theme-adaptive CartoDB tiles and external navigation links.
 
 ### Critical Invariants to Enforce:
-- [ ] **Interactive Monthly Calendar Component (`EventCalendarComponent`):**
+- [x] **Interactive Monthly Calendar Component (`EventCalendarComponent`):**
   - **Desktop View ($\ge 768\text{px}$):** Full 7-column month grid (LUN, MAR, MIE, J, VIN, S, D) displaying event title chips on scheduled days.
   - **Mobile View ($< 768\text{px}$):** Compact monthly calendar with blue event indicator dots under dates that contain active events.
   - **Month Navigation & Day Selection:** `<` and `>` controls for browsing months, clicking a day filters the event list to that specific date.
-- [ ] **100% Free Maps (Zero Paid Google Maps API):** Venue map must use Leaflet.js with theme-adaptive tiles (`CartoDB Dark Matter` in dark mode and `CartoDB Positron` in light mode) and dynamic tile-switching when the user toggles themes.
-- [ ] **External Navigation Links:** Venue map popup must provide deep links to open the venue coordinates in Google Maps, Apple Maps, and Waze.
-- [ ] **Only Published & Future Events (ADR-003):** Public catalog queries `GET /api/events` which returns only published events whose `eventDate > now()`. Expired or draft events display a friendly 404 / unavailable message.
-- [ ] **Scroll-Down Reveal Animations:** Event cards and calendar sections implement smooth entrance animations on scroll (`animate-fade-in-up`, `hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300`).
+- [x] **100% Free Maps (Zero Paid Google Maps API):** Venue map must use Leaflet.js with theme-adaptive tiles (`CartoDB Dark Matter` in dark mode and `CartoDB Positron` in light mode) and dynamic tile-switching when the user toggles themes.
+- [x] **External Navigation Links:** Venue map popup must provide deep links to open the venue coordinates in Google Maps, Apple Maps, and Waze.
+- [x] **Only Published & Future Events (ADR-003):** Public catalog queries `GET /api/events` which returns only published events whose `eventDate > now()`. Expired or draft events display a friendly 404 / unavailable message.
+- [x] **Scroll-Down Reveal Animations:** Event cards and calendar sections implement smooth entrance animations on scroll (`animate-fade-in-up`, `hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300`).
 
 ---
 
 ## 3. Exact File Inventory
 - `[NEW]` `frontend/src/app/models/event.model.ts`
 - `[NEW]` `frontend/src/app/services/event-api.service.ts`
+- `[NEW]` `frontend/src/app/services/venue-api.service.ts`
 - `[NEW]` `frontend/src/app/features/events/event-calendar/event-calendar.component.ts`
 - `[NEW]` `frontend/src/app/features/events/event-calendar/event-calendar.component.html`
 - `[NEW]` `frontend/src/app/features/events/event-calendar/event-calendar.component.scss`
@@ -221,92 +222,6 @@ export class EventCalendarComponent {
 }
 ```
 
-```html
-<div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-4 md:p-6 shadow-sm">
-  <!-- Month Header Controls -->
-  <div class="flex items-center justify-between mb-6">
-    <div class="flex items-center gap-2">
-      <button (click)="prevMonth()" class="p-2 rounded-xl hover:bg-slate-800/10 dark:hover:bg-slate-800 text-[var(--color-text-secondary)] transition-all cursor-pointer">
-        ‹
-      </button>
-      <h3 class="text-base md:text-lg font-bold capitalize text-[var(--color-text-primary)]">
-        {{ formattedMonthHeader() }}
-      </h3>
-      <button (click)="nextMonth()" class="p-2 rounded-xl hover:bg-slate-800/10 dark:hover:bg-slate-800 text-[var(--color-text-secondary)] transition-all cursor-pointer">
-        ›
-      </button>
-    </div>
-
-    @if (selectedDate()) {
-      <button (click)="dateSelected.emit(null)" class="text-xs text-indigo-400 font-semibold hover:underline cursor-pointer">
-        Clear Date Filter
-      </button>
-    }
-  </div>
-
-  <!-- Weekday Columns Header -->
-  <div class="grid grid-cols-7 gap-1 text-center text-xs font-bold text-muted uppercase tracking-wider mb-2">
-    @for (label of weekDayLabels; track label) {
-      <div class="py-1">{{ label }}</div>
-    }
-  </div>
-
-  <!-- Desktop Full Grid View (Hidden on Mobile) -->
-  <div class="hidden md:grid grid-cols-7 gap-1.5">
-    @for (day of calendarDays(); track day.date.toISOString()) {
-      <div
-        (click)="selectDay(day)"
-        class="min-h-[90px] p-2 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between"
-        [ngClass]="[
-          !day.isCurrentMonth ? 'opacity-30 border-transparent bg-transparent' : 'border-[var(--color-border-subtle)] bg-[var(--color-canvas)]',
-          day.isSelected ? 'ring-2 ring-indigo-500 bg-indigo-500/10 border-indigo-500/50' : 'hover:border-indigo-400/40',
-          day.isToday ? 'font-bold' : ''
-        ]"
-      >
-        <span class="text-xs" [ngClass]="day.isToday ? 'text-indigo-400' : 'text-[var(--color-text-primary)]'">
-          {{ day.dayNumber }}
-        </span>
-
-        <div class="space-y-1 overflow-hidden">
-          @for (event of day.events.slice(0, 2); track event.id) {
-            <div class="px-1.5 py-0.5 text-[10px] font-semibold truncate rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              {{ event.title }}
-            </div>
-          }
-          @if (day.events.length > 2) {
-            <span class="text-[9px] text-muted font-bold block">+{{ day.events.length - 2 }} more</span>
-          }
-        </div>
-      </div>
-    }
-  </div>
-
-  <!-- Mobile Dot Matrix View (Shown on Mobile) -->
-  <div class="grid md:hidden grid-cols-7 gap-1 text-center">
-    @for (day of calendarDays(); track day.date.toISOString()) {
-      <button
-        (click)="selectDay(day)"
-        class="py-2.5 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer"
-        [ngClass]="[
-          !day.isCurrentMonth ? 'opacity-30' : '',
-          day.isSelected ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800/10'
-        ]"
-      >
-        <span class="text-xs font-semibold">{{ day.dayNumber }}</span>
-        @if (day.events.length > 0) {
-          <span
-            class="w-1.5 h-1.5 rounded-full mt-1"
-            [ngClass]="day.isSelected ? 'bg-white' : 'bg-indigo-500 animate-pulse'"
-          ></span>
-        } @else {
-          <span class="w-1.5 h-1.5 mt-1"></span>
-        }
-      </button>
-    }
-  </div>
-</div>
-```
-
 ---
 
 ## 5. Step-by-Step Implementation Sequence
@@ -335,9 +250,9 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] Interactive event calendar renders desktop full grid with event pills and mobile dot matrix view.
-- [ ] Clicking a calendar date filters event cards to that specific date.
-- [ ] Leaflet map initializes accurately with theme-adaptive tiles and external navigation links.
-- [ ] Scroll animations and responsive mobile layouts render smoothly at 60 FPS.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/004-event-catalog-filters-and-leaflet-map-details.md`.
+- [x] Interactive event calendar renders desktop full grid with event pills and mobile dot matrix view.
+- [x] Clicking a calendar date filters event cards to that specific date.
+- [x] Leaflet map initializes accurately with theme-adaptive tiles and external navigation links.
+- [x] Scroll animations and responsive mobile layouts render smoothly at 60 FPS.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/004-event-catalog-filters-and-leaflet-map-details.md`.

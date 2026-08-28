@@ -19,10 +19,28 @@ function resolveMessage(error: HttpErrorResponse, apiError: ApiErrorResponse | n
     return 'Unable to connect to SeatFlow server. Please check your internet connection.';
   }
 
+  if (
+    error.error instanceof SyntaxError ||
+    (typeof error.error === 'string' && error.error.startsWith('<!doctype')) ||
+    error.message?.includes('Unexpected token')
+  ) {
+    return 'Invalid server response. Please verify the backend service is running.';
+  }
+
   const validationMessage = apiError?.validationErrors?.[0]?.message;
-  return (
-    validationMessage ?? apiError?.message ?? error.statusText ?? 'An unexpected error occurred'
-  );
+  if (validationMessage) {
+    return validationMessage;
+  }
+
+  if (apiError?.message) {
+    return apiError.message;
+  }
+
+  if (error.statusText && error.statusText !== 'OK') {
+    return error.statusText;
+  }
+
+  return 'An unexpected error occurred. Please try again.';
 }
 
 export const errorInterceptor: HttpInterceptorFn = (request, next) => {
@@ -53,7 +71,7 @@ export const errorInterceptor: HttpInterceptorFn = (request, next) => {
           duration: 6000,
           panelClass: 'snack-error',
         });
-      } else {
+      } else if (error.status === 0 || error.status >= 400) {
         snackBar.open(message, 'Close', {
           duration: 4500,
           panelClass: 'snack-warning',
