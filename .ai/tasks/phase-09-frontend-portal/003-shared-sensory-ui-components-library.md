@@ -276,11 +276,11 @@ export class DateFormatPipe implements PipeTransform {
 3. **Implement Hold Countdown Progress Ring:**
    - Create `HoldCountdownComponent` calculating remaining seconds, SVG stroke offset, formatting `MM:SS`, and emitting `(expired)` at 0 seconds.
 4. **Implement Status Badge Component:**
-   - Create `StatusBadgeComponent` mapping statuses (`AVAILABLE`, `HELD`, `SOLD`, `PUBLISHED`, `USED`, `CANCELLED`) to pill colors and labels.
+   - Create `StatusBadgeComponent` mapping statuses (`AVAILABLE`, `HELD`, `SOLD`, `PUBLISHED`, `VALID`, `USED`, `CANCELLED`) to pill colors and labels.
 5. **Implement Skeleton Loader Component:**
    - Create `SkeletonLoaderComponent` supporting text lines, rectangular card blocks, and circular avatar shapes with animated shimmer gradients.
 6. **Implement QR Modal Component:**
-   - Create `QrModalComponent` utilizing `@angular/material/dialog`, displaying large QR image, alphanumeric code, and copy-to-clipboard button.
+   - Create `QrModalComponent` utilizing `@angular/material/dialog`, displaying client-rendered high-density QR code (from `qrCodeData`), alphanumeric code, and copy-to-clipboard button.
 7. **Implement Formatting Pipes:**
    - Write `CurrencyFormatPipe` and `DateFormatPipe`.
 8. **Write Unit Tests:**

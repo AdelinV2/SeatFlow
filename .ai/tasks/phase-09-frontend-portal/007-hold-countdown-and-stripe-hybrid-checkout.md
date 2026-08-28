@@ -59,11 +59,11 @@ export interface PaymentStatusResponse {
   id: string;
   reservationId: string;
   customerEmail: string;
+  eventId?: string;
   amount: number;
-  taxAmount: number;
-  netAmount: number;
   currency: string;
-  status: 'INITIATED' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  status: 'INITIATED' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
+  failureReason?: string;
   createdAt: string;
 }
 ```
@@ -187,7 +187,7 @@ export class CheckoutComponent implements OnInit {
     const publishableKey = 'pk_test_TYooMQauvdEDq54NiTphI7jx'; // Standard Test Key
     this.stripe = await loadStripe(publishableKey);
 
-    const idempotencyKey = `pay-intent-${reservationId}-${Date.now()}`;
+    const idempotencyKey = `pay-intent-${reservationId}`;
     this.paymentService.createPaymentIntent({ reservationId, idempotencyKey }).subscribe({
       next: (intent) => {
         this.currentPaymentId = intent.paymentId;
@@ -239,11 +239,13 @@ export class CheckoutComponent implements OnInit {
 
     this.isProcessingPayment.set(true);
 
+    const customerEmail = this.guestForm.getRawValue().customerEmail || this.userContext.userEmail();
+
     const { error } = await this.stripe.confirmPayment({
       elements: this.elements,
       confirmParams: {
         return_url: `${window.location.origin}/order-confirmation/${this.currentPaymentId}`,
-        receipt_email: this.guestForm.value.customerEmail || undefined,
+        receipt_email: customerEmail || undefined,
       },
     });
 

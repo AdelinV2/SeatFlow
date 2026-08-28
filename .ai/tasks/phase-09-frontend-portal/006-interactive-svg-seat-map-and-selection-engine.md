@@ -51,9 +51,9 @@ import { Observable } from 'rxjs';
 
 export interface CreateReservationRequest {
   eventId: string;
-  seatIds: string[];
   customerEmail?: string;
-  customerName?: string;
+  seatIds: string[];
+  seatPrices: number[];
   idempotencyKey: string;
 }
 
@@ -168,7 +168,7 @@ export class SeatMapComponent {
   }
 
   startDrag(event: MouseEvent): void {
-    if ((event.target as HTMLElement).tagName === 'circle' || (event.target as HTMLElement).tagName === 'rect') return;
+    if ((event.target as Element).closest('.seat-node, circle, rect')) return;
     this.isDragging.set(true);
     this.dragStartX = event.clientX - this.panX();
     this.dragStartY = event.clientY - this.panY();
@@ -267,10 +267,10 @@ export class SelectionDockComponent {
 3. **Build SelectionDockComponent:**
    - Render floating dock displaying selected seat pills, total sum (`sfCurrency`), removal buttons, and "Hold Seats & Checkout" CTA.
 4. **Implement SeatSelectionComponent (Container Page):**
-   - Load event details and venue layout (`GET /api/events/:id/seat-map`).
+   - Load event details and venue layout (`GET /api/events/:id/seat-map`), flattening nested `sections[].seats[]` into `Seat[]` with section tier pricing.
    - Connect to `WebSocketService` on init (`connectForEvent(eventId, onConflict, selectedSeatIds)`).
    - Maintain `selectedSeats` Signal set with strict $\le 10$ limit check.
-   - On checkout trigger, generate unique idempotency key, call `POST /api/reservations`, and navigate to `/checkout/${response.id}`.
+   - On checkout trigger, generate unique idempotency key, call `POST /api/reservations` with `seatIds` and corresponding `seatPrices`, and navigate to `/checkout/${response.id}`.
 5. **Develop Unit Tests:**
    - Verify selection rejects 11th seat.
    - Verify total price computation.
