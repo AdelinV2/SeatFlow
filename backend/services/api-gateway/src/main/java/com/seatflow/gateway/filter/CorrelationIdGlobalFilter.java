@@ -31,7 +31,7 @@ public class CorrelationIdGlobalFilter implements GlobalFilter, Ordered {
                 .header(CORRELATION_ID_HEADER, finalCorrelationId)
                 .build();
 
-        exchange.getResponse().getHeaders().add(CORRELATION_ID_HEADER, finalCorrelationId);
+        exchange.getResponse().getHeaders().set(CORRELATION_ID_HEADER, finalCorrelationId);
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
     }

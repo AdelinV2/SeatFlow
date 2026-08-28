@@ -2,8 +2,9 @@
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka/
+      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}}
 
 seatflow:
   cors:
-    allowed-origins: http://localhost:4200
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200}
+

@@ -4,50 +4,21 @@ server:
 spring:
   application:
     name: api-gateway
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   cloud:
     gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Headers Access-Control-Allow-Methods, RETAIN_FIRST
       discovery:
         locator:
           enabled: true
           lower-case-service-id: true
-      routes:
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/users/**, /api/admin/users/**
-        - id: seat-map-service
-          uri: lb://seat-map-service
-          predicates:
-            - Path=/api/venues/**, /api/admin/venues/**
-        - id: event-service
-          uri: lb://event-service
-          predicates:
-            - Path=/api/events/**, /api/admin/events/**
-        - id: reservation-service
-          uri: lb://reservation-service
-          predicates:
-            - Path=/api/reservations/**, /api/admin/reservations/**
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/payments/**
-        - id: ticket-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/tickets/**, /api/scanner/tickets/**, /api/admin/tickets/**
-        - id: realtime-service
-          uri: lb://realtime-service
-          predicates:
-            - Path=/ws/**
-        - id: notification-service
-          uri: lb://notification-service
-          predicates:
-            - Path=/api/notifications/**, /api/admin/notifications/**
 
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://localhost:8761/eureka/}}
     register-with-eureka: true
     fetch-registry: true
   instance:
@@ -61,7 +32,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
+        include: health,info,metrics,gateway,prometheus
   endpoint:
     health:
       show-details: when_authorized

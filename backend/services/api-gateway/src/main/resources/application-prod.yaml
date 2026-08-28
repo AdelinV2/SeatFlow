@@ -2,7 +2,7 @@
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}}
 
 seatflow:
   cors:
@@ -12,3 +12,4 @@ management:
   endpoint:
     health:
       show-details: never
+
