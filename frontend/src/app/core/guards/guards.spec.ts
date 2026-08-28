@@ -11,6 +11,7 @@ import { AuthService } from '../auth/auth.service';
 import { UserContextService } from '../auth/user-context.service';
 import { adminGuard } from './admin.guard';
 import { authGuard } from './auth.guard';
+import { guestGuard } from './guest.guard';
 import { pendingChangesGuard, PendingChangesAware } from './pending-changes.guard';
 import { staffGuard } from './staff.guard';
 
@@ -90,6 +91,17 @@ describe('functional route guards', () => {
       confirmDiscardChanges: () => Promise.resolve(false),
     };
     expect(await runPendingGuard(dirtyComponent)).toBeFalse();
+  });
+
+  it('guestGuard allows unauthenticated guests to access auth pages', async () => {
+    expect(await runGuard(guestGuard, '/auth/login')).toBeTrue();
+  });
+
+  it('guestGuard redirects authenticated users to events or returnUrl', async () => {
+    userContext.setUser(createUser(['ROLE_CUSTOMER']));
+
+    const result = await runGuard(guestGuard, '/auth/login');
+    expect(router.serializeUrl(result as UrlTree)).toBe('/events');
   });
 
   async function runGuard(guard: typeof authGuard, url: string): Promise<boolean | UrlTree> {

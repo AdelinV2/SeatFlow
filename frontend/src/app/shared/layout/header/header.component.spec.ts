@@ -104,7 +104,9 @@ describe('HeaderComponent', () => {
 
     fixture.detectChanges();
     fixture.componentInstance.signIn();
-    expect(router.navigate).toHaveBeenCalledWith(['/auth/login']);
+    expect(router.navigate).toHaveBeenCalledWith(['/auth/login'], {
+      queryParams: { returnUrl: '/' },
+    });
 
     userContext.setUser({
       id: 'user-123',

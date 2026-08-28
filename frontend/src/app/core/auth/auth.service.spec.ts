@@ -45,6 +45,14 @@ describe('AuthService', () => {
           data: { provider: 'google', url: null },
           error: null,
         }),
+        resetPasswordForEmail: jasmine.createSpy('resetPasswordForEmail').and.resolveTo({
+          data: {},
+          error: null,
+        }),
+        updateUser: jasmine.createSpy('updateUser').and.resolveTo({
+          data: { user: null },
+          error: null,
+        }),
         signOut: jasmine.createSpy('signOut').and.resolveTo({ error: null }),
       },
     };
@@ -281,6 +289,45 @@ describe('AuthService', () => {
     expect(userContext.isAuthenticated()).toBeTrue();
     expect(userContext.isStaff()).toBeTrue();
     expect(service.getToken()).toBe(token);
+  });
+
+  it('triggers resetPasswordForEmail via Supabase client with redirect url', async () => {
+    const service = createService();
+    await service.initialize();
+
+    await service.resetPasswordForEmail('user@seatflow.test', 'https://custom-redirect.test/reset');
+
+    expect(supabaseMock.auth.resetPasswordForEmail).toHaveBeenCalledWith('user@seatflow.test', {
+      redirectTo: 'https://custom-redirect.test/reset',
+    });
+  });
+
+  it('triggers updateUser with new password via Supabase client', async () => {
+    const service = createService();
+    await service.initialize();
+
+    await service.updatePassword('NewSecretPassword123!');
+
+    expect(supabaseMock.auth.updateUser).toHaveBeenCalledWith({
+      password: 'NewSecretPassword123!',
+    });
+  });
+
+  it('triggers signInWithOAuth with prompt select_account option', async () => {
+    const service = createService();
+    await service.initialize();
+
+    await service.signInWithOAuth('google');
+
+    expect(supabaseMock.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
   });
 
   function createService(): AuthService {

@@ -133,7 +133,10 @@ export class AuthService {
     const { error } = await this.supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          prompt: 'select_account',
+        },
       },
     });
 
@@ -151,6 +154,35 @@ export class AuthService {
     if (error) {
       this.lastError.set(error.message);
       throw error;
+    }
+  }
+
+  async resetPasswordForEmail(email: string, redirectTo?: string): Promise<void> {
+    await this.initialization;
+    this.lastError.set(null);
+    const redirectUrl = redirectTo ?? `${window.location.origin}/auth/reset-password`;
+    const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+    if (error) {
+      this.lastError.set(error.message);
+      throw error;
+    }
+  }
+
+  async updatePassword(newPassword: string): Promise<void> {
+    await this.initialization;
+    this.lastError.set(null);
+    const { data, error } = await this.supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      this.lastError.set(error.message);
+      throw error;
+    }
+    if (data.user) {
+      const { data: sessionData } = await this.supabase.auth.getSession();
+      if (sessionData.session) {
+        this.syncSession(sessionData.session);
+      }
     }
   }
 

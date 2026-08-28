@@ -2,6 +2,7 @@ import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   PLATFORM_ID,
@@ -33,6 +34,22 @@ export class HeaderComponent {
   readonly theme = inject(ThemeService);
   readonly mobileMenuOpen = signal(false);
 
+  readonly userInitials = computed(() => {
+    const name = this.userContext.userName().trim();
+    if (!name) return 'U';
+    const parts = name.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  });
+
+  readonly userRoleBadge = computed(() => {
+    if (this.userContext.isAdmin()) return 'Admin';
+    if (this.userContext.isStaff()) return 'Staff';
+    return null;
+  });
+
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
       effect(() => {
@@ -51,7 +68,12 @@ export class HeaderComponent {
 
   signIn(): void {
     this.closeMobileMenu();
-    void this.router.navigate(['/auth/login']);
+    const currentUrl = this.router.url;
+    const returnUrl =
+      currentUrl && !currentUrl.startsWith('/auth') ? currentUrl : '/events';
+    void this.router.navigate(['/auth/login'], {
+      queryParams: { returnUrl },
+    });
   }
 
   signOut(): void {
