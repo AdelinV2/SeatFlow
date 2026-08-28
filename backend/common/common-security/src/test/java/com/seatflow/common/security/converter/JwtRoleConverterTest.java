@@ -7,6 +7,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -68,9 +69,9 @@ class JwtRoleConverterTest {
     @Test
     void shouldExtractRolesFromSupabaseAppMetadata() {
         Jwt jwt = Jwt.withTokenValue("supabase-token")
-                .header("alg", "RS256")
+                .header("alg", "ES256")
                 .subject("1234-5678")
-                .claim("app_metadata", java.util.Map.of("roles", List.of("ROLE_ADMIN", "STAFF")))
+                .claim("app_metadata", Map.of("roles", List.of("ROLE_ADMIN", "STAFF")))
                 .build();
 
         Collection<GrantedAuthority> authorities = converter.convert(jwt);
@@ -84,13 +85,42 @@ class JwtRoleConverterTest {
     @Test
     void shouldExtractRolesFromUserMetadataIfAppMetadataMissing() {
         Jwt jwt = Jwt.withTokenValue("supabase-token")
-                .header("alg", "RS256")
+                .header("alg", "ES256")
                 .subject("1234-5678")
-                .claim("user_metadata", java.util.Map.of("roles", List.of("STAFF")))
+                .claim("user_metadata", Map.of("roles", List.of("STAFF")))
                 .build();
 
         Collection<GrantedAuthority> authorities = converter.convert(jwt);
 
         assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_STAFF"));
+    }
+
+    @Test
+    void shouldExtractSingleStringRoleFromAppMetadataOrUserMetadata() {
+        Jwt jwt = Jwt.withTokenValue("supabase-token")
+                .header("alg", "ES256")
+                .subject("1234-5678")
+                .claim("app_metadata", Map.of("role", "ADMIN"))
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_ADMIN"));
+    }
+
+    @Test
+    void shouldExtractRolesFromCommaSeparatedString() {
+        Jwt jwt = Jwt.withTokenValue("supabase-token")
+                .header("alg", "ES256")
+                .subject("1234-5678")
+                .claim("roles", "ADMIN, STAFF")
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities).containsExactlyInAnyOrder(
+                new SimpleGrantedAuthority("ROLE_ADMIN"),
+                new SimpleGrantedAuthority("ROLE_STAFF")
+        );
     }
 }
