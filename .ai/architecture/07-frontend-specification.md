@@ -165,12 +165,12 @@ frontend/
 ├── package.json
 ├── tsconfig.json
 ├── angular.json
-├── .env.example                       # API Gateway URL, Entra client ID
+├── .env.example                       # API Gateway URL, Supabase project credentials
 ├── .env                               # Local overrides (.gitignored)
 └── src/
     ├── app/
     │   ├── core/                      # Singletons, auth interceptor, error handling, theme engine
-    │   │   ├── auth/                  # AuthService, OIDC/Entra ID integration, token storage
+    │   │   ├── auth/                  # AuthService, Supabase Auth/OIDC integration, token storage
     │   │   ├── interceptors/          # auth.interceptor.ts, error.interceptor.ts, logging.interceptor.ts
     │   │   ├── guards/                # auth.guard.ts, admin.guard.ts, staff.guard.ts
     │   │   └── theme/                 # theme.service.ts (Dark/Light/System Signal engine)

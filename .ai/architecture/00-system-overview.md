@@ -4,7 +4,7 @@
 **Type:** Portfolio-Grade, Production-Oriented Event Ticketing & Real-Time Seat Reservation Platform  
 **Target Stack:** Java 21 (LTS), Spring Boot 4.1.x (Spring Framework 7), Angular 22, PostgreSQL, Redis, Kafka  
 **Service Discovery:** Netflix Eureka Server + Spring Cloud Eureka Clients (Spring Cloud 2025.1.x Oakwood)  
-**Authentication:** Microsoft Entra External ID with OIDC, Google Federation, Email/Password  
+**Authentication:** Supabase Auth (OIDC / JWT, Google Federation, Email/Password - ADR-006)  
 
 ---
 

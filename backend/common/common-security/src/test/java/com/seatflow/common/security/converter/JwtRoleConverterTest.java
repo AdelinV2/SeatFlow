@@ -64,4 +64,33 @@ class JwtRoleConverterTest {
         assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_ADMIN"));
         assertThat(authorities).doesNotContain(new SimpleGrantedAuthority("ROLE_ROLE_ADMIN"));
     }
+
+    @Test
+    void shouldExtractRolesFromSupabaseAppMetadata() {
+        Jwt jwt = Jwt.withTokenValue("supabase-token")
+                .header("alg", "RS256")
+                .subject("1234-5678")
+                .claim("app_metadata", java.util.Map.of("roles", List.of("ROLE_ADMIN", "STAFF")))
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities).containsExactlyInAnyOrder(
+                new SimpleGrantedAuthority("ROLE_ADMIN"),
+                new SimpleGrantedAuthority("ROLE_STAFF")
+        );
+    }
+
+    @Test
+    void shouldExtractRolesFromUserMetadataIfAppMetadataMissing() {
+        Jwt jwt = Jwt.withTokenValue("supabase-token")
+                .header("alg", "RS256")
+                .subject("1234-5678")
+                .claim("user_metadata", java.util.Map.of("roles", List.of("STAFF")))
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities).containsExactly(new SimpleGrantedAuthority("ROLE_STAFF"));
+    }
 }

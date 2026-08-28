@@ -1,6 +1,6 @@
 # 08 — Observability, CI/CD & Deployment Specification
 
-This document details the local development setup, `.env` configuration architecture, observability stack (OpenTelemetry, Prometheus, Grafana), GitHub Actions CI/CD pipelines (Staging & Production), and Multi-Cloud deployment (Google Cloud Platform compute + Microsoft Azure Entra ID / CIAM).
+This document details the local development setup, `.env` configuration architecture, observability stack (OpenTelemetry, Prometheus, Grafana), GitHub Actions CI/CD pipelines (Staging & Production), and Cloud deployment (Google Cloud Platform compute + Supabase Auth Identity Management - ADR-006).
 
 ---
 
@@ -12,7 +12,7 @@ SeatFlow strictly isolates secrets and configuration across environments using s
 - Every microservice and frontend module maintains a version-controlled `.env.example` in its directory containing dummy/placeholder values and documentation for all required variables.
 - Developers copy `.env.example` to `.env` locally.
 - Real `.env` files are strictly added to `.gitignore` and **never committed to Git**.
-- Spring Boot microservices read environment variables natively using property placeholders (e.g. `${DB_PASSWORD}`, `${STRIPE_API_KEY}`, `${AZURE_ENTRA_CLIENT_ID}`).
+- Spring Boot microservices read environment variables natively using property placeholders (e.g. `${DB_PASSWORD}`, `${STRIPE_API_KEY}`, `${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI}`).
 
 #### Directory Layout for Environment Files:
 ```text
@@ -48,9 +48,9 @@ DB_PASSWORD=postgres
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
-# Microsoft Entra ID (OIDC / JWT)
-AZURE_ENTRA_ISSUER_URI=https://seatflow.ciamlogin.com/12345678-1234-1234-1234-123456789abc/v2.0
-AZURE_ENTRA_CLIENT_ID=00000000-0000-0000-0000-000000000000
+# Supabase Auth (OIDC / JWT)
+SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json
+SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1
 
 # Stripe Sandbox
 STRIPE_API_KEY=sk_test_placeholder_key

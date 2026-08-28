@@ -189,14 +189,15 @@ Provides a standardized `logback-spring.xml` using `logstash-logback-encoder` wi
 
 ## 5. `common-security`
 
-Auto-configures Spring Security OAuth2 Resource Server integration with Microsoft Entra External ID / OIDC.
+Auto-configures Spring Security OAuth2 Resource Server integration with Supabase Auth / standard OIDC (ADR-006).
 
 ### 5.1 Roles & Claims Converter
-- Converts Microsoft Entra External ID / OIDC JWT roles into Spring Security `GrantedAuthority` (`ROLE_CUSTOMER`, `ROLE_ADMIN`).
+- Converts Supabase Auth (`app_metadata.roles`, `user_metadata.roles`) or OIDC JWT roles into Spring Security `GrantedAuthority` (`ROLE_CUSTOMER`, `ROLE_STAFF`, `ROLE_ADMIN`).
 - Constants defined in `SecurityRoles`:
   ```java
   public final class SecurityRoles {
       public static final String ROLE_CUSTOMER = "ROLE_CUSTOMER";
+      public static final String ROLE_STAFF = "ROLE_STAFF";
       public static final String ROLE_ADMIN = "ROLE_ADMIN";
   }
   ```

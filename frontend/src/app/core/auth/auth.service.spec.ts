@@ -1,70 +1,87 @@
 import { TestBed } from '@angular/core/testing';
-import type {
-  AccountInfo,
-  AuthenticationResult,
-  IPublicClientApplication,
-} from '@azure/msal-browser';
+import { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import {
-  AUTH_CLIENT_CONFIG,
-  AuthClientConfiguration,
   AuthService,
-  MSAL_CLIENT,
+  SUPABASE_AUTH_CONFIG,
+  SUPABASE_CLIENT,
+  SupabaseAuthConfiguration,
 } from './auth.service';
 import { UserContextService } from './user-context.service';
 
 describe('AuthService', () => {
-  let msalClient: jasmine.SpyObj<IPublicClientApplication>;
-  let account: AccountInfo;
-  const authConfig: AuthClientConfiguration = {
-    clientId: 'client-id',
-    tenantSubdomain: 'seatflow-test',
-    apiScope: 'api://seatflow/access_as_user',
+  let supabaseMock: any;
+  let authStateCallback: ((event: string, session: Session | null) => void) | null = null;
+
+  const authConfig: SupabaseAuthConfiguration = {
+    supabaseUrl: 'https://test-project.supabase.co',
+    supabaseAnonKey: 'test-anon-key',
   };
 
   beforeEach(() => {
-    account = {
-      homeAccountId: 'home-account',
-      environment: 'seatflow-test.ciamlogin.com',
-      tenantId: 'tenant-id',
-      username: 'alex@seatflow.test',
-      localAccountId: 'user-123',
-      name: 'Alex Morgan',
-      idTokenClaims: {
-        sub: 'user-123',
-        email: 'alex@seatflow.test',
-        name: 'Alex Morgan',
-        roles: ['ROLE_CUSTOMER'],
+    authStateCallback = null;
+    supabaseMock = {
+      auth: {
+        getSession: jasmine.createSpy('getSession').and.resolveTo({
+          data: { session: null },
+          error: null,
+        }),
+        onAuthStateChange: jasmine
+          .createSpy('onAuthStateChange')
+          .and.callFake((callback: (event: string, session: Session | null) => void) => {
+            authStateCallback = callback;
+            return {
+              data: { subscription: { unsubscribe: jasmine.createSpy('unsubscribe') } },
+            };
+          }),
+        signInWithPassword: jasmine.createSpy('signInWithPassword').and.resolveTo({
+          data: { session: null, user: null },
+          error: null,
+        }),
+        signUp: jasmine.createSpy('signUp').and.resolveTo({
+          data: { session: null, user: null },
+          error: null,
+        }),
+        signInWithOAuth: jasmine.createSpy('signInWithOAuth').and.resolveTo({
+          data: { provider: 'google', url: null },
+          error: null,
+        }),
+        signOut: jasmine.createSpy('signOut').and.resolveTo({ error: null }),
       },
-    } as AccountInfo;
-
-    msalClient = jasmine.createSpyObj<IPublicClientApplication>('MSAL client', [
-      'initialize',
-      'handleRedirectPromise',
-      'getActiveAccount',
-      'getAllAccounts',
-      'setActiveAccount',
-      'acquireTokenSilent',
-      'loginRedirect',
-      'logoutRedirect',
-    ]);
-    msalClient.initialize.and.resolveTo();
-    msalClient.getActiveAccount.and.returnValue(null);
-    msalClient.getAllAccounts.and.returnValue([]);
-    msalClient.loginRedirect.and.resolveTo();
-    msalClient.logoutRedirect.and.resolveTo();
+    };
   });
 
   afterEach(() => TestBed.resetTestingModule());
 
-  it('parses redirect JWT claims and normalizes roles into the user context', async () => {
+  it('parses Supabase JWT claims and normalizes roles into the user context', async () => {
     const token = createJwt({
       sub: 'user-123',
       email: 'alex@seatflow.test',
       name: 'Alex Morgan',
-      roles: ['CUSTOMER', 'ROLE_STAFF'],
+      app_metadata: {
+        roles: ['CUSTOMER', 'ROLE_STAFF'],
+      },
       exp: futureExpiration(),
     });
-    msalClient.handleRedirectPromise.and.resolveTo(createResult(token));
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'user-123',
+        email: 'alex@seatflow.test',
+        app_metadata: { roles: ['CUSTOMER', 'ROLE_STAFF'] },
+        user_metadata: { name: 'Alex Morgan' },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.getSession.and.resolveTo({
+      data: { session },
+      error: null,
+    });
 
     const service = createService();
     await service.initialize();
@@ -74,29 +91,43 @@ describe('AuthService', () => {
     expect(service.isReady()).toBeTrue();
     expect(userContext.currentUser()?.roles).toEqual(['ROLE_CUSTOMER', 'ROLE_STAFF']);
     expect(userContext.isStaff()).toBeTrue();
-    expect(msalClient.setActiveAccount).toHaveBeenCalledWith(account);
+    expect(userContext.userName()).toBe('Alex Morgan');
   });
 
-  it('restores a cached account and silently acquires a fresh API token', async () => {
+  it('defaults empty roles to ROLE_CUSTOMER aligning with backend convention', async () => {
     const token = createJwt({
       sub: 'user-123',
       email: 'alex@seatflow.test',
-      roles: ['ROLE_ADMIN'],
+      app_metadata: { roles: [] },
       exp: futureExpiration(),
     });
-    msalClient.handleRedirectPromise.and.resolveTo(null);
-    msalClient.getAllAccounts.and.returnValue([account]);
-    msalClient.acquireTokenSilent.and.resolveTo(createResult(token));
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'user-123',
+        email: 'alex@seatflow.test',
+        app_metadata: { roles: [] },
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.getSession.and.resolveTo({
+      data: { session },
+      error: null,
+    });
 
     const service = createService();
     await service.initialize();
+    const userContext = TestBed.inject(UserContextService);
 
-    expect(msalClient.acquireTokenSilent).toHaveBeenCalledWith({
-      account,
-      scopes: [authConfig.apiScope],
-    });
-    expect(service.getToken()).toBe(token);
-    expect(TestBed.inject(UserContextService).isAdmin()).toBeTrue();
+    expect(userContext.isCustomer()).toBeTrue();
+    expect(userContext.roles()).toEqual(['ROLE_CUSTOMER']);
   });
 
   it('rejects an expired access token or one within the 30s clock skew buffer', async () => {
@@ -106,7 +137,26 @@ describe('AuthService', () => {
       roles: ['ROLE_CUSTOMER'],
       exp: Math.floor(Date.now() / 1000) + 10,
     });
-    msalClient.handleRedirectPromise.and.resolveTo(createResult(token));
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 10,
+      token_type: 'bearer',
+      user: {
+        id: 'user-123',
+        email: 'alex@seatflow.test',
+        app_metadata: {},
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.getSession.and.resolveTo({
+      data: { session },
+      error: null,
+    });
 
     const service = createService();
     await service.initialize();
@@ -114,99 +164,133 @@ describe('AuthService', () => {
     expect(service.getToken()).toBeNull();
   });
 
-  it('defaults empty roles to ROLE_CUSTOMER aligning with backend convention', async () => {
+  it('executes login with Supabase client and syncs session', async () => {
     const token = createJwt({
-      sub: 'user-123',
-      email: 'alex@seatflow.test',
-      roles: [],
+      sub: 'admin-123',
+      email: 'admin@seatflow.com',
+      app_metadata: { roles: ['ROLE_ADMIN'] },
       exp: futureExpiration(),
     });
-    msalClient.handleRedirectPromise.and.resolveTo(createResult(token));
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'admin-123',
+        email: 'admin@seatflow.com',
+        app_metadata: { roles: ['ROLE_ADMIN'] },
+        user_metadata: { name: 'Admin User' },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.signInWithPassword.and.resolveTo({
+      data: { session, user: session.user },
+      error: null,
+    });
 
     const service = createService();
     await service.initialize();
 
-    expect(TestBed.inject(UserContextService).isCustomer()).toBeTrue();
-    expect(TestBed.inject(UserContextService).roles()).toEqual(['ROLE_CUSTOMER']);
-  });
+    await service.login('admin@seatflow.com', 'AdminPass123!');
 
-  it('acquires an access token when redirectResult lacks an accessToken', async () => {
-    const token = createJwt({
-      sub: 'user-123',
-      email: 'alex@seatflow.test',
-      roles: ['ROLE_CUSTOMER'],
-      exp: futureExpiration(),
+    expect(supabaseMock.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'admin@seatflow.com',
+      password: 'AdminPass123!',
     });
-    const resultWithoutToken = { ...createResult(''), accessToken: '' };
-    msalClient.handleRedirectPromise.and.resolveTo(resultWithoutToken);
-    msalClient.acquireTokenSilent.and.resolveTo(createResult(token));
-
-    const service = createService();
-    await service.initialize();
-
-    expect(msalClient.acquireTokenSilent).toHaveBeenCalled();
+    expect(TestBed.inject(UserContextService).isAdmin()).toBeTrue();
     expect(service.getToken()).toBe(token);
   });
 
-  it('starts the Entra redirect flow with OIDC and API scopes', async () => {
-    msalClient.handleRedirectPromise.and.resolveTo(null);
-    const service = createService();
-    await service.initialize();
-
-    await service.login();
-
-    expect(msalClient.loginRedirect).toHaveBeenCalledWith({
-      scopes: ['openid', 'profile', 'email', authConfig.apiScope],
-    });
-  });
-
-  it('clears the user context before redirecting to Entra sign-out', async () => {
+  it('executes logout and clears user context', async () => {
     const token = createJwt({
       sub: 'user-123',
       email: 'alex@seatflow.test',
       roles: ['ROLE_CUSTOMER'],
       exp: futureExpiration(),
     });
-    msalClient.handleRedirectPromise.and.resolveTo(createResult(token));
-    msalClient.getActiveAccount.and.returnValue(account);
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'user-123',
+        email: 'alex@seatflow.test',
+        app_metadata: {},
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.getSession.and.resolveTo({
+      data: { session },
+      error: null,
+    });
+
     const service = createService();
     await service.initialize();
+    expect(service.getToken()).toBe(token);
 
     await service.logout();
 
-    expect(TestBed.inject(UserContextService).currentUser()).toBeNull();
+    expect(supabaseMock.auth.signOut).toHaveBeenCalled();
     expect(service.getToken()).toBeNull();
-    expect(msalClient.logoutRedirect).toHaveBeenCalledWith({
-      account,
-      postLogoutRedirectUri: window.location.origin,
+    expect(TestBed.inject(UserContextService).currentUser()).toBeNull();
+  });
+
+  it('reacts to authStateChange events from Supabase', async () => {
+    const service = createService();
+    await service.initialize();
+    const userContext = TestBed.inject(UserContextService);
+
+    expect(userContext.isAuthenticated()).toBeFalse();
+
+    const token = createJwt({
+      sub: 'user-456',
+      email: 'live@seatflow.test',
+      app_metadata: { roles: ['ROLE_STAFF'] },
+      exp: futureExpiration(),
     });
+
+    const newSession: Session = {
+      access_token: token,
+      refresh_token: 'refresh-456',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'user-456',
+        email: 'live@seatflow.test',
+        app_metadata: { roles: ['ROLE_STAFF'] },
+        user_metadata: { name: 'Gate Staff' },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    // Trigger auth state change event
+    if (authStateCallback) {
+      authStateCallback('SIGNED_IN', newSession);
+    }
+
+    expect(userContext.isAuthenticated()).toBeTrue();
+    expect(userContext.isStaff()).toBeTrue();
+    expect(service.getToken()).toBe(token);
   });
 
   function createService(): AuthService {
     TestBed.configureTestingModule({
       providers: [
-        { provide: AUTH_CLIENT_CONFIG, useValue: authConfig },
-        { provide: MSAL_CLIENT, useValue: Promise.resolve(msalClient) },
+        { provide: SUPABASE_AUTH_CONFIG, useValue: authConfig },
+        { provide: SUPABASE_CLIENT, useValue: supabaseMock },
       ],
     });
     return TestBed.inject(AuthService);
-  }
-
-  function createResult(accessToken: string): AuthenticationResult {
-    return {
-      account,
-      accessToken,
-      idToken: 'id-token',
-      idTokenClaims: account.idTokenClaims,
-      scopes: [authConfig.apiScope],
-      uniqueId: account.localAccountId,
-      tenantId: account.tenantId,
-      tokenType: 'Bearer',
-      expiresOn: new Date(Date.now() + 60_000),
-      correlationId: 'correlation-id',
-      fromCache: false,
-      authority: `https://${authConfig.tenantSubdomain}.ciamlogin.com/`,
-    } as AuthenticationResult;
   }
 
   function createJwt(payload: Record<string, unknown>): string {
