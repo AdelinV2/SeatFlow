@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/07-frontend-specification.md`, `frontend/AGENTS.md`, `.ai/SeatFlow-Architecture-and-Implementation-Spec.md` (Section 17)
 - **Related ADRs:** `None`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,12 +15,12 @@
 Establish the foundational frontend application repository for **SeatFlow** using **Angular 22**, **TailwindCSS v4**, and **Angular Material 22**. Implement the core application shell, responsive layout scaffold, configuration files, scroll-reveal animation utilities, and the nuanced sensory design system with full Dark/Light theme switching powered by Angular Signals and CSS custom properties.
 
 ### Critical Invariants to Enforce:
-- [ ] **Zero Flat Pure #000000 or #FFFFFF:** Dark theme must use "Obsidian & Midnight Slate" (Canvas `#0B0F19`, Card Surface `#111827`, Elevated `#1E293B`, Borders `rgba(255, 255, 255, 0.08)`). Light theme must use "Warm Alabaster & Pearl Slate" (Canvas `#F8FAFC` to `#F1F5F9`, Card Surface `#FFFFFF`, Borders `#E2E8F0`).
-- [ ] **100% Mobile & Desktop Responsive Design:** Fluid layout breakpoints (`sm: 640px`, `md: 768px`, `lg: 1024px`, `xl: 1280px`), touch target minimums ($44 \times 44\text{px}$), and safe-area insets for mobile devices.
-- [ ] **Angular 22 Reactivity Standards:** 100% Standalone components (`standalone: true`), `ChangeDetectionStrategy.OnPush` on all components, Signals-first (`signal()`, `computed()`), and field-level `inject()`. Zero `NgModule` or `BehaviorSubject` for component state.
-- [ ] **TailwindCSS v4 CSS-First Architecture:** Configure styling via `@import "tailwindcss";` in `src/styles.scss`. Material components must not have conflicting Tailwind utility overrides applied directly to internal DOM classes.
-- [ ] **Sensory Motion, Tactile Physics & Scroll Reveals:** Global CSS tokens and animation utilities for button spring press (`active:scale-[0.97] transition-all duration-150 ease-out`), sheen sweep gradients (`@keyframes sheen`), seat spring bounce, and scroll-down reveal animations (`animate-fade-in-up`, `animate-slide-in`).
-- [ ] **Environment Template (.env.example):** Version-controlled `.env.example` defining API Gateway base URL, WebSocket URL, and Microsoft Entra client/tenant ID.
+- [x] **Zero Flat Pure #000000 or #FFFFFF:** Dark theme must use "Obsidian & Midnight Slate" (Canvas `#0B0F19`, Card Surface `#111827`, Elevated `#1E293B`, Borders `rgba(255, 255, 255, 0.08)`). Light theme must use "Warm Alabaster & Pearl Slate" (Canvas `#F8FAFC` to `#F1F5F9`, Card Surface `#FFFFFF`, Borders `#E2E8F0`).
+- [x] **100% Mobile & Desktop Responsive Design:** Fluid layout breakpoints (`sm: 640px`, `md: 768px`, `lg: 1024px`, `xl: 1280px`), touch target minimums ($44 \times 44\text{px}$), and safe-area insets for mobile devices.
+- [x] **Angular 22 Reactivity Standards:** 100% Standalone components (`standalone: true`), `ChangeDetectionStrategy.OnPush` on all components, Signals-first (`signal()`, `computed()`), and field-level `inject()`. Zero `NgModule` or `BehaviorSubject` for component state.
+- [x] **TailwindCSS v4 CSS-First Architecture:** Configure styling via `@import "tailwindcss";` in `src/styles.scss`. Material components must not have conflicting Tailwind utility overrides applied directly to internal DOM classes.
+- [x] **Sensory Motion, Tactile Physics & Scroll Reveals:** Global CSS tokens and animation utilities for button spring press (`active:scale-[0.97] transition-all duration-150 ease-out`), sheen sweep gradients (`@keyframes sheen`), seat spring bounce, and scroll-down reveal animations (`animate-fade-in-up`, `animate-slide-in`).
+- [x] **Environment Template (.env.example):** Version-controlled `.env.example` defining API Gateway base URL, WebSocket URL, and Microsoft Entra client/tenant ID.
 
 ---
 
@@ -281,8 +281,8 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] Angular 22 standalone app config and build scripts compile cleanly.
-- [ ] TailwindCSS v4 and Angular Material 22 base styling integrate with zero stylesheet compilation errors.
-- [ ] `ThemeService` switches between dark, light, and system themes with signal reactivity and updates the root `<html>` class.
-- [ ] All unit tests pass in `theme.service.spec.ts` and `app.component.spec.ts`.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/001-project-scaffolding-theme-and-design-tokens.md`.
+- [x] Angular 22 standalone app config and build scripts compile cleanly.
+- [x] TailwindCSS v4 and Angular Material 22 base styling integrate with zero stylesheet compilation errors.
+- [x] `ThemeService` switches between dark, light, and system themes with signal reactivity and updates the root `<html>` class.
+- [x] All unit tests pass in `theme.service.spec.ts` and `app.component.spec.ts`.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/001-project-scaffolding-theme-and-design-tokens.md`.
