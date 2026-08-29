@@ -1,13 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
 import { Seat, SeatAvailabilityResponse, SeatStatus } from '../models/seat.model';
 
 @Injectable({ providedIn: 'root' })
 export class SeatStateService implements OnDestroy {
   private readonly http = inject(HttpClient);
-  private readonly snackBar = inject(MatSnackBar);
   private reconciliationRequestId = 0;
   private seatUpdateSequence = 0;
   private readonly seatUpdateVersions = new Map<string, number>();
@@ -85,14 +83,6 @@ export class SeatStateService implements OnDestroy {
 
               if (selectedSeatIds?.has(seat.id) && serverStatus !== 'AVAILABLE') {
                 onConflict?.(seat.id);
-                const seatLabel = seat.rowLabel
-                  ? `${seat.rowLabel}-${seat.seatNumber}`
-                  : `#${seat.seatNumber}`;
-                this.snackBar.open(
-                  `Seat ${seatLabel} was just reserved by another user.`,
-                  'Close',
-                  { duration: 5000, panelClass: 'snack-warning' },
-                );
               }
 
               return { ...seat, status: serverStatus };

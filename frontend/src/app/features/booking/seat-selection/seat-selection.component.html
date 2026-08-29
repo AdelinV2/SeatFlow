@@ -1,0 +1,77 @@
+<main class="selection-page">
+  <div class="page-content">
+    <a class="back-link" [routerLink]="['/events', seatMap()?.eventId ?? id()]">← Event details</a>
+
+    @if (isLoading()) {
+      <section class="loading-panel" aria-busy="true" aria-label="Loading seat map">
+        <div class="skeleton-shimmer heading-skeleton"></div>
+        <div class="skeleton-shimmer map-skeleton"></div>
+      </section>
+    } @else if (loadError()) {
+      <section class="error-panel" role="alert">
+        <span aria-hidden="true">⌁</span>
+        <h1>We lost the seating chart</h1>
+        <p>{{ loadError() }}</p>
+        <button type="button" (click)="retryLoad()">Try again</button>
+      </section>
+    } @else if (seatMap(); as map) {
+      <header class="event-heading animate-fade-in-up">
+        <div>
+          <p class="eyebrow">{{ map.venueName }}</p>
+          <h1>{{ map.eventTitle }}</h1>
+          <p>
+            {{ map.eventDate | date: 'EEEE, MMMM d · h:mm a' }} ·
+            {{ map.totalConfiguredSeats }} seats
+          </p>
+        </div>
+        <span class="live-status" [class.connected]="connectionStatus() === 'CONNECTED'">
+          <i></i>
+          {{ connectionStatus() === 'CONNECTED' ? 'Live availability' : 'Connecting live updates' }}
+        </span>
+      </header>
+
+      @if (!isAuthenticated()) {
+        <section class="guest-email-card" aria-labelledby="guest-email-heading">
+          <div>
+            <h2 id="guest-email-heading">Where should we send your hold?</h2>
+            <p>Your email is required to secure seats as a guest.</p>
+          </div>
+          <label>
+            <span>Email address</span>
+            <input
+              type="email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              [value]="guestEmail()"
+              [attr.aria-invalid]="guestEmailTouched() && !guestEmailIsValid()"
+              [attr.aria-describedby]="
+                guestEmailTouched() && !guestEmailIsValid() ? 'guest-email-error' : null
+              "
+              (input)="updateGuestEmail($event)"
+              (blur)="guestEmailTouched.set(true)"
+              (keydown.enter)="createHold()"
+            />
+            @if (guestEmailTouched() && !guestEmailIsValid()) {
+              <small id="guest-email-error">Enter a valid email address.</small>
+            }
+          </label>
+        </section>
+      }
+
+      <app-seat-map
+        [seats]="seats()"
+        [maxSeats]="maxSeats"
+        [selectedSeatIds]="selectedSeatIds()"
+        (seatToggled)="toggleSeat($event)"
+      />
+    }
+  </div>
+
+  <app-selection-dock
+    [selectedSeats]="selectedSeats()"
+    [maxSeats]="maxSeats"
+    [isCreatingHold]="isCreatingHold()"
+    (seatRemoved)="removeSeat($event)"
+    (checkoutTriggered)="createHold()"
+  />
+</main>

@@ -8,6 +8,7 @@ import {
   PagedResult,
   VenueDetail,
 } from '../models/event.model';
+import { EventSeatMapResponse } from '../models/seat.model';
 
 @Injectable({ providedIn: 'root' })
 export class EventApiService {
@@ -51,7 +52,7 @@ export class EventApiService {
     return this.http.get<VenueDetail>(`${this.venuesUrl}/${venueId}`);
   }
 
-  getEventSeatMap(eventId: string): Observable<unknown> {
-    return this.http.get<unknown>(`${this.baseUrl}/${eventId}/seat-map`);
+  getEventSeatMap(eventId: string): Observable<EventSeatMapResponse> {
+    return this.http.get<EventSeatMapResponse>(`${this.baseUrl}/${eventId}/seat-map`);
   }
 }

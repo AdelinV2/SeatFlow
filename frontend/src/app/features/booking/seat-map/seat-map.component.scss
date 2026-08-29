@@ -1,0 +1,267 @@
+:host {
+  display: block;
+}
+
+.seat-map-shell {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 1.5rem;
+  background: var(--color-surface-elevated);
+  box-shadow: 0 24px 60px rgb(15 23 42 / 10%);
+}
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.eyebrow {
+  margin: 0 0 0.2rem;
+  color: #6366f1;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(1.2rem, 3vw, 1.65rem);
+  font-weight: 800;
+}
+
+.zoom-controls,
+.section-tabs,
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.zoom-controls button,
+.section-tabs button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.7rem;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 700;
+  transition: 150ms ease;
+
+  &:hover,
+  &.active {
+    border-color: #6366f1;
+    background: rgb(99 102 241 / 10%);
+    color: #6366f1;
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgb(99 102 241 / 35%);
+    outline-offset: 2px;
+  }
+}
+
+.zoom-controls input {
+  width: 7rem;
+  accent-color: #6366f1;
+}
+
+.zoom-controls .reset-button {
+  width: auto;
+  padding-inline: 0.85rem;
+  font-size: 0.78rem;
+}
+
+.section-tabs {
+  overflow-x: auto;
+  padding: 0.8rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+
+  button {
+    width: auto;
+    padding-inline: 0.9rem;
+    white-space: nowrap;
+  }
+}
+
+.viewport-frame {
+  position: relative;
+  min-height: 360px;
+  background:
+    radial-gradient(circle at 50% 10%, rgb(99 102 241 / 12%), transparent 45%), var(--color-surface);
+}
+
+.seat-viewport {
+  display: block;
+  width: 100%;
+  min-height: 360px;
+  max-height: 65vh;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+
+  &.is-dragging {
+    cursor: grabbing;
+  }
+}
+
+.stage {
+  fill: url('#stageGradient');
+}
+
+.stage-label {
+  fill: white;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  pointer-events: none;
+}
+
+.seat-node {
+  cursor: pointer;
+  outline: none;
+
+  &:hover .seat-shape,
+  &:focus-visible .seat-shape {
+    stroke: #6366f1;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 7px rgb(99 102 241 / 55%));
+  }
+
+  &.selected .seat-shape {
+    fill: #6366f1;
+    stroke: #c7d2fe;
+    filter: drop-shadow(0 0 10px rgb(99 102 241 / 80%));
+  }
+
+  &[data-status='HELD']:not(.selected) .seat-shape {
+    fill: #f59e0b;
+    stroke: #fcd34d;
+  }
+
+  &[data-status='SOLD'] .seat-shape,
+  &[data-status='RESERVED'] .seat-shape {
+    fill: #64748b;
+    stroke: #475569;
+  }
+
+  &[data-status='DISABLED'] .seat-shape {
+    fill: transparent;
+    stroke: #94a3b8;
+    stroke-dasharray: 3 3;
+    opacity: 0.45;
+  }
+
+  &[data-status='SOLD'],
+  &[data-status='RESERVED'],
+  &[data-status='DISABLED'] {
+    cursor: not-allowed;
+  }
+
+  &.selected .seat-number,
+  &[data-status='HELD'] .seat-number,
+  &[data-status='SOLD'] .seat-number,
+  &[data-status='RESERVED'] .seat-number {
+    fill: white;
+  }
+}
+
+.seat-shape {
+  fill: #f8fafc;
+  stroke: #94a3b8;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    fill 150ms ease,
+    stroke 150ms ease,
+    filter 150ms ease;
+}
+
+.seat-number {
+  fill: #334155;
+  font-size: 0.55rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.legend {
+  flex-wrap: wrap;
+  padding: 0.9rem 1.5rem 1.1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  i {
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 1px solid #94a3b8;
+    border-radius: 50%;
+    background: #f8fafc;
+
+    &.selected {
+      background: #6366f1;
+      border-color: #818cf8;
+    }
+    &.held {
+      background: #f59e0b;
+      border-color: #fcd34d;
+    }
+    &.sold {
+      background: #64748b;
+      border-color: #475569;
+    }
+    &.disabled {
+      background: transparent;
+      border-style: dashed;
+      opacity: 0.55;
+    }
+  }
+}
+
+:host-context(.dark) {
+  .seat-shape {
+    fill: #1e293b;
+    stroke: #475569;
+  }
+  .seat-number {
+    fill: #e2e8f0;
+  }
+  .legend i {
+    background: #1e293b;
+    border-color: #475569;
+  }
+}
+
+@media (max-width: 720px) {
+  .map-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .zoom-controls {
+    width: 100%;
+
+    input {
+      min-width: 0;
+      flex: 1;
+    }
+  }
+
+  .viewport-frame,
+  .seat-viewport {
+    min-height: 320px;
+  }
+}

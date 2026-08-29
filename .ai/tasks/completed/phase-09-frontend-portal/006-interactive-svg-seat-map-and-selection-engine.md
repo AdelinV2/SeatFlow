@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/07-frontend-specification.md` (Section 4.5), `.ai/architecture/06-api-contracts.md` (Section 2.3, 2.4), `frontend/AGENTS.md` (Section 4.1)
 - **Related ADRs:** `ADR-001` (Hybrid Guest Checkout)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,11 +15,11 @@
 Implement the interactive SVG seat map and selection engine on route `/events/:id/seats`. This includes pan, pinch-to-zoom, section isolation, SVG seat rendering with status-dependent visual encoding, elastic spring bounce selection animations, strict client-side **max 10 seats** selection limit, real-time STOMP synchronization with conflict deselection alerts, and a floating bottom action dock for instant hold creation.
 
 ### Critical Invariants to Enforce:
-- [ ] **Maximum 10 Seats Selection Invariant:** Client-side selection must strictly cap selected seats at 10. Attempting to select an 11th seat must be blocked and display a warning toast (`"Maximum 10 seats allowed per reservation."`).
-- [ ] **Elastic Spring Selection Physics:** Selecting/deselecting a seat must trigger an elastic spring bounce keyframe animation (`scale-125` -> `scale-100`) and a glowing Indigo focus halo.
-- [ ] **Real-Time Conflict Eviction:** If an active locally-selected seat is held/purchased by another peer via WebSocket `SeatStatusUpdated`, immediately deselect the seat, decrement totals, and display an alert toast.
-- [ ] **Authoritative Hold Dispatch:** The "Hold Seats & Proceed" CTA invokes `POST /api/reservations` with `seatIds` and an idempotency key, transitioning the user directly to `/checkout/:reservationId`.
-- [ ] **Pan & Zoom Viewport Controls:** Support fluid panning (mouse drag / touch drag), zoom slider (+ / - buttons and mouse wheel), and a "Reset View" button.
+- [x] **Maximum 10 Seats Selection Invariant:** Client-side selection must strictly cap selected seats at 10. Attempting to select an 11th seat must be blocked and display a warning toast (`"Maximum 10 seats allowed per reservation."`).
+- [x] **Elastic Spring Selection Physics:** Selecting/deselecting a seat must trigger an elastic spring bounce keyframe animation (`scale-125` -> `scale-100`) and a glowing Indigo focus halo.
+- [x] **Real-Time Conflict Eviction:** If an active locally-selected seat is held/purchased by another peer via WebSocket `SeatStatusUpdated`, immediately deselect the seat, decrement totals, and display an alert toast.
+- [x] **Authoritative Hold Dispatch:** The "Hold Seats & Proceed" CTA invokes `POST /api/reservations` with `seatIds` and an idempotency key, transitioning the user directly to `/checkout/:reservationId`.
+- [x] **Pan & Zoom Viewport Controls:** Support fluid panning (mouse drag / touch drag), zoom slider (+ / - buttons and mouse wheel), and a "Reset View" button.
 
 ---
 
@@ -283,9 +283,9 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] SVG Seat map renders layout accurately with pan and zoom interactions.
-- [ ] Seat selection enforces 10-seat limit strictly on the client.
-- [ ] Real-time updates reflect seat state changes with conflict alert handling.
-- [ ] Hold creation successfully posts to `/api/reservations` and navigates to checkout.
-- [ ] Unit tests pass with 100% success.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/006-interactive-svg-seat-map-and-selection-engine.md`.
+- [x] SVG Seat map renders layout accurately with pan and zoom interactions.
+- [x] Seat selection enforces 10-seat limit strictly on the client.
+- [x] Real-time updates reflect seat state changes with conflict alert handling.
+- [x] Hold creation successfully posts to `/api/reservations` and navigates to checkout.
+- [x] Unit tests pass with 100% success.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/006-interactive-svg-seat-map-and-selection-engine.md`.

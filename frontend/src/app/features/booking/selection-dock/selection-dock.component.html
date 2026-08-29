@@ -1,0 +1,39 @@
+@if (count() > 0) {
+  <aside class="selection-dock" aria-label="Selected seats summary" aria-live="polite">
+    <div class="selection-content">
+      <div class="seat-list">
+        <span class="count-badge">{{ count() }} / {{ maxSeats() }} Seats</span>
+        <div class="seat-pills" aria-label="Selected seats">
+          @for (seat of selectedSeats(); track seat.id) {
+            <span class="seat-pill">
+              {{ seat.rowLabel }}-{{ seat.seatNumber }}
+              <button
+                type="button"
+                (click)="seatRemoved.emit(seat)"
+                [attr.aria-label]="'Remove row ' + seat.rowLabel + ', seat ' + seat.seatNumber"
+              >
+                ×
+              </button>
+            </span>
+          }
+        </div>
+      </div>
+
+      <div class="checkout-summary">
+        <div class="total">
+          <span>Total amount</span>
+          <strong>{{ totalPrice() | sfCurrency: currencyCode() }}</strong>
+        </div>
+        <app-tactile-button
+          variant="primary"
+          size="md"
+          [loading]="isCreatingHold()"
+          [disabled]="count() === 0 || isCreatingHold()"
+          (clicked)="checkoutTriggered.emit()"
+        >
+          Hold Seats &amp; Proceed →
+        </app-tactile-button>
+      </div>
+    </div>
+  </aside>
+}

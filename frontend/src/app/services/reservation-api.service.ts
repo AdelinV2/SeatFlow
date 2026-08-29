@@ -1,0 +1,66 @@
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+export interface CreateReservationRequest {
+  eventId: string;
+  customerEmail?: string;
+  seatIds: string[];
+  seatPrices: number[];
+  idempotencyKey: string;
+}
+
+export interface ReservationSeatDetail {
+  id?: string;
+  seatId: string;
+  status?: 'HELD' | 'CONFIRMED' | 'RELEASED' | 'EXPIRED';
+  rowNumber?: string;
+  seatNumber?: number;
+  price: number;
+}
+
+export interface ReservationResponse {
+  id: string;
+  eventId: string;
+  userId?: string;
+  customerEmail?: string;
+  customerName?: string;
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
+  expiresAt: string;
+  totalAmount: number;
+  seatCount?: number;
+  seats: ReservationSeatDetail[];
+  createdAt?: string;
+}
+
+@Injectable({ providedIn: 'root' })
+export class ReservationApiService {
+  private readonly http = inject(HttpClient);
+  private readonly baseUrl = '/api/reservations';
+
+  createReservation(request: CreateReservationRequest): Observable<ReservationResponse> {
+    return this.http.post<ReservationResponse>(this.baseUrl, request);
+  }
+
+  getReservation(
+    reservationId: string,
+    customerEmailProof?: string,
+  ): Observable<ReservationResponse> {
+    return this.http.get<ReservationResponse>(`${this.baseUrl}/${reservationId}`, {
+      headers: this.guestProofHeaders(customerEmailProof),
+    });
+  }
+
+  cancelReservation(reservationId: string, customerEmailProof?: string): Observable<void> {
+    return this.http.post<void>(
+      `${this.baseUrl}/${reservationId}/cancel`,
+      {},
+      { headers: this.guestProofHeaders(customerEmailProof) },
+    );
+  }
+
+  private guestProofHeaders(customerEmailProof?: string): HttpHeaders | undefined {
+    const normalizedEmail = customerEmailProof?.trim();
+    return normalizedEmail ? new HttpHeaders({ 'X-Customer-Email': normalizedEmail }) : undefined;
+  }
+}

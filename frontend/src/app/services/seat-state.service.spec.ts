@@ -1,14 +1,15 @@
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { Seat, SeatAvailabilityResponse } from '../models/seat.model';
 import { SeatStateService } from './seat-state.service';
 
 describe('SeatStateService', () => {
   let service: SeatStateService;
   let httpMock: HttpTestingController;
-  let snackBar: jasmine.SpyObj<MatSnackBar>;
 
   const seats: Seat[] = [
     {
@@ -20,6 +21,7 @@ describe('SeatStateService', () => {
       gridX: 0,
       gridY: 0,
       price: 50,
+      currency: 'USD',
       status: 'AVAILABLE',
       isActive: true,
     },
@@ -31,6 +33,7 @@ describe('SeatStateService', () => {
       gridX: 1,
       gridY: 0,
       price: 50,
+      currency: 'USD',
       status: 'HELD',
       isActive: true,
     },
@@ -42,6 +45,7 @@ describe('SeatStateService', () => {
       gridX: 2,
       gridY: 0,
       price: 50,
+      currency: 'USD',
       status: 'RESERVED',
       isActive: true,
     },
@@ -53,20 +57,18 @@ describe('SeatStateService', () => {
       gridX: 3,
       gridY: 0,
       price: 50,
+      currency: 'USD',
       status: 'DISABLED',
       isActive: false,
     },
   ];
 
   beforeEach(() => {
-    snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
-
     TestBed.configureTestingModule({
       providers: [
         SeatStateService,
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: MatSnackBar, useValue: snackBar },
       ],
     });
 
@@ -160,7 +162,7 @@ describe('SeatStateService', () => {
     expect(service.seats().find((seat) => seat.id === 'seat-1')?.status).toBe('SOLD');
   });
 
-  it('should report and notify when an authoritative update takes a selected seat', () => {
+  it('should report conflict when an authoritative update takes a selected seat', () => {
     const onConflict = jasmine.createSpy('onConflict');
     service.setSeats(seats, 'event-1');
 
@@ -171,11 +173,6 @@ describe('SeatStateService', () => {
     } satisfies SeatAvailabilityResponse);
 
     expect(onConflict).toHaveBeenCalledOnceWith('seat-1');
-    expect(snackBar.open).toHaveBeenCalledOnceWith(
-      'Seat A-1 was just reserved by another user.',
-      'Close',
-      { duration: 5000, panelClass: 'snack-warning' },
-    );
   });
 
   it('should not report a conflict when a selected seat remains available', () => {
@@ -189,7 +186,6 @@ describe('SeatStateService', () => {
     } satisfies SeatAvailabilityResponse);
 
     expect(onConflict).not.toHaveBeenCalled();
-    expect(snackBar.open).not.toHaveBeenCalled();
   });
 
   it('should clear loading state and preserve seats when reconciliation fails', () => {
@@ -204,35 +200,6 @@ describe('SeatStateService', () => {
     expect(service.seats()).toEqual(seats);
     expect(service.isLoading()).toBeFalse();
     expect(consoleError).toHaveBeenCalled();
-  });
-
-  it('should format the conflict snackbar cleanly when rowLabel is empty', () => {
-    const seatsWithoutRow: Seat[] = [
-      {
-        id: 'seat-norow',
-        sectionId: 'section-1',
-        rowLabel: '',
-        seatNumber: 42,
-        gridX: 0,
-        gridY: 0,
-        price: 50,
-        status: 'AVAILABLE',
-        isActive: true,
-      },
-    ];
-    service.setSeats(seatsWithoutRow, 'event-1');
-
-    service.reconcileAvailability('event-1', new Set(['seat-norow']), () => {});
-    httpMock.expectOne('/api/reservations/events/event-1/availability').flush({
-      eventId: 'event-1',
-      seatStatuses: [{ seatId: 'seat-norow', status: 'HELD' }],
-    } satisfies SeatAvailabilityResponse);
-
-    expect(snackBar.open).toHaveBeenCalledWith(
-      'Seat #42 was just reserved by another user.',
-      'Close',
-      jasmine.any(Object),
-    );
   });
 
   it('should cancel active loading and increment request ID on ngOnDestroy', () => {

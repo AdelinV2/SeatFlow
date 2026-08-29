@@ -6,15 +6,18 @@ export const routes: Routes = [
   {
     path: '',
     loadComponent: () =>
-      import('./features/events/event-list/event-list.component').then(
-        (m) => m.EventListComponent,
-      ),
+      import('./features/events/event-list/event-list.component').then((m) => m.EventListComponent),
   },
   {
     path: 'events',
     loadComponent: () =>
-      import('./features/events/event-list/event-list.component').then(
-        (m) => m.EventListComponent,
+      import('./features/events/event-list/event-list.component').then((m) => m.EventListComponent),
+  },
+  {
+    path: 'events/:id/seats',
+    loadComponent: () =>
+      import('./features/booking/seat-selection/seat-selection.component').then(
+        (m) => m.SeatSelectionComponent,
       ),
   },
   {

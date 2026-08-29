@@ -9,6 +9,7 @@ export interface Seat {
   gridX: number;
   gridY: number;
   price: number;
+  currency?: string;
   status: SeatStatus;
   isActive: boolean;
 }
@@ -55,8 +56,11 @@ export interface SeatMapSectionResponse {
     isActive: boolean;
   }[];
   pricingTiers?: {
+    id?: string;
     sectionId: string;
+    categoryName?: string;
     price: number;
+    currency?: string;
   }[];
 }
 
