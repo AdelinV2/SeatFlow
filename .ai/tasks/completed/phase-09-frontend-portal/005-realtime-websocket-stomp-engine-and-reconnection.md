@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/06-api-contracts.md` (Section 2.7), `.ai/architecture/07-frontend-specification.md` (Section 4.6), `frontend/AGENTS.md` (Section 4.2)
 - **Related ADRs:** `None`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,11 +15,11 @@
 Build the real-time WebSocket communication engine using `@stomp/stompjs` and `sockjs-client`. The service connects to `/ws` (routed via API Gateway to `realtime-service`), subscribes to event seat topics (`/topic/events/{eventId}/seats`), propagates real-time `SeatStatusUpdate` messages into reactive Signal stores, manages exponential reconnection backoff, and performs **authoritative state reconciliation** by querying `GET /api/reservations/events/{eventId}/availability` upon every initial connection or reconnection.
 
 ### Critical Invariants to Enforce:
-- [ ] **Authoritative State Reconciliation on Reconnect:** Whenever the STOMP connection is established or reconnected (`onConnect`), the client MUST re-fetch the full authoritative seat availability from `GET /api/reservations/events/{eventId}/availability` to prevent stale seat states due to dropped packets or network blips.
-- [ ] **Reactive Signal State:** Connection status and live updates must be exposed as Signals (`connectionStatus`, `isConnected`, `lastSeatUpdate`).
-- [ ] **Clean Topic Lifecycle:** Unsubscribing from `/topic/events/{eventId}/seats` when leaving the seat selection screen to prevent memory leaks and zombie network traffic.
-- [ ] **Graceful SockJS Fallback:** Maintain compatibility across environments where native WebSockets are blocked by proxies using SockJS fallback.
-- [ ] **JWT Header Injection:** STOMP connect headers must attach the current JWT Bearer token if user is authenticated.
+- [x] **Authoritative State Reconciliation on Reconnect:** Whenever the STOMP connection is established or reconnected (`onConnect`), the client MUST re-fetch the full authoritative seat availability from `GET /api/reservations/events/{eventId}/availability` to prevent stale seat states due to dropped packets or network blips.
+- [x] **Reactive Signal State:** Connection status and live updates must be exposed as Signals (`connectionStatus`, `isConnected`, `lastSeatUpdate`).
+- [x] **Clean Topic Lifecycle:** Unsubscribing from `/topic/events/{eventId}/seats` when leaving the seat selection screen to prevent memory leaks and zombie network traffic.
+- [x] **Graceful SockJS Fallback:** Maintain compatibility across environments where native WebSockets are blocked by proxies using SockJS fallback.
+- [x] **JWT Header Injection:** STOMP connect headers must attach the current JWT Bearer token if user is authenticated.
 
 ---
 
@@ -301,9 +301,9 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] `WebSocketService` connects to `/ws` and subscribes to `/topic/events/{eventId}/seats`.
-- [ ] Authoritative state reconciliation queries `/api/reservations/events/{eventId}/availability` upon connection.
-- [ ] Deselection and conflict notification are triggered when a selected seat is held by a peer.
-- [ ] `disconnect()` cleans up subscriptions and deactivates the client.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/005-realtime-websocket-stomp-engine-and-reconnection.md`.
+- [x] `WebSocketService` connects to `/ws` and subscribes to `/topic/events/{eventId}/seats`.
+- [x] Authoritative state reconciliation queries `/api/reservations/events/{eventId}/availability` upon connection.
+- [x] Deselection and conflict notification are triggered when a selected seat is held by a peer.
+- [x] `disconnect()` cleans up subscriptions and deactivates the client.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/005-realtime-websocket-stomp-engine-and-reconnection.md`.
