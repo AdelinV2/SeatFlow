@@ -2,6 +2,7 @@ package com.seatflow.reservation.client.impl;
 
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
+import com.seatflow.reservation.client.dto.PricingTierClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
 import com.seatflow.common.domain.enums.ErrorCode;
@@ -61,10 +62,12 @@ class EventClientImplTest {
     }
 
     private EventSeatMapClientResponse buildSeatMapResponse(String status, Instant eventDate, UUID seatId, BigDecimal price) {
+        UUID sectionId = UUID.randomUUID();
+        PricingTierClientDto tier = new PricingTierClientDto(UUID.randomUUID(), sectionId, "Standard", price, "USD");
+        SeatMapSeatClientDto seat = new SeatMapSeatClientDto(seatId, "A", 1, 0, 0, true);
+        SeatMapSectionClientDto section = new SeatMapSectionClientDto(sectionId, "SEC-A", 1, 1, List.of(seat), List.of(tier));
         return new EventSeatMapClientResponse(
-                status, eventId, "Concert", eventDate, UUID.randomUUID(),
-                new SeatMapSectionClientDto(UUID.randomUUID(), "SEC-A", List.of(),
-                        List.of(new SeatMapSeatClientDto(seatId, "A1", "A", "AVAILABLE", UUID.randomUUID(), price))));
+                eventId, UUID.randomUUID(), "Concert", status, eventDate, "Grand Arena", 1000, 1L, List.of(section));
     }
 
     private void stubBody(EventSeatMapClientResponse body) {

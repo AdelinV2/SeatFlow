@@ -126,18 +126,18 @@
                     @for (role of (user.roles || []); track role) {
                       <span
                         class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide border"
-                        [class.bg-purple-500\/10]="role.includes('ADMIN')"
+                        [class.bg-purple-500/10]="role.includes('ADMIN')"
                         [class.text-purple-600]="role.includes('ADMIN')"
                         [class.dark:text-purple-400]="role.includes('ADMIN')"
-                        [class.border-purple-500\/20]="role.includes('ADMIN')"
-                        [class.bg-indigo-500\/10]="role.includes('STAFF')"
+                        [class.border-purple-500/20]="role.includes('ADMIN')"
+                        [class.bg-indigo-500/10]="role.includes('STAFF')"
                         [class.text-indigo-600]="role.includes('STAFF')"
                         [class.dark:text-indigo-400]="role.includes('STAFF')"
-                        [class.border-indigo-500\/20]="role.includes('STAFF')"
-                        [class.bg-slate-500\/10]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                        [class.border-indigo-500/20]="role.includes('STAFF')"
+                        [class.bg-slate-500/10]="!role.includes('ADMIN') && !role.includes('STAFF')"
                         [class.text-slate-600]="!role.includes('ADMIN') && !role.includes('STAFF')"
                         [class.dark:text-slate-400]="!role.includes('ADMIN') && !role.includes('STAFF')"
-                        [class.border-slate-500\/20]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                        [class.border-slate-500/20]="!role.includes('ADMIN') && !role.includes('STAFF')"
                       >
                         {{ role.replace('ROLE_', '') }}
                       </span>

@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   inject,
@@ -45,6 +46,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
   private readonly geocodingService = inject(NominatimGeocodingService);
   private readonly themeService = inject(ThemeService);
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly mapContainer = viewChild<ElementRef<HTMLDivElement>>('mapContainer');
 
@@ -129,6 +131,51 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
     this.addressSearch$.next(value);
   }
 
+  onAddressBlur(): void {
+    setTimeout(() => {
+      this.searchSuggestions.set([]);
+      this.cdr.markForCheck();
+    }, 200);
+  }
+
+  autoGeocodeCurrentVenue(): void {
+    const address = this.venueForm.value.address?.trim() || '';
+    const city = this.venueForm.value.city?.trim() || '';
+    const country = this.venueForm.value.country?.trim() || '';
+
+    const candidates: string[] = [];
+    if (address && city && country) {
+      candidates.push(`${address}, ${city}, ${country}`);
+    }
+    if (address && city) {
+      candidates.push(`${address}, ${city}`);
+    }
+    if (address) {
+      candidates.push(address);
+    }
+    if (city && country) {
+      candidates.push(`${city}, ${country}`);
+    }
+    if (city) {
+      candidates.push(city);
+    }
+
+    if (candidates.length === 0) return;
+
+    this.geocodingService.geocodeBestMatch(candidates).subscribe({
+      next: (result) => {
+        if (result) {
+          this.venueForm.patchValue({
+            latitude: result.lat,
+            longitude: result.lon,
+          });
+          this.cdr.markForCheck();
+          this.updateMapPosition(result.lat, result.lon, 16);
+        }
+      },
+    });
+  }
+
   selectAddressSuggestion(suggestion: GeocodingResult): void {
     this.venueForm.patchValue({
       address: suggestion.street || suggestion.displayName,
@@ -137,6 +184,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
       latitude: suggestion.lat,
       longitude: suggestion.lon,
     });
+    this.cdr.markForCheck();
 
     this.searchSuggestions.set([]);
     this.updateMapPosition(suggestion.lat, suggestion.lon, 16);
@@ -257,6 +305,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
       latitude: parseFloat(lat.toFixed(6)),
       longitude: parseFloat(lng.toFixed(6)),
     });
+    this.cdr.markForCheck();
 
     // Reverse geocode to update address, city, and country inputs on every pin move
     this.geocodingService.reverseGeocode(lat, lng).subscribe({
@@ -279,6 +328,7 @@ export class AdminVenueEditorComponent implements OnInit, AfterViewInit, OnDestr
           }
 
           this.venueForm.patchValue(updates);
+          this.cdr.markForCheck();
         }
       },
     });

@@ -208,11 +208,19 @@ export class SeatSelectionComponent implements OnInit {
         },
         error: () => {
           this.isCreatingHold.set(false);
+          const eventId = this.seatMap()?.eventId;
+          if (eventId) {
+            this.seatStateService.reconcileAvailability(
+              eventId,
+              this.selectedSeatIds(),
+              (conflictSeatId) => this.handleSeatConflict(conflictSeatId),
+            );
+          }
           this.snackBar.open(
-            'We could not hold those seats. Please review availability and retry.',
+            'One or more of your selected seats were already reserved. Availability has been updated.',
             'Close',
             {
-              duration: 5000,
+              duration: 6000,
               panelClass: 'snack-warning',
               politeness: 'assertive',
             },
@@ -227,6 +235,7 @@ export class SeatSelectionComponent implements OnInit {
     this.loadError.set(null);
     this.seatMap.set(null);
     this.selectedSeatIds.set(new Set());
+    this.conflictingSeatIds.set(new Set());
     this.seatStateService.setSeats([], eventId);
     this.resetPendingAttempt();
   }
@@ -268,24 +277,23 @@ export class SeatSelectionComponent implements OnInit {
     });
   }
 
-  private handleSeatConflict(seatId: string): void {
-    if (this.isCreatingHold()) {
-      return;
-    }
+  readonly conflictingSeatIds = signal<Set<string>>(new Set());
 
+  private handleSeatConflict(seatId: string): void {
     const conflictingSeat = this.seats().find((seat) => seat.id === seatId);
     this.selectedSeatIds.update((current) => {
       const updated = new Set(current);
       updated.delete(seatId);
       return updated;
     });
+    this.conflictingSeatIds.update((current) => new Set(current).add(seatId));
     this.resetPendingAttempt();
 
     const label = conflictingSeat
-      ? `${conflictingSeat.rowLabel}-${conflictingSeat.seatNumber}`
-      : seatId;
-    this.snackBar.open(`Seat ${label} was just reserved by another user.`, 'Close', {
-      duration: 5000,
+      ? `Seat ${conflictingSeat.rowLabel}-${conflictingSeat.seatNumber}`
+      : 'A selected seat';
+    this.snackBar.open(`${label} was just reserved by another user.`, 'Close', {
+      duration: 6000,
       panelClass: 'snack-warning',
       politeness: 'assertive',
     });

@@ -21,29 +21,62 @@
     </div>
   </div>
 
-  @if (sections().length > 1) {
-    <nav class="section-tabs" aria-label="Venue sections">
-      @for (section of sections(); track section.id) {
-        <button
-          type="button"
-          [class.active]="activeSectionId() === section.id"
-          [attr.aria-pressed]="activeSectionId() === section.id"
-          (click)="isolateSection(section.id)"
-        >
-          {{ section.name }}
-        </button>
+  @if (sectionDetails().length > 0) {
+    <div class="section-selector-bar">
+      <div class="section-tabs-wrapper">
+        <nav class="section-tabs" aria-label="Venue sections">
+          @for (section of sectionDetails(); track section.id) {
+            <button
+              type="button"
+              class="section-tab-btn"
+              [class.active]="activeSectionId() === section.id"
+              [attr.aria-pressed]="activeSectionId() === section.id"
+              (click)="isolateSection(section.id)"
+            >
+              <span class="tab-name">{{ section.name }}</span>
+              <span class="tab-price-chip">
+                @if (section.minPrice === section.maxPrice) {
+                  {{ section.minPrice | sfCurrency: section.currency }}
+                } @else {
+                  {{ section.minPrice | sfCurrency: section.currency }} – {{ section.maxPrice | sfCurrency: section.currency }}
+                }
+              </span>
+              <span class="tab-avail-count">({{ section.availableSeats }} left)</span>
+            </button>
+          }
+        </nav>
+      </div>
+
+      @if (activeSectionSummary(); as activeSec) {
+        <div class="active-section-tiers" aria-label="Available price categories for this section">
+          <span class="tiers-title">{{ activeSec.name }} Rates:</span>
+          <div class="tier-badges-group">
+            @for (tier of activeSec.pricingTiers; track tier.categoryName + tier.price) {
+              <div class="tier-badge-card" [attr.data-category]="tier.categoryName.toLowerCase()">
+                <span class="tier-cat-name">{{ tier.categoryName }}</span>
+                <strong class="tier-cat-price">{{ tier.price | sfCurrency: tier.currency }}</strong>
+              </div>
+            }
+            @if (activeSec.pricingTiers.length === 0) {
+              <div class="tier-badge-card" data-category="standard">
+                <span class="tier-cat-name">Standard</span>
+                <strong class="tier-cat-price">{{ activeSec.minPrice | sfCurrency: activeSec.currency }}</strong>
+              </div>
+            }
+          </div>
+        </div>
       }
-    </nav>
+    </div>
   }
 
   <div class="viewport-frame">
     <svg
+      #svgViewport
       class="seat-viewport"
       [class.is-dragging]="isDragging()"
       [attr.viewBox]="viewBox()"
       role="group"
       aria-label="Interactive seat map. Drag to pan and use the zoom controls or mouse wheel to zoom."
-      (wheel)="onWheel($event)"
       (pointerdown)="onPointerDown($event)"
       (pointermove)="onPointerMove($event)"
       (pointerup)="onPointerEnd($event)"
@@ -52,58 +85,171 @@
     >
       <defs>
         <linearGradient id="stageGradient" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#6366f1" />
+          <stop offset="0%" stop-color="#4f46e5" />
+          <stop offset="50%" stop-color="#6366f1" />
           <stop offset="100%" stop-color="#8b5cf6" />
         </linearGradient>
+        <linearGradient id="stageGlowGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(99, 102, 241, 0.4)" />
+          <stop offset="100%" stop-color="rgba(99, 102, 241, 0)" />
+        </linearGradient>
+        <radialGradient id="spotlightGradient" cx="50%" cy="0%" r="90%">
+          <stop offset="0%" stop-color="rgba(99, 102, 241, 0.14)" />
+          <stop offset="60%" stop-color="rgba(99, 102, 241, 0.04)" />
+          <stop offset="100%" stop-color="rgba(99, 102, 241, 0)" />
+        </radialGradient>
       </defs>
 
       <g [attr.transform]="transformMatrix()">
-        <rect class="stage" x="48" y="24" [attr.width]="mapWidth() - 96" height="40" rx="20" />
-        <text class="stage-label" [attr.x]="mapWidth() / 2" y="49" text-anchor="middle">STAGE</text>
+        <!-- Ambient Stage Lighting Beam -->
+        <path
+          class="stage-spotlight"
+          [attr.d]="'M ' + (mapWidth() / 2 - 140) + ' 35 L ' + (gridStartX() - 40) + ' ' + (mapHeight() - 20) + ' L ' + (gridStartX() + gridWidth() + 40) + ' ' + (mapHeight() - 20) + ' L ' + (mapWidth() / 2 + 140) + ' 35 Z'"
+          fill="url(#spotlightGradient)"
+        />
 
-        @for (seat of visibleSeats(); track seat.id) {
-          <g
-            class="seat-node"
-            [attr.data-status]="seat.status"
-            [class.selected]="selectedSeatIds().has(seat.id)"
-            [attr.role]="'button'"
-            [attr.tabindex]="isUnavailable(seat) ? -1 : 0"
-            [attr.aria-label]="seatLabel(seat)"
-            [attr.aria-pressed]="selectedSeatIds().has(seat.id)"
-            [attr.aria-disabled]="isUnavailable(seat)"
-            [matTooltip]="seatTooltip(seat)"
-            [matTooltipTouchGestures]="'off'"
-            (click)="handleSeatClick(seat)"
-            (keydown)="handleSeatKeydown($event, seat)"
-          >
-            <circle
-              class="seat-shape"
-              [class.seat-spring-bounce]="animatingSeatIds().has(seat.id)"
-              [attr.cx]="seatX(seat)"
-              [attr.cy]="seatY(seat)"
-              r="13"
-              (animationend)="clearSeatAnimation(seat.id)"
-            />
+        <!-- STAGE Representation -->
+        <g class="stage-group">
+          <rect
+            class="stage-glow"
+            [attr.x]="stageX() - 4"
+            y="24"
+            [attr.width]="stageWidth() + 8"
+            height="48"
+            rx="24"
+            fill="url(#stageGlowGradient)"
+          />
+          <rect
+            class="stage"
+            [attr.x]="stageX()"
+            y="28"
+            [attr.width]="stageWidth()"
+            height="40"
+            rx="20"
+          />
+          <text class="stage-label" [attr.x]="mapWidth() / 2" y="53" text-anchor="middle">
+            ▲ STAGE / SCREEN DIRECTION ▲
+          </text>
+        </g>
+
+        <!-- Column Headers (1, 2, 3...) -->
+        <g class="column-headers" aria-hidden="true">
+          @for (col of columnHeaders(); track col.number) {
             <text
-              class="seat-number"
-              [attr.x]="seatX(seat)"
-              [attr.y]="seatY(seat) + 3"
+              class="col-header-label"
+              [attr.x]="col.x"
+              [attr.y]="gridStartY - 24"
               text-anchor="middle"
-              aria-hidden="true"
             >
-              {{ seat.seatNumber }}
+              {{ col.number }}
             </text>
-          </g>
-        }
+          }
+        </g>
+
+        <!-- Row Headers (A, B, C...) on Left and Right -->
+        <g class="row-headers" aria-hidden="true">
+          @for (row of rowHeaders(); track row.label) {
+            <text
+              class="row-header-label left"
+              [attr.x]="gridStartX() - 32"
+              [attr.y]="row.y"
+              text-anchor="middle"
+            >
+              {{ row.label }}
+            </text>
+            <text
+              class="row-header-label right"
+              [attr.x]="gridStartX() + gridWidth() + 32"
+              [attr.y]="row.y"
+              text-anchor="middle"
+            >
+              {{ row.label }}
+            </text>
+          }
+        </g>
+
+        <!-- Seats Layer: Only Bookable Active Seats -->
+        <g class="seats-layer">
+          @for (seat of bookableSeats(); track seat.id) {
+            <g
+              class="seat-node"
+              [attr.data-status]="seat.status"
+              [class.selected]="selectedSeatIds().has(seat.id)"
+              [class.conflicted]="conflictingSeatIds().has(seat.id)"
+              [attr.role]="'button'"
+              [attr.tabindex]="isUnavailable(seat) ? -1 : 0"
+              [attr.aria-label]="seatLabel(seat)"
+              [attr.aria-pressed]="selectedSeatIds().has(seat.id)"
+              [attr.aria-disabled]="isUnavailable(seat)"
+              [matTooltip]="seatTooltip(seat)"
+              [matTooltipTouchGestures]="'off'"
+              (click)="handleSeatClick(seat)"
+              (keydown)="handleSeatKeydown($event, seat)"
+            >
+              <circle
+                class="seat-shape"
+                [class.seat-spring-bounce]="animatingSeatIds().has(seat.id)"
+                [class.seat-conflict-flash]="conflictingSeatIds().has(seat.id)"
+                [attr.cx]="seatX(seat)"
+                [attr.cy]="seatY(seat)"
+                r="14"
+                (animationend)="clearSeatAnimation(seat.id)"
+              />
+              <text
+                class="seat-number"
+                [attr.x]="seatX(seat)"
+                [attr.y]="seatY(seat) + 4"
+                text-anchor="middle"
+                aria-hidden="true"
+              >
+                {{ seat.seatNumber }}
+              </text>
+            </g>
+          }
+        </g>
       </g>
     </svg>
   </div>
 
   <div class="legend" aria-label="Seat status legend">
-    <span><i class="available"></i> Available</span>
-    <span><i class="selected"></i> Selected</span>
-    <span><i class="held"></i> Held</span>
-    <span><i class="sold"></i> Sold</span>
-    <span><i class="disabled"></i> Unavailable</span>
+    <div class="legend-item">
+      <svg class="legend-icon available" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="4" class="seat-back" />
+        <rect x="2" y="14" width="20" height="6" rx="3" class="seat-cushion" />
+      </svg>
+      <span>Available</span>
+    </div>
+    <div class="legend-item">
+      <svg class="legend-icon selected" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="4" class="seat-back" />
+        <rect x="2" y="14" width="20" height="6" rx="3" class="seat-cushion" />
+        <circle cx="12" cy="11" r="2.5" class="seat-dot" />
+      </svg>
+      <span>Selected</span>
+    </div>
+    <div class="legend-item">
+      <svg class="legend-icon held" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="4" class="seat-back" />
+        <rect x="2" y="14" width="20" height="6" rx="3" class="seat-cushion" />
+        <circle cx="12" cy="11" r="2" class="seat-dot" />
+      </svg>
+      <span>Held</span>
+    </div>
+    <div class="legend-item">
+      <svg class="legend-icon sold" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="4" class="seat-back" />
+        <rect x="2" y="14" width="20" height="6" rx="3" class="seat-cushion" />
+        <path d="M10 11V9.5a2 2 0 114 0V11" class="seat-lock-shackle" />
+      </svg>
+      <span>Sold</span>
+    </div>
+    <div class="legend-item">
+      <svg class="legend-icon unavailable" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="13" rx="4" class="seat-back" stroke-dasharray="3 2" />
+        <rect x="2" y="14" width="20" height="6" rx="3" class="seat-cushion" stroke-dasharray="3 2" />
+        <line x1="5" y1="5" x2="19" y2="19" class="seat-slash" />
+      </svg>
+      <span>Unavailable</span>
+    </div>
   </div>
 </section>

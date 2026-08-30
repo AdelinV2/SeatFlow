@@ -5,10 +5,10 @@ import java.util.UUID;
 
 public record SeatMapSeatClientDto(
         UUID seatId,
-        String seatNumber,
         String rowLabel,
-        String seatStatus,
-        UUID pricingTierId,
-        BigDecimal price
+        Integer seatNumber,
+        Integer gridX,
+        Integer gridY,
+        Boolean isActive
 ) {
 }

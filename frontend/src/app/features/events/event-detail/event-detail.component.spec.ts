@@ -3,6 +3,7 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { EventDetail, VenueDetail } from '../../../models/event.model';
 import { EventApiService } from '../../../services/event-api.service';
+import { NominatimGeocodingService } from '../../../services/nominatim-geocoding.service';
 import { VenueApiService } from '../../../services/venue-api.service';
 import { EventDetailComponent } from './event-detail.component';
 
@@ -10,6 +11,7 @@ describe('EventDetailComponent', () => {
   let component: EventDetailComponent;
   let fixture: ComponentFixture<EventDetailComponent>;
   let eventApiServiceSpy: jasmine.SpyObj<EventApiService>;
+  let geocodingServiceSpy: jasmine.SpyObj<NominatimGeocodingService>;
   let venueApiServiceSpy: jasmine.SpyObj<VenueApiService>;
 
   const mockEventDetail: EventDetail = {
@@ -25,14 +27,14 @@ describe('EventDetailComponent', () => {
       {
         id: 't-1',
         sectionId: 'sec-1',
-        sectionName: 'Balcony',
+        categoryName: 'Standard',
         price: 45,
         currency: 'USD',
       },
       {
         id: 't-2',
         sectionId: 'sec-2',
-        sectionName: 'Orchestra Front',
+        categoryName: 'Standard',
         price: 150,
         currency: 'USD',
       },
@@ -49,19 +51,30 @@ describe('EventDetailComponent', () => {
     capacity: 2000,
     latitude: 48.2082,
     longitude: 16.3738,
+    sections: [
+      { id: 'sec-1', name: 'Balcony' },
+      { id: 'sec-2', name: 'Orchestra Front' },
+    ],
   };
 
   beforeEach(async () => {
     eventApiServiceSpy = jasmine.createSpyObj('EventApiService', ['getEventById']);
+    geocodingServiceSpy = jasmine.createSpyObj('NominatimGeocodingService', [
+      'searchAddress',
+      'geocodeBestMatch',
+    ]);
     venueApiServiceSpy = jasmine.createSpyObj('VenueApiService', ['getVenueById']);
 
     eventApiServiceSpy.getEventById.and.returnValue(of(mockEventDetail));
+    geocodingServiceSpy.searchAddress.and.returnValue(of([]));
+    geocodingServiceSpy.geocodeBestMatch.and.returnValue(of(null));
     venueApiServiceSpy.getVenueById.and.returnValue(of(mockVenueDetail));
 
     await TestBed.configureTestingModule({
       imports: [EventDetailComponent],
       providers: [
         { provide: EventApiService, useValue: eventApiServiceSpy },
+        { provide: NominatimGeocodingService, useValue: geocodingServiceSpy },
         { provide: VenueApiService, useValue: venueApiServiceSpy },
         {
           provide: ActivatedRoute,
@@ -100,6 +113,35 @@ describe('EventDetailComponent', () => {
     expect(component.minPrice()).toBe(45);
     expect(component.maxPrice()).toBe(150);
     expect(component.currency()).toBe('USD');
+  });
+
+  it('should group identical tier names by their venue section', () => {
+    expect(component.pricingSections().map((section) => section.name)).toEqual([
+      'Balcony',
+      'Orchestra Front',
+    ]);
+    expect(component.pricingSections().every((section) => section.tiers[0].categoryName === 'Standard')).toBeTrue();
+  });
+
+  it('should geocode older venues when stored coordinates are missing', () => {
+    venueApiServiceSpy.getVenueById.and.returnValue(
+      of({ ...mockVenueDetail, latitude: undefined, longitude: undefined }),
+    );
+    geocodingServiceSpy.geocodeBestMatch.and.returnValue(
+      of({
+        placeId: 123,
+        displayName: 'Philharmonic Grand Hall, Vienna',
+        street: '45 Concert Blvd',
+        lat: 48.2082,
+        lon: 16.3738,
+      }),
+    );
+
+    component.loadEvent('ev-999');
+    fixture.detectChanges();
+
+    expect(geocodingServiceSpy.geocodeBestMatch).toHaveBeenCalled();
+    expect(component.venueCoordinates()).toEqual({ lat: 48.2082, lng: 16.3738 });
   });
 
   it('should resolve venue coordinates', () => {

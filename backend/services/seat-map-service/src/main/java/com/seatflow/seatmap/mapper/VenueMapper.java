@@ -23,6 +23,8 @@ public interface VenueMapper {
     @Mapping(target = "city", source = "venue.city")
     @Mapping(target = "country", source = "venue.country")
     @Mapping(target = "capacity", source = "venue.capacity")
+    @Mapping(target = "latitude", source = "venue.latitude")
+    @Mapping(target = "longitude", source = "venue.longitude")
     @Mapping(target = "totalConfiguredSeats", source = "totalConfiguredSeats")
     @Mapping(target = "sections", source = "sections")
     @Mapping(target = "createdAt", source = "venue.createdAt")

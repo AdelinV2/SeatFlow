@@ -60,7 +60,7 @@ class VenueControllerTest {
     void shouldGetVenueDetailWithoutAuthentication() throws Exception {
         UUID venueId = UUID.randomUUID();
         VenueDetailResponse response = new VenueDetailResponse(venueId, "Theatre", "123 St",
-                "NYC", "USA", 500, 0L, List.of(), Instant.now());
+                "NYC", "USA", 500, 40.7128, -74.0060, 0L, List.of(), Instant.now());
 
         when(venueService.getVenueById(venueId)).thenReturn(response);
 

@@ -36,6 +36,7 @@ resilience4j:
         ignoreExceptions:
           - com.seatflow.common.domain.exception.ResourceNotFoundException
           - com.seatflow.common.domain.exception.ValidationException
+          - org.springframework.web.client.HttpClientErrorException
 
 eureka:
   client:
@@ -60,7 +61,7 @@ springdoc:
 
 outbox:
   publisher:
-    fixed-delay-ms: 3000
+    fixed-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
     batch-size: 50
     topic: seatflow.reservation.events
 

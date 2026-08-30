@@ -62,6 +62,15 @@ export interface VenueDetail {
   capacity: number;
   latitude?: number;
   longitude?: number;
+  sections?: VenueSection[];
+}
+
+export interface VenueSection {
+  id: string;
+  name: string;
+  rowCount?: number;
+  colCount?: number;
+  activeSeatCount?: number;
 }
 
 export interface PagedResult<T> {

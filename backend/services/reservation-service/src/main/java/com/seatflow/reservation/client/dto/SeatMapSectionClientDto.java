@@ -5,8 +5,10 @@ import java.util.UUID;
 
 public record SeatMapSectionClientDto(
         UUID sectionId,
-        String sectionName,
-        List<PricingTierClientDto> pricingTiers,
-        List<SeatMapSeatClientDto> seats
+        String name,
+        Integer rowCount,
+        Integer colCount,
+        List<SeatMapSeatClientDto> seats,
+        List<PricingTierClientDto> pricingTiers
 ) {
 }

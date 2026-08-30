@@ -8,8 +8,8 @@
   right: 0;
   bottom: 0;
   left: 0;
-  padding: 0.8rem max(1rem, env(safe-area-inset-right)) max(0.8rem, env(safe-area-inset-bottom))
-    max(1rem, env(safe-area-inset-left));
+  padding: 1rem max(1.25rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom))
+    max(1.25rem, env(safe-area-inset-left));
   pointer-events: none;
 }
 
@@ -17,122 +17,215 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: min(100%, 58rem);
+  gap: 1.25rem;
+  width: min(100%, 64rem);
   margin: 0 auto;
-  padding: 0.9rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 80%, #6366f1 20%);
-  border-radius: 1.1rem;
-  background: color-mix(in srgb, var(--color-surface-elevated) 90%, transparent);
-  box-shadow: 0 24px 70px rgb(15 23 42 / 30%);
-  backdrop-filter: blur(18px);
+  padding: 0.85rem 1.25rem;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 1.25rem;
+  background: rgba(15, 23, 42, 0.82);
+  box-shadow:
+    0 20px 50px -10px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(99, 102, 241, 0.15);
+  backdrop-filter: blur(24px) saturate(180%);
   pointer-events: auto;
+  animation: slideUpDock 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.seat-list,
-.seat-pills,
-.checkout-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
+@keyframes slideUpDock {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .seat-list {
+  display: flex;
   min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.85rem;
 }
 
-.seat-pills {
-  overflow-x: auto;
-  max-width: min(40vw, 27rem);
-  padding-block: 0.2rem;
-}
-
-.count-badge,
-.seat-pill {
-  white-space: nowrap;
-  border-radius: 0.55rem;
-  font-size: 0.72rem;
-  font-weight: 750;
+.count-badge-wrapper {
+  flex-shrink: 0;
 }
 
 .count-badge {
-  padding: 0.38rem 0.55rem;
-  border: 1px solid rgb(99 102 241 / 25%);
-  background: rgb(99 102 241 / 10%);
-  color: #6366f1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 9999px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #6366f1;
+    box-shadow: 0 0 8px #6366f1;
+    animation: pulseDot 2s infinite ease-in-out;
+  }
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+.seat-pills-container {
+  overflow-x: auto;
+  max-width: min(45vw, 34rem);
+  padding: 0.25rem 0.1rem;
+
+  /* Sleek modern scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgba(99, 102, 241, 0.3);
+
+    &:hover {
+      background: rgba(99, 102, 241, 0.6);
+    }
+  }
+}
+
+.seat-pills {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .seat-pill {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 0.28rem;
-  padding: 0.32rem 0.35rem 0.32rem 0.52rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
+  gap: 0.4rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(30, 41, 59, 0.75);
+  color: #f1f5f9;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: all 150ms ease;
+
+  &:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(30, 41, 59, 0.95);
+  }
 }
 
-.seat-pill button {
+.pill-remove-btn {
   display: grid;
   width: 1.25rem;
   height: 1.25rem;
-  place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
-  background: transparent;
-  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
   cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-}
+  place-items: center;
+  transition: all 150ms ease;
 
-.seat-pill button:hover,
-.seat-pill button:focus-visible {
-  background: rgb(244 63 94 / 12%);
-  color: #f43f5e;
-  outline: none;
+  .remove-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    outline: none;
+    transform: scale(1.1);
+  }
 }
 
 .checkout-summary {
-  flex: none;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1.25rem;
 }
 
 .total {
   text-align: right;
-}
 
-.total span {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
+  span {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
 
-.total strong {
-  color: #6366f1;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 1.05rem;
+  strong {
+    display: block;
+    color: #818cf8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1.15rem;
+    font-weight: 900;
+    text-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+  }
 }
 
 @media (max-width: 760px) {
   .selection-content {
     align-items: stretch;
     flex-direction: column;
+    gap: 0.9rem;
+    padding: 0.9rem 1rem;
   }
 
   .seat-list {
     width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 
-  .seat-pills {
-    max-width: none;
-    flex: 1;
+  .seat-pills-container {
+    width: 100%;
+    max-width: 100%;
   }
 
   .checkout-summary {
     justify-content: space-between;
     width: 100%;
+    padding-top: 0.6rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 }

@@ -91,6 +91,7 @@
               id="city"
               type="text"
               formControlName="city"
+              (blur)="autoGeocodeCurrentVenue()"
               placeholder="e.g. London, New York, Paris"
               class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             />
@@ -104,6 +105,7 @@
               id="country"
               type="text"
               formControlName="country"
+              (blur)="autoGeocodeCurrentVenue()"
               placeholder="e.g. United Kingdom, United States"
               class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
             />
@@ -112,10 +114,23 @@
 
         <!-- Address Search Autocomplete (OpenStreetMap Nominatim) -->
         <div class="relative">
-          <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5" for="address">
-            Street Address *
-            <span class="text-[10px] font-normal text-indigo-500 normal-case ml-1">(Live OpenStreetMap Geocoding)</span>
-          </label>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]" for="address">
+              Street Address *
+              <span class="text-[10px] font-normal text-indigo-500 normal-case ml-1">(Live OpenStreetMap Geocoding)</span>
+            </label>
+            <button
+              type="button"
+              (click)="autoGeocodeCurrentVenue()"
+              class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+            >
+              <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+              <span>Locate on Map</span>
+            </button>
+          </div>
 
           <div class="relative">
             <input
@@ -123,6 +138,7 @@
               type="text"
               formControlName="address"
               (input)="onAddressInput($event)"
+              (blur)="onAddressBlur(); autoGeocodeCurrentVenue()"
               placeholder="Start typing street address or venue name..."
               autocomplete="off"
               class="w-full pl-4 pr-10 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
@@ -143,7 +159,7 @@
               @for (item of searchSuggestions(); track item.placeId) {
                 <button
                   type="button"
-                  (click)="selectAddressSuggestion(item)"
+                  (mousedown)="selectAddressSuggestion(item)"
                   class="w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-primary)] transition-colors flex items-start gap-2"
                 >
                   <svg class="size-4 text-indigo-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

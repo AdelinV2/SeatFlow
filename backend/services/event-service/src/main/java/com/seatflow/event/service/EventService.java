@@ -2,6 +2,7 @@ package com.seatflow.event.service;
 
 import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventStatus;
 import com.seatflow.event.web.dto.request.CreateEventRequest;
 import com.seatflow.event.web.dto.request.UpdateEventRequest;
 import com.seatflow.event.web.dto.response.EventDetailResponse;
@@ -19,6 +20,8 @@ public interface EventService {
     EventDetailResponse updateEvent(UUID eventId, UpdateEventRequest request);
 
     PagedResult<EventSummaryResponse> findPublishedEvents(EventCategory category, String search, Pageable pageable);
+
+    PagedResult<EventDetailResponse> findEventsForAdministration(EventStatus status, EventCategory category, String search, Pageable pageable);
 
     EventDetailResponse getPublishedEvent(UUID eventId);
 

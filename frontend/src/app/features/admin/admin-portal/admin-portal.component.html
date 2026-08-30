@@ -4,18 +4,18 @@
     <div>
       <div
         class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-3 border"
-        [class.bg-emerald-500\/10]="health.status() === 'OPERATIONAL'"
+        [class.bg-emerald-500/10]="health.status() === 'OPERATIONAL'"
         [class.text-emerald-600]="health.status() === 'OPERATIONAL'"
         [class.dark:text-emerald-400]="health.status() === 'OPERATIONAL'"
-        [class.border-emerald-500\/20]="health.status() === 'OPERATIONAL'"
-        [class.bg-amber-500\/10]="health.status() === 'DEGRADED'"
+        [class.border-emerald-500/20]="health.status() === 'OPERATIONAL'"
+        [class.bg-amber-500/10]="health.status() === 'DEGRADED'"
         [class.text-amber-600]="health.status() === 'DEGRADED'"
         [class.dark:text-amber-400]="health.status() === 'DEGRADED'"
-        [class.border-amber-500\/20]="health.status() === 'DEGRADED'"
-        [class.bg-rose-500\/10]="health.status() === 'DOWN'"
+        [class.border-amber-500/20]="health.status() === 'DEGRADED'"
+        [class.bg-rose-500/10]="health.status() === 'DOWN'"
         [class.text-rose-600]="health.status() === 'DOWN'"
         [class.dark:text-rose-400]="health.status() === 'DOWN'"
-        [class.border-rose-500\/20]="health.status() === 'DOWN'"
+        [class.border-rose-500/20]="health.status() === 'DOWN'"
       >
         <span
           class="size-2 rounded-full animate-pulse"
@@ -34,19 +34,28 @@
       </p>
     </div>
 
-    <div class="flex items-center gap-3">
-      <a routerLink="/admin/venues/new" class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/20 transition-all">
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <a routerLink="/admin/events/new" class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/20 transition-all">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14"/>
         </svg>
-        <span>Create Venue</span>
+        <span>Create Event</span>
+      </a>
+      <a routerLink="/admin/events" class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-primary)] transition-all">
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+          <line x1="16" x2="16" y1="2" y2="6"/>
+          <line x1="8" x2="8" y1="2" y2="6"/>
+          <line x1="3" x2="21" y1="10" y2="10"/>
+        </svg>
+        <span>All Events</span>
       </a>
       <a routerLink="/admin/venues" class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-primary)] transition-all">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect width="18" height="18" x="3" y="3" rx="2"/>
           <path d="M3 9h18M9 21V9"/>
         </svg>
-        <span>All Venues</span>
+        <span>Venues</span>
       </a>
     </div>
   </div>
@@ -143,24 +152,50 @@
       Administrative Operations Hub
     </h2>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- Hub Card 1: Venue Layout & 2D Grid Designer -->
-      <a routerLink="/admin/venues" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-indigo-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- Hub Card 1: Event Lifecycle & Pricing Manager -->
+      <a routerLink="/admin/events" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-indigo-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
         <div>
           <div class="size-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center mb-4 shadow-md shadow-indigo-600/20 group-hover:scale-110 transition-transform duration-300">
+            <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+              <line x1="16" x2="16" y1="2" y2="6"/>
+              <line x1="8" x2="8" y1="2" y2="6"/>
+              <line x1="3" x2="21" y1="10" y2="10"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+            Event & Pricing Manager
+          </h3>
+          <p class="mt-2 text-sm text-[var(--color-text-muted)] leading-relaxed">
+            Create events with 16:9 banner presets, configure section pricing matrices, and control publishing lifecycles.
+          </p>
+        </div>
+        <div class="mt-6 flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+          <span>Manage Events & Pricing</span>
+          <svg class="size-4 transition-transform group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </a>
+
+      <!-- Hub Card 2: Venue Layout & 2D Grid Designer -->
+      <a routerLink="/admin/venues" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-violet-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
+        <div>
+          <div class="size-12 rounded-xl bg-gradient-to-tr from-violet-600 to-purple-500 text-white flex items-center justify-center mb-4 shadow-md shadow-violet-600/20 group-hover:scale-110 transition-transform duration-300">
             <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect width="18" height="18" x="3" y="3" rx="2"/>
               <path d="M3 9h18M9 21V9"/>
             </svg>
           </div>
-          <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+          <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
             Venue & Seat Map Designer
           </h3>
           <p class="mt-2 text-sm text-[var(--color-text-muted)] leading-relaxed">
             Construct 2D seat matrix grids (Rows A-Z, AA-ZZ), configure section capacities, toggle aisle walkways, and manage OpenStreetMap locations.
           </p>
         </div>
-        <div class="mt-6 flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+        <div class="mt-6 flex items-center gap-2 text-xs font-bold text-violet-600 dark:text-violet-400">
           <span>Open Designer & Venues</span>
           <svg class="size-4 transition-transform group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -168,10 +203,10 @@
         </div>
       </a>
 
-      <!-- Hub Card 2: User Security & Audit -->
-      <a routerLink="/admin/users" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-violet-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
+      <!-- Hub Card 3: User Security & Audit -->
+      <a routerLink="/admin/users" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-purple-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
         <div>
-          <div class="size-12 rounded-xl bg-gradient-to-tr from-violet-600 to-purple-500 text-white flex items-center justify-center mb-4 shadow-md shadow-violet-600/20 group-hover:scale-110 transition-transform duration-300">
+          <div class="size-12 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 text-white flex items-center justify-center mb-4 shadow-md shadow-purple-600/20 group-hover:scale-110 transition-transform duration-300">
             <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
@@ -179,14 +214,14 @@
               <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
           </div>
-          <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+          <h3 class="text-lg font-bold text-[var(--color-text-primary)] group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
             User Audit & Access Control
           </h3>
           <p class="mt-2 text-sm text-[var(--color-text-muted)] leading-relaxed">
             Inspect registered customer profiles, audit security roles (ADMIN, STAFF, CUSTOMER), contact details, and account creation dates.
           </p>
         </div>
-        <div class="mt-6 flex items-center gap-2 text-xs font-bold text-violet-600 dark:text-violet-400">
+        <div class="mt-6 flex items-center gap-2 text-xs font-bold text-purple-600 dark:text-purple-400">
           <span>Audit Registered Users</span>
           <svg class="size-4 transition-transform group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -194,7 +229,7 @@
         </div>
       </a>
 
-      <!-- Hub Card 3: Gate Scanner & Staff Tools -->
+      <!-- Hub Card 4: Gate Scanner & Staff Tools -->
       <a routerLink="/scanner" class="hub-card group relative p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-emerald-500/50 shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
         <div>
           <div class="size-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center mb-4 shadow-md shadow-emerald-600/20 group-hover:scale-110 transition-transform duration-300">

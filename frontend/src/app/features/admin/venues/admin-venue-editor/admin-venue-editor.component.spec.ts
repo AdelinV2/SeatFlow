@@ -34,6 +34,7 @@ describe('AdminVenueEditorComponent', () => {
     ]);
     geocodingSpy = jasmine.createSpyObj('NominatimGeocodingService', [
       'searchAddress',
+      'geocodeBestMatch',
       'reverseGeocode',
     ]);
     snackBarSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
@@ -42,6 +43,7 @@ describe('AdminVenueEditorComponent', () => {
     venueApiSpy.createVenue.and.returnValue(of(mockVenue));
     venueApiSpy.updateVenue.and.returnValue(of(mockVenue));
     geocodingSpy.searchAddress.and.returnValue(of([]));
+    geocodingSpy.geocodeBestMatch.and.returnValue(of(null));
     geocodingSpy.reverseGeocode.and.returnValue(of(null));
 
     await TestBed.configureTestingModule({

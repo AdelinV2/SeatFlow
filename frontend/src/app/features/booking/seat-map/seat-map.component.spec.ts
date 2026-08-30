@@ -82,4 +82,39 @@ describe('SeatMapComponent', () => {
     expect(component.panX()).toBe(0);
     expect(component.panY()).toBe(0);
   });
+
+  it('computes pricing tiers and price ranges correctly from sectionsData', () => {
+    fixture.componentRef.setInput('sectionsData', [
+      {
+        sectionId: 'section-a',
+        name: 'Orchestra',
+        rowCount: 1,
+        colCount: 10,
+        seats: [],
+        pricingTiers: [
+          { categoryName: 'Child', price: 25, currency: 'USD', sectionId: 'section-a' },
+          { categoryName: 'Student', price: 35, currency: 'USD', sectionId: 'section-a' },
+          { categoryName: 'Standard', price: 50, currency: 'USD', sectionId: 'section-a' },
+        ],
+      },
+    ]);
+    fixture.detectChanges();
+
+    const orchestra = component.sectionDetails().find((s) => s.id === 'section-a');
+    expect(orchestra).toBeDefined();
+    expect(orchestra?.minPrice).toBe(25);
+    expect(orchestra?.maxPrice).toBe(50);
+    expect(orchestra?.pricingTiers.length).toBe(3);
+    expect(orchestra?.pricingTiers.map((t) => t.categoryName)).toEqual(['Child', 'Student', 'Standard']);
+  });
+
+  it('zooms in/out on wheel events', () => {
+    const wheelEvent = new WheelEvent('wheel', { deltaY: -100, cancelable: true });
+    component.onWheel(wheelEvent);
+    expect(component.zoomLevel()).toBeCloseTo(1.12, 2);
+
+    const wheelOut = new WheelEvent('wheel', { deltaY: 100, cancelable: true });
+    component.onWheel(wheelOut);
+    expect(component.zoomLevel()).toBeCloseTo(1.0, 2);
+  });
 });

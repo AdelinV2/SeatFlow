@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { map, Observable, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { from, map, Observable, of } from 'rxjs';
+import { catchError, concatMap, defaultIfEmpty, filter, take } from 'rxjs/operators';
 
 export interface GeocodingResult {
   placeId: number;
@@ -75,6 +75,24 @@ export class NominatimGeocodingService {
         ),
         catchError(() => of([]))
       );
+  }
+
+  geocodeBestMatch(candidates: string[]): Observable<GeocodingResult | null> {
+    const validCandidates = candidates
+      .map((c) => c.trim())
+      .filter((c, idx, arr) => c.length > 0 && arr.indexOf(c) === idx);
+
+    if (validCandidates.length === 0) {
+      return of(null);
+    }
+
+    return from(validCandidates).pipe(
+      concatMap((candidate) => this.searchAddress(candidate)),
+      filter((results) => results.length > 0),
+      map((results) => results[0]),
+      take(1),
+      defaultIfEmpty(null)
+    );
   }
 
   reverseGeocode(lat: number, lon: number): Observable<GeocodingResult | null> {

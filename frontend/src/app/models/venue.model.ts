@@ -33,6 +33,8 @@ export interface VenueSummary {
   city: string;
   country: string;
   capacity: number;
+  latitude?: number;
+  longitude?: number;
   totalConfiguredSeats?: number;
   createdAt?: string;
 }

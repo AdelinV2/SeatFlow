@@ -147,6 +147,24 @@ class EventServiceIntegrationTest {
     }
 
     @Test
+    void configurePricing_replacesExistingTierWithoutUniqueConstraintViolation() {
+        UUID eventId = eventService.createEvent(new CreateEventRequest(
+                VENUE_ID, "Pricing Update", "Test event", EventCategory.CONCERT,
+                null, Instant.now().plusSeconds(86400))).id();
+
+        eventPricingService.configurePricing(eventId, new ConfigurePricingRequest(List.of(
+                new PricingTierItemRequest(SECTION_ID, "Standard", new BigDecimal("20.00"), "USD"))));
+
+        var updatedTiers = eventPricingService.configurePricing(eventId, new ConfigurePricingRequest(List.of(
+                new PricingTierItemRequest(SECTION_ID, "Standard", new BigDecimal("25.00"), "USD"))));
+
+        assertThat(updatedTiers).hasSize(1);
+        assertThat(updatedTiers.getFirst().categoryName()).isEqualTo("Standard");
+        assertThat(updatedTiers.getFirst().price()).isEqualByComparingTo("25.00");
+        assertThat(pricingTierRepository.findByEvent_IdOrderByPriceAsc(eventId)).hasSize(1);
+    }
+
+    @Test
     void cancelEvent_emitsEventCancelledOutbox() {
         UUID eventId = eventService.createEvent(new CreateEventRequest(VENUE_ID, "Othello", "desc",
                 EventCategory.OTHER, null, Instant.now().plusSeconds(86400))).id();

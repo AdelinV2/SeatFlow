@@ -1,32 +1,68 @@
 import { CommonModule } from '@angular/common';
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
   inject,
   input,
+  OnDestroy,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Seat } from '../../../models/seat.model';
+import { EventSeatMapResponse, Seat, SeatMapSectionResponse } from '../../../models/seat.model';
+
+import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 
 interface PointerPosition {
   x: number;
   y: number;
 }
 
+export interface ColumnHeader {
+  number: number;
+  x: number;
+}
+
+export interface RowHeader {
+  label: string;
+  y: number;
+}
+
+export interface PricingTierDetail {
+  id?: string;
+  sectionId: string;
+  categoryName: string;
+  price: number;
+  currency: string;
+}
+
+export interface SectionDetail {
+  id: string;
+  name: string;
+  minPrice: number;
+  maxPrice: number;
+  currency: string;
+  pricingTiers: PricingTierDetail[];
+  availableSeats: number;
+  totalSeats: number;
+}
+
 @Component({
   selector: 'app-seat-map',
   standalone: true,
-  imports: [CommonModule, MatTooltipModule],
+  imports: [CommonModule, MatTooltipModule, CurrencyFormatPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seat-map.component.html',
   styleUrl: './seat-map.component.scss',
 })
-export class SeatMapComponent {
+export class SeatMapComponent implements AfterViewInit, OnDestroy {
   private readonly snackBar = inject(MatSnackBar);
+  readonly svgViewport = viewChild<ElementRef<SVGSVGElement>>('svgViewport');
   private readonly activePointers = new Map<number, PointerPosition>();
   private pinchStartDistance = 0;
   private pinchStartZoom = 1;
@@ -34,9 +70,14 @@ export class SeatMapComponent {
   private pinchStartPan: PointerPosition = { x: 0, y: 0 };
   private lastDragPosition: PointerPosition | null = null;
 
+  readonly seatSpacing = 44;
+  readonly gridStartY = 145;
+
   readonly seats = input.required<Seat[]>();
+  readonly sectionsData = input<SeatMapSectionResponse[]>([]);
   readonly maxSeats = input(10);
   readonly selectedSeatIds = input<Set<string>>(new Set());
+  readonly conflictingSeatIds = input<Set<string>>(new Set());
   readonly seatToggled = output<Seat>();
 
   readonly zoomLevel = signal(1);
@@ -46,12 +87,109 @@ export class SeatMapComponent {
   readonly isolatedSectionId = signal<string | null>(null);
   readonly animatingSeatIds = signal<Set<string>>(new Set());
 
-  readonly sections = computed(() => {
-    const sections = new Map<string, string>();
-    for (const seat of this.seats()) {
-      sections.set(seat.sectionId, seat.sectionName ?? 'Section');
+  readonly sectionDetails = computed<SectionDetail[]>(() => {
+    const rawSections = this.sectionsData();
+    const sectionMap = new Map<
+      string,
+      {
+        name: string;
+        currency: string;
+        pricingTiers: PricingTierDetail[];
+        availableSeats: number;
+        totalSeats: number;
+        seatPrices: number[];
+      }
+    >();
+
+    for (const rawSec of rawSections) {
+      const tiers: PricingTierDetail[] = (rawSec.pricingTiers ?? []).map((t) => ({
+        id: t.id,
+        sectionId: rawSec.sectionId,
+        categoryName: t.categoryName || 'Standard',
+        price: Number(t.price),
+        currency: t.currency || 'USD',
+      }));
+      tiers.sort((a, b) => a.price - b.price);
+
+      sectionMap.set(rawSec.sectionId, {
+        name: rawSec.name,
+        currency: tiers[0]?.currency || 'USD',
+        pricingTiers: tiers,
+        availableSeats: 0,
+        totalSeats: 0,
+        seatPrices: [],
+      });
     }
-    return [...sections].map(([id, name]) => ({ id, name }));
+
+    for (const seat of this.seats()) {
+      let entry = sectionMap.get(seat.sectionId);
+      if (!entry) {
+        entry = {
+          name: seat.sectionName ?? 'Section',
+          currency: seat.currency ?? 'USD',
+          pricingTiers: [],
+          availableSeats: 0,
+          totalSeats: 0,
+          seatPrices: [],
+        };
+        sectionMap.set(seat.sectionId, entry);
+      }
+      if (seat.price > 0) {
+        entry.seatPrices.push(seat.price);
+        if (seat.currency) {
+          entry.currency = seat.currency;
+        }
+      }
+      if (seat.isActive) {
+        entry.totalSeats += 1;
+        if (seat.status === 'AVAILABLE') {
+          entry.availableSeats += 1;
+        }
+      }
+    }
+
+    return [...sectionMap.entries()].map(([id, info]) => {
+      let tiers = info.pricingTiers;
+      if (tiers.length === 0 && info.seatPrices.length > 0) {
+        const uniquePrices = [...new Set(info.seatPrices)].sort((a, b) => a - b);
+        tiers = uniquePrices.map((price) => ({
+          sectionId: id,
+          categoryName: 'Standard',
+          price,
+          currency: info.currency,
+        }));
+      }
+
+      const allPrices =
+        tiers.length > 0
+          ? tiers.map((t) => t.price)
+          : info.seatPrices.length > 0
+            ? info.seatPrices
+            : [0];
+
+      const minPrice = Math.min(...allPrices);
+      const maxPrice = Math.max(...allPrices);
+
+      return {
+        id,
+        name: info.name,
+        minPrice,
+        maxPrice,
+        currency: info.currency,
+        pricingTiers: tiers,
+        availableSeats: info.availableSeats,
+        totalSeats: info.totalSeats,
+      };
+    });
+  });
+
+  readonly sections = computed(() => {
+    return this.sectionDetails().map((s) => ({ id: s.id, name: s.name }));
+  });
+
+  readonly activeSectionSummary = computed<SectionDetail | null>(() => {
+    const activeId = this.activeSectionId();
+    return this.sectionDetails().find((s) => s.id === activeId) ?? null;
   });
 
   readonly activeSectionId = computed(() => {
@@ -67,14 +205,88 @@ export class SeatMapComponent {
     return activeSectionId ? this.seats().filter((seat) => seat.sectionId === activeSectionId) : [];
   });
 
+  readonly bookableSeats = computed(() => {
+    return this.visibleSeats().filter((seat) => seat.isActive && seat.status !== 'DISABLED');
+  });
+
+  readonly bounds = computed(() => {
+    const seats = this.visibleSeats();
+    if (seats.length === 0) {
+      return { minCol: 0, maxCol: 9, minRow: 0, maxRow: 4, colCount: 10, rowCount: 5 };
+    }
+    let minCol = Number.POSITIVE_INFINITY;
+    let maxCol = Number.NEGATIVE_INFINITY;
+    let minRow = Number.POSITIVE_INFINITY;
+    let maxRow = Number.NEGATIVE_INFINITY;
+    for (const s of seats) {
+      minCol = Math.min(minCol, s.gridX);
+      maxCol = Math.max(maxCol, s.gridX);
+      minRow = Math.min(minRow, s.gridY);
+      maxRow = Math.max(maxRow, s.gridY);
+    }
+    return {
+      minCol: Number.isFinite(minCol) ? minCol : 0,
+      maxCol: Number.isFinite(maxCol) ? maxCol : 9,
+      minRow: Number.isFinite(minRow) ? minRow : 0,
+      maxRow: Number.isFinite(maxRow) ? maxRow : 4,
+      colCount: Math.max(1, (maxCol - minCol) + 1),
+      rowCount: Math.max(1, (maxRow - minRow) + 1),
+    };
+  });
+
+  readonly gridWidth = computed(() => {
+    return (this.bounds().colCount - 1) * this.seatSpacing;
+  });
+
   readonly mapWidth = computed(() => {
-    const maxColumn = this.visibleSeats().reduce((maximum, seat) => Math.max(maximum, seat.gridX), 0);
-    return Math.max(520, (maxColumn + 1) * 38 + 96);
+    return Math.max(680, this.gridWidth() + 160);
+  });
+
+  readonly gridStartX = computed(() => {
+    return (this.mapWidth() - this.gridWidth()) / 2;
   });
 
   readonly mapHeight = computed(() => {
-    const maxRow = this.visibleSeats().reduce((maximum, seat) => Math.max(maximum, seat.gridY), 0);
-    return Math.max(330, (maxRow + 1) * 38 + 156);
+    return this.gridStartY + (this.bounds().rowCount - 1) * this.seatSpacing + 80;
+  });
+
+  readonly stageWidth = computed(() => {
+    return Math.min(this.mapWidth() - 96, Math.max(360, this.gridWidth() + 100));
+  });
+
+  readonly stageX = computed(() => {
+    return (this.mapWidth() - this.stageWidth()) / 2;
+  });
+
+  readonly columnHeaders = computed<ColumnHeader[]>(() => {
+    const b = this.bounds();
+    const headers: ColumnHeader[] = [];
+    for (let c = b.minCol; c <= b.maxCol; c++) {
+      headers.push({
+        number: c + 1,
+        x: this.gridStartX() + (c - b.minCol) * this.seatSpacing,
+      });
+    }
+    return headers;
+  });
+
+  readonly rowHeaders = computed<RowHeader[]>(() => {
+    const b = this.bounds();
+    const rowsMap = new Map<number, string>();
+    for (const seat of this.visibleSeats()) {
+      if (!rowsMap.has(seat.gridY)) {
+        rowsMap.set(seat.gridY, seat.rowLabel);
+      }
+    }
+    const headers: RowHeader[] = [];
+    for (const [gridY, label] of rowsMap.entries()) {
+      headers.push({
+        label,
+        y: this.gridStartY + (gridY - b.minRow) * this.seatSpacing + 4,
+      });
+    }
+    headers.sort((a, b) => a.y - b.y);
+    return headers;
   });
 
   readonly viewBox = computed(() => `0 0 ${this.mapWidth()} ${this.mapHeight()}`);
@@ -137,6 +349,24 @@ export class SeatMapComponent {
 
   setZoomFromInput(event: Event): void {
     this.setZoom(Number((event.target as HTMLInputElement).value));
+  }
+
+  private readonly wheelHandler = (event: WheelEvent): void => {
+    this.onWheel(event);
+  };
+
+  ngAfterViewInit(): void {
+    const el = this.svgViewport()?.nativeElement;
+    if (el) {
+      el.addEventListener('wheel', this.wheelHandler, { passive: false });
+    }
+  }
+
+  ngOnDestroy(): void {
+    const el = this.svgViewport()?.nativeElement;
+    if (el) {
+      el.removeEventListener('wheel', this.wheelHandler);
+    }
   }
 
   onWheel(event: WheelEvent): void {
@@ -206,26 +436,33 @@ export class SeatMapComponent {
   }
 
   seatX(seat: Seat): number {
-    return seat.gridX * 38 + 48;
+    return this.gridStartX() + (seat.gridX - this.bounds().minCol) * this.seatSpacing;
   }
 
   seatY(seat: Seat): number {
-    return seat.gridY * 38 + 112;
+    return this.gridStartY + (seat.gridY - this.bounds().minRow) * this.seatSpacing;
   }
 
   seatLabel(seat: Seat): string {
-    return `${seat.sectionName ?? 'Section'}, row ${seat.rowLabel}, seat ${seat.seatNumber}, ${this.formatPrice(seat)}, ${seat.status.toLowerCase()}`;
+    return `${seat.sectionName ?? 'Section'}, row ${seat.rowLabel}, seat ${seat.seatNumber}, ${this.formatPrice(seat.price, seat.currency)}, ${seat.status.toLowerCase()}`;
   }
 
   seatTooltip(seat: Seat): string {
-    return this.seatLabel(seat).replaceAll(', ', ' · ');
+    const sec = this.sectionDetails().find((s) => s.id === seat.sectionId);
+    if (sec && sec.pricingTiers.length > 1) {
+      const tiersStr = sec.pricingTiers
+        .map((t) => `${t.categoryName}: ${this.formatPrice(t.price, t.currency)}`)
+        .join(', ');
+      return `${seat.sectionName ?? 'Section'} · Row ${seat.rowLabel}, Seat ${seat.seatNumber} · Rates: ${tiersStr} · ${seat.status.toLowerCase()}`;
+    }
+    return `${seat.sectionName ?? 'Section'} · Row ${seat.rowLabel}, Seat ${seat.seatNumber} · ${this.formatPrice(seat.price, seat.currency)} · ${seat.status.toLowerCase()}`;
   }
 
-  private formatPrice(seat: Seat): string {
+  private formatPrice(price: number, currency = 'USD'): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: seat.currency ?? 'USD',
-    }).format(seat.price);
+      currency: currency || 'USD',
+    }).format(price);
   }
 
   isUnavailable(seat: Seat): boolean {

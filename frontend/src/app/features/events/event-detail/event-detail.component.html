@@ -58,14 +58,14 @@
     <!-- 1. HERO MEDIA BANNER SECTION -->
     <section class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8" aria-label="Event overview">
       <div class="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-slate-950 shadow-2xl">
-        <!-- Backdrop Blurred Image -->
+        <!-- Event image -->
         <div class="absolute inset-0 z-0">
           <img
             [src]="ev.bannerUrl || 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=80'"
             [alt]="ev.title"
-            class="h-full w-full object-cover opacity-35 blur-md scale-105"
+            class="h-full w-full object-cover object-center opacity-60"
           />
-          <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/45 to-slate-950/10"></div>
         </div>
 
         <!-- Banner Content Grid -->
@@ -143,29 +143,52 @@
                 </p>
               </div>
               <span class="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                {{ ev.pricingTiers.length }} Tiers
+                {{ ev.pricingTiers.length }} tiers · {{ pricingSections().length }} sections
               </span>
             </div>
 
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              @for (tier of ev.pricingTiers; track tier.sectionId || tier.id) {
-                <div class="flex items-center justify-between rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-canvas)] p-4 transition-colors hover:border-indigo-400/40">
-                  <div class="flex items-center gap-3">
-                    <div class="flex size-9 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 font-bold text-xs">
-                      SF
+            <div class="space-y-4">
+              @for (section of pricingSections(); track section.id) {
+                <div class="rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-canvas)]/70 p-4 sm:p-5">
+                  <div class="mb-4 flex items-center justify-between gap-3">
+                    <div class="flex min-w-0 items-center gap-3">
+                      <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-500">
+                        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.8">
+                          <path d="M4 19.5V8.75L12 4l8 4.75V19.5" />
+                          <path d="M8 19.5v-6h8v6M3 20h18" />
+                        </svg>
+                      </div>
+                      <div class="min-w-0">
+                        <span class="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Venue section</span>
+                        <h3 class="truncate text-base font-black text-[var(--color-text-primary)] sm:text-lg">
+                          {{ section.name }}
+                        </h3>
+                      </div>
                     </div>
-                    <div>
-                      <h4 class="text-sm font-bold text-[var(--color-text-primary)]">
-                        {{ tier.sectionName || tier.categoryName || 'General Admission' }}
-                      </h4>
-                      <span class="text-xs text-[var(--color-text-muted)]">Official Seat Tier</span>
-                    </div>
+                    <span class="shrink-0 rounded-full border border-[var(--color-border)] px-2.5 py-1 text-[11px] font-bold text-[var(--color-text-muted)]">
+                      {{ section.tiers.length }} {{ section.tiers.length === 1 ? 'tier' : 'tiers' }}
+                    </span>
                   </div>
 
-                  <div class="text-right">
-                    <span class="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
-                      {{ tier.price | sfCurrency: (tier.currency || 'USD') }}
-                    </span>
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    @for (tier of section.tiers; track tier.id || tier.categoryName) {
+                      <div class="flex min-h-18 items-center justify-between gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3.5 transition-colors hover:border-indigo-400/40">
+                        <div class="flex min-w-0 items-center gap-3">
+                          <div class="min-w-0">
+                            <h4 class="truncate text-sm font-bold text-[var(--color-text-primary)]">
+                              {{ tier.categoryName || 'General Admission' }}
+                            </h4>
+                            <span class="text-xs text-[var(--color-text-muted)]">{{ section.name }} · Official seat tier</span>
+                          </div>
+                        </div>
+
+                        <div class="shrink-0 text-right">
+                          <span class="text-base font-extrabold text-indigo-600 dark:text-indigo-400">
+                            {{ tier.price | sfCurrency: (tier.currency || 'USD') }}
+                          </span>
+                        </div>
+                      </div>
+                    }
                   </div>
                 </div>
               }
@@ -195,14 +218,20 @@
               <span class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
                 Ticket Pricing
               </span>
-              <div class="mt-1 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-[var(--color-text-primary)]">
-                  {{ minPrice() | sfCurrency: currency() }}
-                </span>
-                @if (maxPrice() > minPrice()) {
-                  <span class="text-sm text-[var(--color-text-muted)] font-medium">
-                    – {{ maxPrice() | sfCurrency: currency() }}
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <div class="rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-canvas)] px-3 py-2.5">
+                  <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">From</span>
+                  <span class="mt-0.5 block text-2xl font-black leading-tight text-[var(--color-text-primary)]">
+                    {{ minPrice() | sfCurrency: currency() }}
                   </span>
+                </div>
+                @if (maxPrice() > minPrice()) {
+                  <div class="rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-canvas)] px-3 py-2.5">
+                    <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Up to</span>
+                    <span class="mt-0.5 block text-2xl font-black leading-tight text-[var(--color-text-primary)]">
+                      {{ maxPrice() | sfCurrency: currency() }}
+                    </span>
+                  </div>
                 }
               </div>
             </div>
