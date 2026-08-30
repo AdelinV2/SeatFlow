@@ -75,7 +75,9 @@ describe('GuestTicketComponent', () => {
   beforeEach(async () => {
     ticketServiceSpy = jasmine.createSpyObj('TicketApiService', [
       'getGuestTicket',
+      'getGuestTicketBundle',
       'downloadTicketPdf',
+      'downloadGuestTicketPdf',
     ]);
     reservationApiSpy = jasmine.createSpyObj('ReservationApiService', ['getReservation']);
     eventApiSpy = jasmine.createSpyObj('EventApiService', ['getEventById']);
@@ -88,7 +90,20 @@ describe('GuestTicketComponent', () => {
       'userEmail',
     ]);
 
+    const mockTicketBundle: TicketItem[] = [
+      mockTicket,
+      {
+        ...mockTicket,
+        id: 'ticket-2',
+        seatId: 'seat-2',
+        seatNumber: 2,
+        ticketCode: 'SF-TKT-123457',
+      },
+    ];
     ticketServiceSpy.getGuestTicket.and.returnValue(of(mockTicket));
+    ticketServiceSpy.getGuestTicketBundle.and.returnValue(of(mockTicketBundle));
+    ticketServiceSpy.downloadTicketPdf.and.returnValue(of(new Blob(['pdf'], { type: 'application/pdf' })));
+    ticketServiceSpy.downloadGuestTicketPdf.and.returnValue(of(new Blob(['pdf'], { type: 'application/pdf' })));
     reservationApiSpy.getReservation.and.returnValue(of(mockReservation));
     eventApiSpy.getEventById.and.returnValue(of(mockEvent));
     userContextSpy.isAuthenticated.and.returnValue(false);
@@ -155,10 +170,10 @@ describe('GuestTicketComponent', () => {
 
   it('downloads ticket PDF when downloadCurrentPdf() is called', () => {
     const mockBlob = new Blob(['pdf-data'], { type: 'application/pdf' });
-    ticketServiceSpy.downloadTicketPdf.and.returnValue(of(mockBlob));
+    ticketServiceSpy.downloadGuestTicketPdf.and.returnValue(of(mockBlob));
 
     component.downloadCurrentPdf();
-    expect(ticketServiceSpy.downloadTicketPdf).toHaveBeenCalledWith('ticket-1');
+    expect(ticketServiceSpy.downloadGuestTicketPdf).toHaveBeenCalledWith('SF-TKT-123456');
   });
 
   it('displays error state when guest ticket fetch fails', () => {

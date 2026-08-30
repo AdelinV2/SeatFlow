@@ -66,10 +66,13 @@
           </span>
         </div>
 
-        <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+        <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin" role="tablist" aria-label="Passes in this booking">
           @for (seat of ticketList(); track seat.seatId; let idx = $index) {
             <button
               type="button"
+              role="tab"
+              [attr.aria-selected]="selectedTicketIndex() === idx"
+              [attr.aria-label]="'Pass ' + (idx + 1) + ', Row ' + seat.rowNumber + ', Seat ' + seat.seatNumber"
               class="btn-spring flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-xs font-bold whitespace-nowrap transition-all"
               [class.bg-indigo-600]="selectedTicketIndex() === idx"
               [class.text-white]="selectedTicketIndex() === idx"
@@ -142,6 +145,7 @@
               aria-label="Enlarge QR Code"
               (click)="openQrModal()"
               (keydown.enter)="openQrModal()"
+              (keydown.space)="$event.preventDefault(); openQrModal()"
             >
               @if (qrImageUrl()) {
                 <img

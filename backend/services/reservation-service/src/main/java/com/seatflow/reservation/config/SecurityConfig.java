@@ -33,7 +33,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         // Public reservation creation & availability (Hybrid Guest Flow - ADR-001)
                         .requestMatchers(HttpMethod.POST, "/api/reservations").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/reservations/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reservations/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reservations/events/*/availability").permitAll()
                         // Documentation & Actuator

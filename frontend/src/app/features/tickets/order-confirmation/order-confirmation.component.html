@@ -99,7 +99,7 @@
           @if (ev.bannerUrl) {
             <img
               [src]="ev.bannerUrl"
-              [alt]="ev.title"
+              [alt]="ev.title || 'Event promotional banner'"
               class="w-20 sm:w-24 h-20 sm:h-24 object-cover rounded-2xl border border-[var(--color-border)] shadow-md shrink-0"
             />
           }
@@ -182,6 +182,10 @@
 
     <!-- Clean, Sleek Actions Bar -->
     <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+      <app-tactile-button variant="secondary" size="md" (clicked)="printReceipt()" class="w-full sm:w-auto">
+        🖨️ Print Receipt
+      </app-tactile-button>
+
       @if (!isGuest()) {
         <a routerLink="/profile/tickets" class="w-full sm:w-auto">
           <app-tactile-button variant="secondary" size="md" class="w-full">

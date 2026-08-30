@@ -39,6 +39,12 @@ public final class UserContext {
             if (email == null) {
                 email = jwt.getClaimAsString("preferred_username");
             }
+            if (email == null && jwt.getClaims().get("emails") instanceof java.util.Collection<?> emails && !emails.isEmpty()) {
+                Object first = emails.iterator().next();
+                if (first != null) {
+                    email = first.toString();
+                }
+            }
             return email;
         });
     }

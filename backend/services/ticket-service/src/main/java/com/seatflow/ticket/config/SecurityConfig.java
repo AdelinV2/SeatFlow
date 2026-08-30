@@ -42,7 +42,6 @@ public class SecurityConfig {
 
                 // Guest ticket delivery (ADR-001) and public PDF download
                 .requestMatchers(HttpMethod.GET, "/api/tickets/guest/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
 
                 // Gate scanner verification (ADR-005: operational staff and admins)
                 .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority(SecurityRoles.ROLE_STAFF, SecurityRoles.ROLE_ADMIN)
@@ -50,6 +49,7 @@ public class SecurityConfig {
 
                 // Authenticated user tickets
                 .requestMatchers(HttpMethod.GET, "/api/tickets/my-tickets").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/tickets/*").authenticated()
 
                 .anyRequest().authenticated()

@@ -25,9 +25,11 @@
   </div>
 
   <!-- Tab Filter Switcher -->
-  <div class="flex items-center gap-2 border-b border-[var(--color-border)] pb-4">
+  <div class="flex items-center gap-2 border-b border-[var(--color-border)] pb-4" role="tablist" aria-label="Ticket filter tabs">
     <button
       type="button"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'upcoming'"
       class="btn-spring flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all"
       [class.bg-indigo-600]="activeTab() === 'upcoming'"
       [class.text-white]="activeTab() === 'upcoming'"
@@ -54,6 +56,8 @@
 
     <button
       type="button"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'past'"
       class="btn-spring flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all"
       [class.bg-indigo-600]="activeTab() === 'past'"
       [class.text-white]="activeTab() === 'past'"
@@ -134,15 +138,15 @@
         @let seatInfo = getSeatDetail(ticket);
         <div class="wallet-pass-card relative flex flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
           <!-- Pass Header / Banner Image (Clickable to Event Details) -->
-          <div
-            class="relative h-32 w-full bg-gradient-to-tr from-indigo-950 via-slate-900 to-indigo-900 overflow-hidden border-b border-[var(--color-border)] cursor-pointer group"
+          <a
+            class="relative h-32 w-full block bg-gradient-to-tr from-indigo-950 via-slate-900 to-indigo-900 overflow-hidden border-b border-[var(--color-border)] group"
             [routerLink]="['/events', ticket.eventId]"
-            title="View Event Details"
+            [attr.aria-label]="'View details for ' + (eventInfo?.title || ticket.eventTitle || 'event')"
           >
             @if (ticket.bannerUrl || eventInfo?.bannerUrl) {
               <img
                 [src]="ticket.bannerUrl || eventInfo?.bannerUrl"
-                [alt]="ticket.eventTitle || eventInfo?.title || 'Event'"
+                [alt]="ticket.eventTitle || eventInfo?.title || 'Event promotional banner'"
                 class="size-full object-cover opacity-60 transition-transform duration-500 group-hover:scale-105"
               />
             }
@@ -160,7 +164,7 @@
                 {{ eventInfo?.title || ticket.eventTitle || 'SeatFlow Live Event' }}
               </h2>
             </div>
-          </div>
+          </a>
 
           <!-- Pass Details & Notches -->
           <div class="p-5 space-y-4 flex-1 flex flex-col justify-between">
@@ -203,6 +207,7 @@
             <div class="pt-3 border-t border-[var(--color-border)] grid grid-cols-2 gap-2">
               <button
                 type="button"
+                [attr.aria-label]="'View QR pass for ' + (eventInfo?.title || ticket.eventTitle || ticket.ticketCode)"
                 class="btn-spring flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 text-xs font-bold transition-colors"
                 (click)="openQrModal(ticket)"
               >
@@ -215,6 +220,7 @@
 
               <button
                 type="button"
+                [attr.aria-label]="'Download PDF for ' + (eventInfo?.title || ticket.eventTitle || ticket.ticketCode)"
                 class="btn-spring flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)] text-xs font-bold transition-colors disabled:opacity-50"
                 [disabled]="downloadingTicketId() === ticket.id"
                 (click)="downloadPdf(ticket)"

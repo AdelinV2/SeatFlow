@@ -18,6 +18,14 @@ export class TicketApiService {
     return this.http.get<TicketItem>(`${this.baseUrl}/guest/${ticketCode}`);
   }
 
+  getGuestTicketBundle(ticketCode: string): Observable<TicketItem[]> {
+    return this.http.get<TicketItem[]>(`${this.baseUrl}/guest/${ticketCode}/bundle`);
+  }
+
+  downloadGuestTicketPdf(ticketCode: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/guest/${ticketCode}/pdf`, { responseType: 'blob' });
+  }
+
   getTicketById(ticketId: string): Observable<TicketItem> {
     return this.http.get<TicketItem>(`${this.baseUrl}/${ticketId}`);
   }

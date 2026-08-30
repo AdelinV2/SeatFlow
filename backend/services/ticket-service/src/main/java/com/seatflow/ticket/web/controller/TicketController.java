@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -62,6 +63,28 @@ public class TicketController {
     public ResponseEntity<TicketDetailResponse> getGuestTicket(@PathVariable String ticketCode) {
         TicketDetailResponse response = ticketService.getGuestTicketByCode(ticketCode);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/guest/{ticketCode}/bundle")
+    @Operation(summary = "Retrieve all tickets in guest reservation bundle", description = "Returns all tickets associated with the reservation for multi-seat guest orders (ADR-001)")
+    @ApiResponse(responseCode = "200", description = "List of ticket details in reservation bundle")
+    @ApiResponse(responseCode = "404", description = "Ticket code not found", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<List<TicketDetailResponse>> getGuestTicketBundle(@PathVariable String ticketCode) {
+        List<TicketDetailResponse> response = ticketService.getGuestTicketBundleByCode(ticketCode);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/guest/{ticketCode}/pdf")
+    @Operation(summary = "Download guest ticket PDF", description = "Secure guest PDF delivery verified by ticketCode token (ADR-001)")
+    @ApiResponse(responseCode = "200", description = "PDF stream returned", content = @Content(mediaType = "application/pdf"))
+    @ApiResponse(responseCode = "404", description = "Ticket code not found", content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<byte[]> downloadGuestTicketPdf(@PathVariable String ticketCode) {
+        byte[] pdfBytes = ticketService.generateGuestTicketPdf(ticketCode);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"ticket-" + ticketCode + ".pdf\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(pdfBytes);
     }
 
     @GetMapping("/{ticketId}")

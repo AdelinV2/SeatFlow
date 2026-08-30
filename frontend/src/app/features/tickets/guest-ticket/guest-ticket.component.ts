@@ -7,6 +7,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  input,
   OnInit,
   PLATFORM_ID,
   signal,
@@ -62,6 +63,7 @@ export interface DisplayTicketSeat {
   styleUrl: './guest-ticket.component.scss',
 })
 export class GuestTicketComponent implements OnInit {
+  readonly ticketCodeParam = input<string>(undefined, { alias: 'ticketCode' });
   private readonly route = inject(ActivatedRoute);
   private readonly ticketService = inject(TicketApiService);
   private readonly reservationApi = inject(ReservationApiService);
@@ -74,6 +76,7 @@ export class GuestTicketComponent implements OnInit {
   readonly userContext = inject(UserContextService);
 
   readonly primaryTicket = signal<TicketItem | null>(null);
+  readonly bundleTickets = signal<TicketItem[]>([]);
   readonly reservation = signal<ReservationResponse | null>(null);
   readonly event = signal<EventDetail | null>(null);
   readonly selectedTicketIndex = signal<number>(0);
@@ -86,6 +89,20 @@ export class GuestTicketComponent implements OnInit {
   private copyTimeoutId?: ReturnType<typeof setTimeout>;
 
   readonly ticketList = computed<DisplayTicketSeat[]>(() => {
+    const bundle = this.bundleTickets();
+    if (bundle.length > 0) {
+      return bundle.map((t) => ({
+        seatId: t.seatId,
+        ticketCode: t.ticketCode,
+        ticketId: t.id,
+        rowNumber: t.rowNumber || '—',
+        seatNumber: t.seatNumber || 1,
+        section: t.section || 'General Admission',
+        price: t.price,
+        qrCodeData: t.qrCodeData,
+      }));
+    }
+
     const primary = this.primaryTicket();
     if (!primary) return [];
 
@@ -174,7 +191,7 @@ export class GuestTicketComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const ticketCode = this.route.snapshot.paramMap.get('ticketCode');
+    const ticketCode = this.ticketCodeParam() || this.route.snapshot.paramMap.get('ticketCode');
     if (!ticketCode) {
       this.errorMessage.set('No ticket access code was found in the link.');
       this.isLoading.set(false);
@@ -182,6 +199,12 @@ export class GuestTicketComponent implements OnInit {
     }
 
     this.loadTicketData(ticketCode);
+    this.destroyRef.onDestroy(() => {
+      if (this.copyTimeoutId !== undefined) {
+        clearTimeout(this.copyTimeoutId);
+        this.copyTimeoutId = undefined;
+      }
+    });
   }
 
   private loadTicketData(ticketCode: string): void {
@@ -195,6 +218,20 @@ export class GuestTicketComponent implements OnInit {
         next: (ticket) => {
           this.primaryTicket.set(ticket);
           this.isLoading.set(false);
+
+          this.ticketService
+            .getGuestTicketBundle(ticketCode)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: (bundle) => {
+                if (bundle && bundle.length > 0) {
+                  this.bundleTickets.set(bundle);
+                }
+              },
+              error: () => {
+                // Bundle enrichment fallback
+              },
+            });
 
           if (ticket.reservationId) {
             this.loadReservationDetails(ticket.reservationId, ticket.customerEmail);
@@ -283,11 +320,15 @@ export class GuestTicketComponent implements OnInit {
 
   downloadCurrentPdf(): void {
     const primary = this.primaryTicket();
-    if (!primary) return;
+    const active = this.activeTicket();
+    if (!primary || !active) return;
 
     this.isDownloadingPdf.set(true);
-    this.ticketService
-      .downloadTicketPdf(primary.id)
+    const download$ = active.ticketCode
+      ? this.ticketService.downloadGuestTicketPdf(active.ticketCode)
+      : this.ticketService.downloadTicketPdf(active.ticketId);
+
+    download$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (blob) => {
@@ -295,9 +336,9 @@ export class GuestTicketComponent implements OnInit {
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `SeatFlow-Ticket-${primary.ticketCode}.pdf`;
+          a.download = `SeatFlow-Ticket-${active.ticketCode}.pdf`;
           a.click();
-          window.URL.revokeObjectURL(url);
+          setTimeout(() => window.URL.revokeObjectURL(url), 1000);
           this.snackBar.open('Ticket PDF downloaded successfully.', 'Close', {
             duration: 3500,
             panelClass: 'snack-success',

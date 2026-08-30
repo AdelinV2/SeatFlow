@@ -5,6 +5,7 @@ import {
   computed,
   DestroyRef,
   inject,
+  input,
   OnInit,
   PLATFORM_ID,
   signal,
@@ -43,6 +44,7 @@ import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
   styleUrl: './order-confirmation.component.scss',
 })
 export class OrderConfirmationComponent implements OnInit {
+  readonly paymentId = input<string>();
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly paymentApi = inject(PaymentApiService);
@@ -51,6 +53,8 @@ export class OrderConfirmationComponent implements OnInit {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly destroyRef = inject(DestroyRef);
   readonly userContext = inject(UserContextService);
+
+  private readonly confettiTimers: ReturnType<typeof setTimeout>[] = [];
 
   readonly payment = signal<PaymentStatusResponse | null>(null);
   readonly reservation = signal<ReservationResponse | null>(null);
@@ -99,7 +103,7 @@ export class OrderConfirmationComponent implements OnInit {
   readonly currency = computed(() => this.payment()?.currency ?? 'USD');
 
   ngOnInit(): void {
-    const paymentId = this.route.snapshot.paramMap.get('paymentId');
+    const paymentId = this.paymentId() || this.route.snapshot.paramMap.get('paymentId');
     if (!paymentId) {
       this.errorMessage.set('No payment identifier was provided in the URL.');
       this.isLoading.set(false);
@@ -108,6 +112,16 @@ export class OrderConfirmationComponent implements OnInit {
 
     this.loadOrderDetails(paymentId);
     this.launchCelebrationConfetti();
+    this.destroyRef.onDestroy(() => {
+      this.confettiTimers.forEach((t) => clearTimeout(t));
+      if (isPlatformBrowser(this.platformId)) {
+        try {
+          confetti.reset();
+        } catch {
+          // ignore
+        }
+      }
+    });
   }
 
   private launchCelebrationConfetti(): void {
@@ -125,26 +139,30 @@ export class OrderConfirmationComponent implements OnInit {
       });
 
       // Stage 2: Left cannon
-      setTimeout(() => {
-        confetti({
-          particleCount: 45,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0.1, y: 0.7 },
-          colors: ['#6366f1', '#a855f7', '#ec4899', '#3b82f6'],
-        });
-      }, 250);
+      this.confettiTimers.push(
+        setTimeout(() => {
+          confetti({
+            particleCount: 45,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0.1, y: 0.7 },
+            colors: ['#6366f1', '#a855f7', '#ec4899', '#3b82f6'],
+          });
+        }, 250),
+      );
 
       // Stage 3: Right cannon
-      setTimeout(() => {
-        confetti({
-          particleCount: 45,
-          angle: 120,
-          spread: 55,
-          origin: { x: 0.9, y: 0.7 },
-          colors: ['#10b981', '#14b8a6', '#6366f1', '#f59e0b'],
-        });
-      }, 400);
+      this.confettiTimers.push(
+        setTimeout(() => {
+          confetti({
+            particleCount: 45,
+            angle: 120,
+            spread: 55,
+            origin: { x: 0.9, y: 0.7 },
+            colors: ['#10b981', '#14b8a6', '#6366f1', '#f59e0b'],
+          });
+        }, 400),
+      );
     } catch {
       // Confetti is a non-critical progressive enhancement
     }
@@ -200,21 +218,24 @@ export class OrderConfirmationComponent implements OnInit {
         next: (event) => {
           this.event.set(event);
           if (event.venueId) {
-            this.eventApi.getVenueById(event.venueId).subscribe({
-              next: (venue) => {
-                this.event.update((curr) =>
-                  curr
-                    ? {
-                        ...curr,
-                        venueName: venue.name,
-                        venueAddress: venue.address,
-                        venueCity: venue.city,
-                        venueCountry: venue.country,
-                      }
-                    : curr,
-                );
-              },
-            });
+            this.eventApi
+              .getVenueById(event.venueId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: (venue) => {
+                  this.event.update((curr) =>
+                    curr
+                      ? {
+                          ...curr,
+                          venueName: venue.name,
+                          venueAddress: venue.address,
+                          venueCity: venue.city,
+                          venueCountry: venue.country,
+                        }
+                      : curr,
+                  );
+                },
+              });
           }
         },
         error: () => {
