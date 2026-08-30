@@ -153,7 +153,10 @@ export class MyTicketsComponent implements OnInit {
             if (ev.venueId && !ev.venueName) {
               this.eventApi
                 .getVenueById(ev.venueId)
-                .pipe(catchError(() => of(null)))
+                .pipe(
+                  catchError(() => of(null)),
+                  takeUntilDestroyed(this.destroyRef),
+                )
                 .subscribe((venue) => {
                   if (venue) {
                     this.eventDetailsMap.update((currentMap) => {
@@ -236,7 +239,7 @@ export class MyTicketsComponent implements OnInit {
           a.href = url;
           a.download = `SeatFlow-Ticket-${ticket.ticketCode}.pdf`;
           a.click();
-          window.URL.revokeObjectURL(url);
+          setTimeout(() => window.URL.revokeObjectURL(url), 1000);
           this.snackBar.open('Ticket PDF downloaded.', 'Close', {
             duration: 3500,
             panelClass: 'snack-success',

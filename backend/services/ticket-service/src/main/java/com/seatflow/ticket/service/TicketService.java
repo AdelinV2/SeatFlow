@@ -34,9 +34,19 @@ public interface TicketService {
     TicketDetailResponse getGuestTicketByCode(String ticketCode);
 
     /**
-     * Generates a downloadable PDF ticket with QR code and fiscal breakdown.
+     * Retrieves all ticket details belonging to the same reservation bundle by ticket code (ADR-001).
+     */
+    List<TicketDetailResponse> getGuestTicketBundleByCode(String ticketCode);
+
+    /**
+     * Generates a downloadable PDF ticket for authenticated owner or admin.
      */
     byte[] generateTicketPdf(UUID ticketId, UUID userId, boolean isGuestOrAdmin);
+
+    /**
+     * Generates a downloadable PDF ticket for guest access by ticket code token (ADR-001).
+     */
+    byte[] generateGuestTicketPdf(String ticketCode);
 
     /**
      * Validates a ticket QR code at the venue gate scanner and writes an audit log.

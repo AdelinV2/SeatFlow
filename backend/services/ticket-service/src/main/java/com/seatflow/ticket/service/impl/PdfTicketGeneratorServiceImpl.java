@@ -8,6 +8,7 @@ import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.Rectangle;
+import com.lowagie.text.pdf.BaseFont;
 import com.lowagie.text.pdf.PdfPCell;
 import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
@@ -49,23 +50,36 @@ public class PdfTicketGeneratorServiceImpl implements PdfTicketGeneratorService 
             PdfWriter.getInstance(document, baos);
             document.open();
             try {
-                Font brandFont = new Font(Font.HELVETICA, 16, Font.BOLD, Color.WHITE);
-                Font brandSubFont = new Font(Font.HELVETICA, 8, Font.NORMAL, new Color(199, 210, 254));
-                Font statusBadgeFont = new Font(Font.HELVETICA, 9, Font.BOLD, COLOR_EMERALD);
+                BaseFont baseUnicode;
+                BaseFont baseBold;
+                BaseFont baseCourier;
+                try {
+                    baseUnicode = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.CP1250, BaseFont.NOT_EMBEDDED);
+                    baseBold = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.CP1250, BaseFont.NOT_EMBEDDED);
+                    baseCourier = BaseFont.createFont(BaseFont.COURIER_BOLD, BaseFont.CP1250, BaseFont.NOT_EMBEDDED);
+                } catch (Exception ex) {
+                    baseUnicode = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+                    baseBold = BaseFont.createFont(BaseFont.HELVETICA_BOLD, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+                    baseCourier = BaseFont.createFont(BaseFont.COURIER_BOLD, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+                }
 
-                Font eventTitleFont = new Font(Font.HELVETICA, 20, Font.BOLD, COLOR_DARK);
-                Font eventCategoryFont = new Font(Font.HELVETICA, 8, Font.BOLD, COLOR_PRIMARY);
-                Font eventMetaFont = new Font(Font.HELVETICA, 10, Font.NORMAL, COLOR_MUTED);
-                Font eventVenueFont = new Font(Font.HELVETICA, 11, Font.BOLD, COLOR_DARK);
+                Font brandFont = new Font(baseBold, 16, Font.NORMAL, Color.WHITE);
+                Font brandSubFont = new Font(baseUnicode, 8, Font.NORMAL, new Color(199, 210, 254));
+                Font statusBadgeFont = new Font(baseBold, 9, Font.NORMAL, COLOR_EMERALD);
 
-                Font sectionHeaderFont = new Font(Font.HELVETICA, 10, Font.BOLD, COLOR_PRIMARY);
-                Font cardLabelFont = new Font(Font.HELVETICA, 8, Font.BOLD, COLOR_MUTED);
-                Font cardValueFont = new Font(Font.HELVETICA, 12, Font.BOLD, COLOR_DARK);
-                Font detailLabelFont = new Font(Font.HELVETICA, 8, Font.BOLD, COLOR_MUTED);
-                Font detailValueFont = new Font(Font.HELVETICA, 10, Font.NORMAL, COLOR_DARK);
-                Font codeFont = new Font(Font.COURIER, 11, Font.BOLD, COLOR_PRIMARY);
-                Font totalPaidFont = new Font(Font.HELVETICA, 13, Font.BOLD, COLOR_PRIMARY);
-                Font footerFont = new Font(Font.HELVETICA, 8, Font.NORMAL, COLOR_MUTED);
+                Font eventTitleFont = new Font(baseBold, 20, Font.NORMAL, COLOR_DARK);
+                Font eventCategoryFont = new Font(baseBold, 8, Font.NORMAL, COLOR_PRIMARY);
+                Font eventMetaFont = new Font(baseUnicode, 10, Font.NORMAL, COLOR_MUTED);
+                Font eventVenueFont = new Font(baseBold, 11, Font.NORMAL, COLOR_DARK);
+
+                Font sectionHeaderFont = new Font(baseBold, 10, Font.NORMAL, COLOR_PRIMARY);
+                Font cardLabelFont = new Font(baseBold, 8, Font.NORMAL, COLOR_MUTED);
+                Font cardValueFont = new Font(baseBold, 12, Font.NORMAL, COLOR_DARK);
+                Font detailLabelFont = new Font(baseBold, 8, Font.NORMAL, COLOR_MUTED);
+                Font detailValueFont = new Font(baseUnicode, 10, Font.NORMAL, COLOR_DARK);
+                Font codeFont = new Font(baseCourier, 11, Font.NORMAL, COLOR_PRIMARY);
+                Font totalPaidFont = new Font(baseBold, 13, Font.NORMAL, COLOR_PRIMARY);
+                Font footerFont = new Font(baseUnicode, 8, Font.NORMAL, COLOR_MUTED);
 
                 // --- 1. BRAND HEADER BANNER ---
                 PdfPTable headerTable = new PdfPTable(2);

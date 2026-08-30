@@ -154,6 +154,15 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<TicketDetailResponse> getGuestTicketBundleByCode(String ticketCode) {
+        Ticket ticket = ticketRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found for code", ticketCode));
+        List<Ticket> bundle = ticketRepository.findByReservationId(ticket.getReservationId());
+        return bundle.stream().map(ticketMapper::toDetailResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public byte[] generateTicketPdf(UUID ticketId, UUID userId, boolean isGuestOrAdmin) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
@@ -164,8 +173,25 @@ public class TicketServiceImpl implements TicketService {
             if (!isOwner && !isAdminAccess) {
                 throw new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403);
             }
+        } else {
+            // Internal UUID access to guest ticket requires admin or authenticated caller
+            if (!isGuestOrAdmin && userId == null) {
+                throw new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403);
+            }
         }
 
+        return generatePdfForTicket(ticket);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] generateGuestTicketPdf(String ticketCode) {
+        Ticket ticket = ticketRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found for code", ticketCode));
+        return generatePdfForTicket(ticket);
+    }
+
+    private byte[] generatePdfForTicket(Ticket ticket) {
         EventEnrichment enrichment = enrichEvent(ticket.getEventId(), ticket.getSeatId());
 
         byte[] qrBytes = qrCodeGeneratorService.generateQrCodePng(ticket.getQrCodeData(), 200, 200);
