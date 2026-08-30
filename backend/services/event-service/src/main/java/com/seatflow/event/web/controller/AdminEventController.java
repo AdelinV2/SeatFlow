@@ -1,5 +1,8 @@
 package com.seatflow.event.web.controller;
 
+import com.seatflow.common.domain.dto.PagedResult;
+import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventStatus;
 import com.seatflow.event.service.EventPricingService;
 import com.seatflow.event.service.EventService;
 import com.seatflow.event.web.dto.request.ConfigurePricingRequest;
@@ -15,6 +18,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +30,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -37,6 +44,24 @@ public class AdminEventController {
 
     private final EventService eventService;
     private final EventPricingService eventPricingService;
+
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "List events for administration",
+            description = "Returns a paginated list of events with optional filtering by status, category, and search query.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Events retrieved",
+                content = @Content(schema = @Schema(implementation = PagedResult.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request",
+                content = @Content(schema = @Schema(implementation = PagedResult.class)))
+    })
+    public ResponseEntity<PagedResult<EventDetailResponse>> listEvents(
+            @RequestParam(required = false) EventStatus status,
+            @RequestParam(required = false) EventCategory category,
+            @RequestParam(required = false) String search,
+            @PageableDefault(size = 50, sort = "eventDate", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(eventService.findEventsForAdministration(status, category, search, pageable));
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")

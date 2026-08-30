@@ -1,0 +1,391 @@
+<div class="admin-pricing-manager max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Header / Breadcrumbs -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]">
+    <div>
+      <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] mb-1">
+        <a routerLink="/admin/events" class="hover:text-[var(--color-text-primary)] transition-colors">
+          Events
+        </a>
+        <span>/</span>
+        <span class="text-[var(--color-text-primary)]">Pricing Matrix</span>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+        Section Pricing Matrix & Customer Tiers
+      </h1>
+      @if (event()) {
+        <p class="text-xs sm:text-sm text-[var(--color-text-muted)] mt-0.5">
+          Configure multi-tier customer rates (Standard, Student, Pensioner, VIP, etc.) for <span class="font-bold text-[var(--color-text-primary)]">{{ event()?.title }}</span>
+        </p>
+      }
+    </div>
+
+    <div class="flex items-center gap-2.5">
+      <a
+        routerLink="/admin/events"
+        class="btn-spring inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-[var(--color-border)] hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+      >
+        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+        <span>Back to Events</span>
+      </a>
+
+      @if (eventId()) {
+        <a
+          [routerLink]="['/admin/events', eventId(), 'edit']"
+          class="btn-spring inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-[var(--color-border)] hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+        >
+          <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+          </svg>
+          <span>Edit Details</span>
+        </a>
+      }
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="space-y-6 p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <app-skeleton-loader height="80px" width="100%"/>
+      <app-skeleton-loader height="250px" width="100%"/>
+      <app-skeleton-loader height="40px" width="100%"/>
+    </div>
+  } @else {
+    <!-- Status Locked Notice (ADR-003) -->
+    @if (isLocked()) {
+      <div class="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex items-start gap-3 text-rose-600 dark:text-rose-400">
+        <svg class="size-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <div class="text-xs">
+          <p class="font-bold">Pricing Locked: Event is {{ event()?.status }}</p>
+          <p class="mt-0.5 text-rose-500/90">
+            Per ADR-003, events in {{ event()?.status }} status cannot have their section pricing matrix modified.
+          </p>
+        </div>
+      </div>
+    }
+
+    <!-- Event & Venue Context Capsule -->
+    @if (event() && venueLayout()) {
+      <div class="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="size-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-xl shrink-0">
+            🏟️
+          </div>
+          <div>
+            <h2 class="text-sm font-bold text-[var(--color-text-primary)]">
+              {{ venueLayout()?.name }}
+            </h2>
+            <div class="flex items-center gap-3 text-xs text-[var(--color-text-muted)] mt-0.5">
+              <span>Capacity: <strong class="text-[var(--color-text-primary)]">{{ venueLayout()?.capacity }}</strong></span>
+              <span>•</span>
+              <span>Sections: <strong class="text-[var(--color-text-primary)]">{{ sections().length }}</strong></span>
+              <span>•</span>
+              <span>Total Tiers: <strong class="text-[var(--color-text-primary)]">{{ priceStats().tierCount }}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span
+            class="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border"
+            [ngClass]="{
+              'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20': event()?.status === 'DRAFT',
+              'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20': event()?.status === 'PUBLISHED',
+              'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20': event()?.status === 'CANCELLED',
+              'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20': event()?.status === 'COMPLETED'
+            }"
+          >
+            {{ event()?.status }}
+          </span>
+        </div>
+      </div>
+    }
+
+    <!-- Pricing Summary Stat Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div class="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs">
+        <span class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Min Rate</span>
+        <div class="text-xl font-black text-emerald-500 mt-1">
+          {{ priceStats().min | sfCurrency: currency() }}
+        </div>
+      </div>
+      <div class="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs">
+        <span class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Max Rate</span>
+        <div class="text-xl font-black text-indigo-500 mt-1">
+          {{ priceStats().max | sfCurrency: currency() }}
+        </div>
+      </div>
+      <div class="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs">
+        <span class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Avg Rate</span>
+        <div class="text-xl font-black text-[var(--color-text-primary)] mt-1">
+          {{ priceStats().avg | sfCurrency: currency() }}
+        </div>
+      </div>
+      <div class="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs">
+        <span class="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Total Tiers Active</span>
+        <div class="text-xl font-black mt-1" [ngClass]="isFormValid() ? 'text-emerald-500' : 'text-amber-500'">
+          {{ priceStats().tierCount }} Tiers
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Bulk Customer Tier Tools -->
+    @if (!isLocked()) {
+      <div class="p-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 mb-6 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="font-bold text-[var(--color-text-primary)]">⚡ 1-Click Multi-Tier Customer Generator:</span>
+            <span class="text-[var(--color-text-secondary)]">Add student, pensioner, or VIP tiers to all sections at once.</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <!-- Currency & Standard Price Override -->
+          <label class="flex h-12 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3">
+            <span class="text-xs font-bold text-[var(--color-text-muted)]">Currency:</span>
+            <select
+              [disabled]="isLocked()"
+              [ngModel]="currency()"
+              (ngModelChange)="currency.set($event)"
+              class="h-8 px-2 text-xs font-bold bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+              aria-label="Event currency"
+            >
+              @for (option of currencyOptions; track option.code) {
+                <option [value]="option.code">{{ option.code }} · {{ option.name }}</option>
+              }
+            </select>
+          </label>
+
+          <div class="flex h-12 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3">
+            <span class="text-xs font-bold text-[var(--color-text-muted)]">Standard:</span>
+            <div class="relative w-24">
+              <span class="absolute left-2.5 top-2 text-[10px] text-[var(--color-text-muted)] font-mono">{{ currency() }}</span>
+              <input
+                type="number"
+                [ngModel]="uniformPriceInput()"
+                (ngModelChange)="uniformPriceInput.set($event)"
+                min="0"
+                step="5"
+                class="h-8 w-full pl-11 pr-1.5 text-xs bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 font-mono font-bold"
+              />
+            </div>
+            <button
+              type="button"
+              (click)="applyUniformStandardPrice()"
+              class="compact-apply-button h-8 shrink-0 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-extrabold text-white transition-colors hover:bg-indigo-500 cursor-pointer"
+              aria-label="Apply the Standard price to all sections"
+              title="Apply the Standard price to all sections"
+            >
+              Apply
+            </button>
+          </div>
+
+          <!-- One-click Template Additions -->
+          @for (tpl of categoryTemplates; track tpl.name) {
+            @if (tpl.name !== 'Standard') {
+              <button
+                type="button"
+                (click)="addTemplateToAllSections(tpl)"
+                [disabled]="allSectionsHaveTemplate(tpl)"
+                class="flex h-12 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-bold text-[var(--color-text-primary)] shadow-xs transition-all hover:bg-[var(--color-canvas)] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                [attr.aria-label]="allSectionsHaveTemplate(tpl) ? 'All sections already have ' + tpl.name + ' tier' : 'Add ' + tpl.name + ' tier to all sections'"
+              >
+                <span>+ All {{ tpl.name }}</span>
+                <span class="font-mono text-[11px] text-indigo-500">({{ currency() }} {{ tpl.defaultPrice | number:'1.2-2' }})</span>
+              </button>
+            }
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Section Pricing Matrix Cards / Table -->
+    <div class="space-y-4 mb-6">
+      <div class="flex items-center justify-between px-1">
+        <h3 class="text-sm font-bold text-[var(--color-text-primary)]">
+          Venue Sections & Customer Pricing Tiers
+        </h3>
+        <span class="text-xs font-mono font-bold text-indigo-500 bg-indigo-500/10 px-2.5 py-1 rounded-lg">
+          Currency: {{ currency() }}
+        </span>
+      </div>
+
+      @for (sec of sections(); track sec.sectionId) {
+        <div class="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs space-y-4">
+          <!-- Section Header Bar -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-[var(--color-border)]">
+            <div class="flex items-center gap-3">
+              <span class="relative inline-flex size-7 shrink-0 items-center justify-center" aria-hidden="true">
+                <span class="absolute inset-0 rounded-full bg-indigo-500/25 blur-md"></span>
+                <span class="relative size-3 rounded-full border-2 border-[var(--color-surface)] bg-gradient-to-br from-indigo-400 to-violet-600 shadow-sm shadow-indigo-500/60"></span>
+              </span>
+              <div>
+                <h4 class="text-base font-extrabold text-[var(--color-text-primary)]">
+                  {{ sec.name }}
+                </h4>
+                <div class="flex items-center gap-2 text-xs text-[var(--color-text-muted)] font-mono">
+                  <span>{{ sec.rowCount }} Rows × {{ sec.colCount }} Cols</span>
+                  <span>•</span>
+                  <span>{{ sec.totalSeats }} Seats</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fancy Quick Add Tier Toolbar for this Section -->
+            @if (!isLocked()) {
+              <div class="flex w-full overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.08] via-[var(--color-surface)] to-violet-500/[0.06] shadow-sm sm:max-w-[58rem]">
+                <div class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 border-r border-indigo-500/15 bg-indigo-500/[0.04] px-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-indigo-500">
+                  <span class="inline-flex size-8 items-center justify-center rounded-full border border-indigo-400/30 bg-indigo-500/15 text-base leading-none shadow-inner shadow-indigo-500/20">+</span>
+                  <span class="text-center leading-3">Add tier</span>
+                </div>
+
+                <div class="grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-1.5 p-2">
+                  @for (tpl of categoryTemplates; track tpl.name) {
+                    <button
+                      type="button"
+                      (click)="addTierToSection(sec.sectionId, tpl)"
+                      [disabled]="hasTemplateTier(sec.sectionId, tpl)"
+                      class="group relative z-10 inline-flex h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-2.5 text-[11px] font-bold text-[var(--color-text-secondary)] shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-400/60 hover:bg-indigo-500/10 hover:text-indigo-500 hover:shadow-md hover:shadow-indigo-500/10 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                      [attr.aria-label]="hasTemplateTier(sec.sectionId, tpl) ? tpl.name + ' tier already added' : 'Add ' + tpl.name + ' tier'"
+                      [attr.title]="hasTemplateTier(sec.sectionId, tpl) ? tpl.name + ' tier already added' : 'Add ' + tpl.name + ' tier'"
+                    >
+                      <span class="flex min-w-0 items-center gap-1.5">
+                        <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-sm leading-none text-indigo-500 transition-colors group-hover:bg-indigo-500 group-hover:text-white">+</span>
+                        <span class="truncate">{{ tpl.name }}</span>
+                      </span>
+                      <span class="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-0.5 font-mono text-[10px] text-indigo-500">{{ currency() }} {{ tpl.defaultPrice | number:'1.2-2' }}</span>
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    (click)="addTierToSection(sec.sectionId)"
+                    class="group inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-violet-500/40 bg-violet-500/10 px-2.5 text-[11px] font-extrabold text-violet-600 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:bg-violet-500 hover:text-white hover:shadow-md hover:shadow-violet-500/15 cursor-pointer dark:text-violet-300"
+                    aria-label="Add custom tier"
+                  >
+                    <span class="inline-flex size-6 items-center justify-center rounded-full bg-violet-500/15 text-sm leading-none">+</span>
+                    <span>Custom</span>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Section Customer Tiers Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            @for (tier of sec.tiers; track tier.id) {
+              <div class="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)]/60 flex items-center justify-between gap-3 shadow-xs">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
+                  <input
+                    type="text"
+                    [disabled]="isLocked()"
+                    [ngModel]="tier.categoryName"
+                    (ngModelChange)="onTierCategoryNameChange(sec.sectionId, tier.id, $event)"
+                    placeholder="e.g. Standard, Student"
+                    class="h-8 min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 text-xs font-bold leading-none text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-border)] focus:border-indigo-500 focus:outline-none"
+                    [class.border-rose-500]="!tier.categoryName || !tier.categoryName.trim()"
+                  />
+
+                  <div class="relative h-8 w-28 shrink-0">
+                    <span class="absolute inset-y-0 left-2.5 flex items-center text-[10px] font-mono leading-none text-[var(--color-text-muted)]">{{ currency() }}</span>
+                    <input
+                      type="number"
+                      [disabled]="isLocked()"
+                      [ngModel]="tier.price"
+                      (ngModelChange)="onTierPriceChange(sec.sectionId, tier.id, $event)"
+                      min="0"
+                      step="1"
+                      placeholder="20.00"
+                      class="h-8 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-0 pl-10 pr-2 text-xs font-mono font-bold leading-none text-[var(--color-text-primary)] focus:border-indigo-500 focus:outline-none transition-colors disabled:opacity-50"
+                      [class.border-rose-500]="tier.price < 0"
+                    />
+                  </div>
+                </div>
+
+                @if (!isLocked() && sec.tiers.length > 1) {
+                  <button
+                    type="button"
+                    (click)="removeTierFromSection(sec.sectionId, tier.id)"
+                    class="centered-remove-button inline-flex size-9 shrink-0 self-center items-center justify-center rounded-xl border border-rose-500/20 bg-rose-500/10 p-0 leading-none text-rose-500 transition-colors hover:bg-rose-500/20 cursor-pointer"
+                    aria-label="Remove tier"
+                    title="Remove Tier"
+                  >
+                    <svg class="block size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Error Banner -->
+    @if (errorMessage()) {
+      <div class="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs">
+        {{ errorMessage() }}
+      </div>
+    }
+
+    <!-- Bottom Actions Bar -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs">
+      <a
+        routerLink="/admin/events"
+        class="w-full sm:w-auto text-center px-5 py-2.5 text-xs font-bold border border-[var(--color-border)] rounded-xl hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+      >
+        Cancel
+      </a>
+
+      <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <button
+          type="button"
+          (click)="savePricing(false)"
+          [disabled]="isSaving() || isLocked() || !isFormValid()"
+          class="btn-spring inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+        >
+          @if (isSaving()) {
+            <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+            <span>Saving Pricing...</span>
+          } @else {
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span>Save Pricing Matrix</span>
+          }
+        </button>
+
+        <!-- Quick Publish Action if Draft -->
+        @if (event()?.status === 'DRAFT') {
+          <button
+            type="button"
+            (click)="savePricing(true)"
+            [disabled]="isSaving() || isPublishing() || !isFormValid()"
+            class="btn-spring inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl shadow-md shadow-emerald-600/25 transition-all cursor-pointer disabled:opacity-50"
+          >
+            @if (isPublishing()) {
+              <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10"/>
+              </svg>
+              <span>Publishing...</span>
+            } @else {
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              <span>Save & Publish Event</span>
+            }
+          </button>
+        }
+      </div>
+    </div>
+  }
+</div>

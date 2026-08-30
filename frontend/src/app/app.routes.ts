@@ -110,6 +110,39 @@ export const routes: Routes = [
         (m) => m.AdminUserListComponent,
       ),
   },
+  // Admin Event Routes
+  {
+    path: 'admin/events',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/events/admin-event-list/admin-event-list.component').then(
+        (m) => m.AdminEventListComponent,
+      ),
+  },
+  {
+    path: 'admin/events/new',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/events/admin-event-editor/admin-event-editor.component').then(
+        (m) => m.AdminEventEditorComponent,
+      ),
+  },
+  {
+    path: 'admin/events/:id/edit',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/events/admin-event-editor/admin-event-editor.component').then(
+        (m) => m.AdminEventEditorComponent,
+      ),
+  },
+  {
+    path: 'admin/events/:id/pricing',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/events/admin-pricing-manager/admin-pricing-manager.component').then(
+        (m) => m.AdminPricingManagerComponent,
+      ),
+  },
   {
     path: '**',
     redirectTo: '',

@@ -15,11 +15,12 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -67,8 +68,10 @@ public class EventClientImpl implements EventClient {
     }
 
     private RestClient buildClient() {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(READ_TIMEOUT);
         return loadBalancedBuilder
                 .baseUrl("http://" + serviceId)
@@ -118,15 +121,22 @@ public class EventClientImpl implements EventClient {
             throw new ValidationException("Event is in the past or too close to start time", ErrorCode.INVALID_REQUEST);
         }
 
-        SeatMapSectionClientDto seatMap = response.seatMap();
-        if (seatMap == null || seatMap.seats() == null) {
+        List<SeatMapSectionClientDto> sections = response.sections();
+        if (sections == null || sections.isEmpty()) {
             throw new EventClientUnavailableException("Seat map unavailable for eventId=" + eventId);
         }
 
         Map<UUID, BigDecimal> seatPrices = new HashMap<>();
-        for (SeatMapSeatClientDto seat : seatMap.seats()) {
-            if (seat.seatId() != null && seat.price() != null) {
-                seatPrices.put(seat.seatId(), seat.price());
+        for (SeatMapSectionClientDto section : sections) {
+            BigDecimal sectionPrice = (section.pricingTiers() != null && !section.pricingTiers().isEmpty())
+                    ? section.pricingTiers().get(0).price()
+                    : BigDecimal.ZERO;
+            if (section.seats() != null) {
+                for (SeatMapSeatClientDto seat : section.seats()) {
+                    if (seat.seatId() != null && Boolean.TRUE.equals(seat.isActive())) {
+                        seatPrices.put(seat.seatId(), sectionPrice);
+                    }
+                }
             }
         }
 

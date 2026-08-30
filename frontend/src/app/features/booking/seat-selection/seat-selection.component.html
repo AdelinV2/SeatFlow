@@ -60,8 +60,10 @@
 
       <app-seat-map
         [seats]="seats()"
+        [sectionsData]="map.sections ?? []"
         [maxSeats]="maxSeats"
         [selectedSeatIds]="selectedSeatIds()"
+        [conflictingSeatIds]="conflictingSeatIds()"
         (seatToggled)="toggleSeat($event)"
       />
     }

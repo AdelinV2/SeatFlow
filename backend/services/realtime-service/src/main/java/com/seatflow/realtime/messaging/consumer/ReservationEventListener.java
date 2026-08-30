@@ -5,6 +5,7 @@ import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
+import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
 import com.seatflow.realtime.service.SeatStatusBroadcaster;
@@ -46,7 +47,7 @@ public class ReservationEventListener {
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
             switch (envelope.eventType()) {
-                case "ReservationHeld" -> {
+                case "ReservationHeld", "ReservationHeldEvent" -> {
                     ReservationHeldEvent event = convertPayload(envelope.payload(), ReservationHeldEvent.class);
                     seatStatusBroadcaster.broadcastSeatStatus(
                             event.eventId(),
@@ -55,7 +56,7 @@ public class ReservationEventListener {
                             event.expiresAt()
                     );
                 }
-                case "ReservationExpired" -> {
+                case "ReservationExpired", "ReservationExpiredEvent" -> {
                     ReservationExpiredEvent event = convertPayload(envelope.payload(), ReservationExpiredEvent.class);
                     seatStatusBroadcaster.broadcastSeatStatus(
                             event.eventId(),
@@ -64,12 +65,21 @@ public class ReservationEventListener {
                             null
                     );
                 }
-                case "ReservationCancelled" -> {
+                case "ReservationCancelled", "ReservationCancelledEvent" -> {
                     ReservationCancelledEvent event = convertPayload(envelope.payload(), ReservationCancelledEvent.class);
                     seatStatusBroadcaster.broadcastSeatStatus(
                             event.eventId(),
                             event.seatIds(),
                             SeatStatus.AVAILABLE,
+                            null
+                    );
+                }
+                case "ReservationConfirmed", "ReservationConfirmedEvent" -> {
+                    ReservationConfirmedEvent event = convertPayload(envelope.payload(), ReservationConfirmedEvent.class);
+                    seatStatusBroadcaster.broadcastSeatStatus(
+                            event.eventId(),
+                            event.seatIds(),
+                            SeatStatus.SOLD,
                             null
                     );
                 }

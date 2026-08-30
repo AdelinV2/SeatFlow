@@ -1,0 +1,369 @@
+<div class="admin-event-editor max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Header / Breadcrumb -->
+  <div class="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]">
+    <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)]">
+      <a routerLink="/admin/events" class="hover:text-[var(--color-text-primary)] transition-colors">
+        Events
+      </a>
+      <span>/</span>
+      <span class="text-[var(--color-text-primary)]">
+        {{ isEditMode() ? 'Edit Event' : 'Create New Event' }}
+      </span>
+    </div>
+
+    <a
+      routerLink="/admin/events"
+      class="btn-spring inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--color-border)] hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors"
+    >
+      <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+      <span>Back to List</span>
+    </a>
+  </div>
+
+  @if (isLoading()) {
+    <div class="space-y-6 p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <app-skeleton-loader height="32px" width="50%"/>
+      <app-skeleton-loader height="200px" width="100%"/>
+      <app-skeleton-loader height="40px" width="100%"/>
+      <app-skeleton-loader height="80px" width="100%"/>
+    </div>
+  } @else {
+    <!-- Status Locked Notice (ADR-003) -->
+    @if (isLocked()) {
+      <div class="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex items-start gap-3 text-rose-600 dark:text-rose-400">
+        <svg class="size-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <div class="text-xs">
+          <p class="font-bold">Lifecycle State Locked: {{ eventStatus() }}</p>
+          <p class="mt-0.5 text-rose-500/90">
+            Per ADR-003, events in {{ eventStatus() }} status are immutable and cannot be edited or repriced.
+          </p>
+        </div>
+      </div>
+    }
+
+    <!-- Main Editor Form -->
+    <form [formGroup]="eventForm" (ngSubmit)="onSubmit()" class="space-y-8">
+      <!-- Section 1: Title & Category -->
+      <div class="p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs space-y-5">
+        <div class="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+          <h2 class="text-base font-bold text-[var(--color-text-primary)]">
+            Basic Event Information
+          </h2>
+          <span class="text-xs text-[var(--color-text-muted)]">* Required fields</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Title Input -->
+          <div class="md:col-span-2 space-y-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Event Title *
+            </label>
+            <input
+              type="text"
+              formControlName="title"
+              placeholder="e.g. Neon Symphony World Tour 2026"
+              class="w-full px-4 py-2.5 text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+              [class.border-rose-500]="eventForm.controls.title.invalid && eventForm.controls.title.touched"
+            />
+            @if (eventForm.controls.title.invalid && eventForm.controls.title.touched) {
+              <p class="text-[11px] text-rose-500">
+                Title must be between 3 and 150 characters.
+              </p>
+            }
+          </div>
+
+          <!-- Category Select -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Category *
+            </label>
+            <select
+              formControlName="category"
+              class="w-full px-3.5 py-2.5 text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              @for (cat of categories; track cat.value) {
+                <option [value]="cat.value">{{ cat.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <!-- Venue & Date/Time -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Venue Selector -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Venue Location *
+            </label>
+            <select
+              formControlName="venueId"
+              class="w-full px-3.5 py-2.5 text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+              [class.border-rose-500]="eventForm.controls.venueId.invalid && eventForm.controls.venueId.touched"
+            >
+              <option value="" disabled>-- Select a registered venue --</option>
+              @for (v of venues(); track v.id) {
+                <option [value]="v.id">
+                  {{ v.name }} ({{ v.city }} — Cap: {{ v.capacity }})
+                </option>
+              }
+            </select>
+            @if (eventForm.controls.venueId.invalid && eventForm.controls.venueId.touched) {
+              <p class="text-[11px] text-rose-500">
+                Please select a venue location.
+              </p>
+            }
+          </div>
+
+          <!-- Event Date & Time Input -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+              Event Date & Time (Local) *
+            </label>
+            <input
+              type="datetime-local"
+              formControlName="eventDate"
+              class="w-full px-3.5 py-2.5 text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+              [class.border-rose-500]="eventForm.controls.eventDate.invalid && eventForm.controls.eventDate.touched"
+            />
+            @if (eventForm.controls.eventDate.invalid && eventForm.controls.eventDate.touched) {
+              <p class="text-[11px] text-rose-500">
+                Event date and time is required.
+              </p>
+            }
+          </div>
+        </div>
+
+        <!-- Customizable Event Description Editor with Toolbar -->
+        <div class="space-y-2 pt-2 border-t border-[var(--color-border)]">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                Event Description & Schedule (Customizable Markdown) *
+              </label>
+              <p class="text-[11px] text-[var(--color-text-muted)]">
+                Add artist lineups, door times, dress code, age limits, and performance details.
+              </p>
+            </div>
+
+            <!-- Edit / Preview Switcher -->
+            <div class="flex items-center gap-1 border border-[var(--color-border)] bg-[var(--color-canvas)] p-1 rounded-xl shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                (click)="descriptionTab.set('EDIT')"
+                class="px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                [ngClass]="descriptionTab() === 'EDIT' ? 'bg-indigo-600 text-white shadow-xs' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'"
+              >
+                ✏️ Edit
+              </button>
+              <button
+                type="button"
+                (click)="descriptionTab.set('PREVIEW')"
+                class="px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                [ngClass]="descriptionTab() === 'PREVIEW' ? 'bg-indigo-600 text-white shadow-xs' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'"
+              >
+                👁️ Live Preview
+              </button>
+            </div>
+          </div>
+
+          <!-- Formatting Toolbar (Visible in Edit mode) -->
+          @if (descriptionTab() === 'EDIT' && !isLocked()) {
+            <div class="flex items-center gap-1.5 flex-wrap p-2 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--color-border)]">
+              <button
+                type="button"
+                (click)="insertFormatting('**', '**')"
+                class="px-2.5 py-1 text-xs font-bold border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Bold (**text**)"
+              >
+                B
+              </button>
+              <button
+                type="button"
+                (click)="insertFormatting('*', '*')"
+                class="px-2.5 py-1 text-xs italic border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Italic (*text*)"
+              >
+                I
+              </button>
+              <button
+                type="button"
+                (click)="insertFormatting('## ')"
+                class="px-2.5 py-1 text-xs font-bold border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Heading 2 (## Title)"
+              >
+                H2
+              </button>
+              <button
+                type="button"
+                (click)="insertFormatting('### ')"
+                class="px-2.5 py-1 text-xs font-bold border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Heading 3 (### Subtitle)"
+              >
+                H3
+              </button>
+              <span class="h-4 w-px bg-[var(--color-border)] mx-1"></span>
+              <button
+                type="button"
+                (click)="insertFormatting('- ')"
+                class="px-2.5 py-1 text-xs border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Bullet List (- item)"
+              >
+                • List
+              </button>
+              <button
+                type="button"
+                (click)="insertFormatting('> ')"
+                class="px-2.5 py-1 text-xs border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Quote Block (> quote)"
+              >
+                " Quote
+              </button>
+              <button
+                type="button"
+                (click)="insertFormatting('\n---\n')"
+                class="px-2.5 py-1 text-xs border border-[var(--color-border)] rounded-lg hover:bg-indigo-500/10 hover:text-indigo-500 transition-colors"
+                title="Horizontal Divider"
+              >
+                — Divider
+              </button>
+              <span class="h-4 w-px bg-[var(--color-border)] mx-1"></span>
+              <!-- Quick Template Inserts -->
+              <button
+                type="button"
+                (click)="insertTemplate('SCHEDULE')"
+                class="px-2.5 py-1 text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/20 transition-colors"
+              >
+                + Schedule Template
+              </button>
+              <button
+                type="button"
+                (click)="insertTemplate('LINEUP')"
+                class="px-2.5 py-1 text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-colors"
+              >
+                + Lineup Template
+              </button>
+              <button
+                type="button"
+                (click)="insertTemplate('NOTICES')"
+                class="px-2.5 py-1 text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition-colors"
+              >
+                + Notices Template
+              </button>
+            </div>
+          }
+
+          <!-- Edit Textarea Mode -->
+          @if (descriptionTab() === 'EDIT') {
+            <textarea
+              #descTextarea
+              formControlName="description"
+              rows="10"
+              placeholder="Provide full details about the artist lineup, door times, program, VIP amenities, and terms..."
+              class="w-full px-4 py-3 text-sm font-sans bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors leading-relaxed min-h-[240px] resize-y"
+              [class.border-rose-500]="eventForm.controls.description.invalid && eventForm.controls.description.touched"
+            ></textarea>
+          } @else {
+            <!-- Live Preview Container Mode -->
+            <div
+              class="w-full px-5 py-4 min-h-[240px] rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-primary)] overflow-y-auto leading-relaxed shadow-inner"
+              [innerHTML]="formattedDescriptionPreview()"
+            ></div>
+          }
+
+          <div class="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] pt-1">
+            @if (eventForm.controls.description.invalid && eventForm.controls.description.touched) {
+              <span class="text-rose-500">
+                Description must be between 10 and 2000 characters.
+              </span>
+            } @else {
+              <span>Supports headers (##, ###), bold (**text**), italics (*text*), quotes (> text), and bullet lists.</span>
+            }
+            <span class="font-mono">{{ currentDescription().length }} / 2000 chars • {{ wordCount() }} words</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Banner Preset Gallery & 16:9 Live Preview -->
+      <div class="p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs space-y-4">
+        <div class="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+          <div>
+            <h2 class="text-base font-bold text-[var(--color-text-primary)]">
+              Event Banner Visuals
+            </h2>
+            <p class="text-xs text-[var(--color-text-muted)]">
+              16:9 high-definition banner displayed in event cards, seat selector, and client portal.
+            </p>
+          </div>
+        </div>
+
+        <app-banner-gallery-picker
+          [currentBannerUrl]="bannerUrl()"
+          (bannerSelected)="onBannerSelected($event)"
+        />
+
+        @if (eventForm.controls.bannerUrl.invalid && eventForm.controls.bannerUrl.touched) {
+          <p class="text-[11px] text-rose-500">
+            A valid banner image URL is required.
+          </p>
+        }
+      </div>
+
+      <!-- Error Message Banner -->
+      @if (errorMessage()) {
+        <div class="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <!-- Form Actions -->
+      <div class="flex items-center justify-between gap-4 pt-4 border-t border-[var(--color-border)]">
+        <a
+          routerLink="/admin/events"
+          class="btn-spring px-5 py-2.5 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+        >
+          Cancel
+        </a>
+
+        <div class="flex items-center gap-3">
+          @if (isEditMode() && eventId()) {
+            <a
+              [routerLink]="['/admin/events', eventId(), 'pricing']"
+              class="btn-spring inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors"
+            >
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="2" x2="12" y2="22"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              <span>Manage Pricing</span>
+            </a>
+          }
+
+          <button
+            type="submit"
+            [disabled]="isSaving() || isLocked()"
+            class="btn-spring inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-50"
+          >
+            @if (isSaving()) {
+              <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10"/>
+              </svg>
+              <span>Saving...</span>
+            } @else {
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span>{{ isEditMode() ? 'Save Changes' : 'Create & Proceed to Pricing' }}</span>
+            }
+          </button>
+        </div>
+      </div>
+    </form>
+  }
+</div>

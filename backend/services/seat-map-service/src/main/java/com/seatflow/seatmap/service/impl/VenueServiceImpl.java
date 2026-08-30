@@ -67,6 +67,8 @@ public class VenueServiceImpl implements VenueService {
                 .city(request.city())
                 .country(request.country() != null ? request.country() : "USA")
                 .capacity(request.capacity())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .build();
 
         venue = venueRepository.save(venue);
@@ -117,6 +119,8 @@ public class VenueServiceImpl implements VenueService {
         if (request.address() != null) venue.setAddress(request.address());
         if (request.city() != null) venue.setCity(request.city());
         if (request.country() != null) venue.setCountry(request.country());
+        if (request.latitude() != null) venue.setLatitude(request.latitude());
+        if (request.longitude() != null) venue.setLongitude(request.longitude());
 
         venue = venueRepository.save(venue);
         log.info("Venue updated. venueId={}, name={}", venue.getId(), venue.getName());

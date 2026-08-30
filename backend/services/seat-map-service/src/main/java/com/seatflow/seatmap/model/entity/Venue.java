@@ -57,6 +57,12 @@ public class Venue {
     @ToString.Include
     private Integer capacity;
 
+    @Column
+    private Double latitude;
+
+    @Column
+    private Double longitude;
+
     @Version
     @Column(nullable = false)
     private Long version;

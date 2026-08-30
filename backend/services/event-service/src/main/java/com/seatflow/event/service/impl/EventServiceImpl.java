@@ -39,8 +39,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -77,24 +75,12 @@ public class EventServiceImpl implements EventService {
     private final SeatMapClient seatMapClient;
     private final ObjectMapper objectMapper;
 
-    @Autowired
-    @Lazy
-    private EventServiceImpl self;
-
-    private EventServiceImpl proxy() {
-        return self != null ? self : this;
-    }
-
     @Override
+    @Transactional
     public EventDetailResponse createEvent(CreateEventRequest request) {
         if (!venueExists(request.venueId())) {
             throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
         }
-        return proxy().createEventInTx(request);
-    }
-
-    @Transactional
-    public EventDetailResponse createEventInTx(CreateEventRequest request) {
         Event event = eventMapper.toEntity(request);
         event.setStatus(EventStatus.DRAFT);
         Event saved = eventRepository.save(event);
@@ -106,28 +92,23 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public EventDetailResponse updateEvent(UUID eventId, UpdateEventRequest request) {
-        Event snapshot = eventRepository.findWithPricingTiersById(eventId)
-                .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
-        if (snapshot.getStatus() == EventStatus.CANCELLED || snapshot.getStatus() == EventStatus.COMPLETED) {
-            throw new ValidationException("Event is immutable in its current lifecycle state", ErrorCode.INVALID_REQUEST);
-        }
-        boolean publishRequested = request.status() != null && request.status() == EventStatus.PUBLISHED
-                && snapshot.getStatus() != EventStatus.PUBLISHED;
-        if (publishRequested && !venueExists(snapshot.getVenueId())) {
-            throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
-        }
-        return proxy().updateEventInTx(eventId, request);
-    }
-
     @Transactional
-    public EventDetailResponse updateEventInTx(UUID eventId, UpdateEventRequest request) {
+    public EventDetailResponse updateEvent(UUID eventId, UpdateEventRequest request) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
+        if (event.getStatus() == EventStatus.CANCELLED || event.getStatus() == EventStatus.COMPLETED) {
+            throw new ValidationException("Event is immutable in its current lifecycle state", ErrorCode.INVALID_REQUEST);
+        }
         boolean noChange = request.title() == null && request.description() == null && request.category() == null
                 && request.bannerUrl() == null && request.eventDate() == null && request.status() == null;
         if (noChange) {
             throw new ValidationException("No updatable fields provided", ErrorCode.INVALID_REQUEST);
+        }
+
+        boolean publishRequested = request.status() != null && request.status() == EventStatus.PUBLISHED
+                && event.getStatus() != EventStatus.PUBLISHED;
+        if (publishRequested && !venueExists(event.getVenueId())) {
+            throw new ValidationException("Referenced venue does not exist", ErrorCode.INVALID_REQUEST);
         }
 
         EventStatus current = event.getStatus();
@@ -210,6 +191,33 @@ public class EventServiceImpl implements EventService {
 
     @Override
     @Transactional(readOnly = true)
+    public PagedResult<EventDetailResponse> findEventsForAdministration(EventStatus status, EventCategory category, String search, Pageable pageable) {
+        Specification<Event> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (category != null) {
+                predicates.add(cb.equal(root.get("category"), category));
+            }
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                    cb.like(cb.lower(root.get("title")), pattern),
+                    cb.like(cb.lower(root.get("description")), pattern)
+                ));
+            }
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
+        Page<Event> page = eventRepository.findAll(spec, pageable);
+        List<EventDetailResponse> content = page.getContent().stream()
+                .map(eventMapper::toDetailResponse)
+                .toList();
+        return PagedResult.of(content, page.getNumber(), page.getSize(), page.getTotalElements());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public EventDetailResponse getPublishedEvent(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
@@ -228,6 +236,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public EventSeatMapResponse getEventSeatMap(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
@@ -236,12 +245,7 @@ public class EventServiceImpl implements EventService {
         }
         SeatMapVenueLayout venue = seatMapClient.getVenueLayout(event.getVenueId());
         List<SeatMapVenueSection> sections = venue.sections() == null ? List.of() : venue.sections();
-        return proxy().getEventSeatMapInTx(event, sections, venue);
-    }
 
-    @Transactional(readOnly = true)
-    public EventSeatMapResponse getEventSeatMapInTx(Event event, List<SeatMapVenueSection> sections,
-                                                   SeatMapVenueLayout venue) {
         List<PricingTierResponse> allTiers = event.getPricingTiers().stream()
                 .map(tierMapper::toResponse).toList();
         List<SeatMapSectionResponse> mapped = sections.stream().map(vs -> {
@@ -252,8 +256,8 @@ public class EventServiceImpl implements EventService {
             return new SeatMapSectionResponse(vs.sectionId(), vs.name(), vs.rowCount(), vs.colCount(), seats, sectionTiers);
         }).toList();
         long totalConfiguredSeats = venue.totalConfiguredSeats() != null ? venue.totalConfiguredSeats() : 0L;
-        return new EventSeatMapResponse(event.getId(), event.getVenueId(), event.getTitle(), event.getEventDate(),
-                venue.name(), venue.capacity(), totalConfiguredSeats, mapped);
+        return new EventSeatMapResponse(event.getId(), event.getVenueId(), event.getTitle(), event.getStatus().name(),
+                event.getEventDate(), venue.name(), venue.capacity(), totalConfiguredSeats, mapped);
     }
 
     private SeatMapSeatResponse toSeatMapSeat(SeatMapVenueSeat vs) {

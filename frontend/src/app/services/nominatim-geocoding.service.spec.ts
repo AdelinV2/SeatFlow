@@ -78,6 +78,62 @@ describe('NominatimGeocodingService', () => {
     req.flush(rawNominatimData);
   });
 
+  it('should find best match across candidate queries progressively', () => {
+    const rawNominatimData = [
+      {
+        place_id: 999,
+        display_name: 'Opera Română Timișoara, Piața Victoriei, Cetate, Timișoara',
+        lat: '45.7541',
+        lon: '21.225943',
+        address: {
+          theatre: 'Opera Română Timișoara',
+          city: 'Timișoara',
+          country: 'România',
+        },
+      },
+    ];
+
+    service
+      .geocodeBestMatch([
+        'Non Existent Street 999',
+        'Opera Română Timișoara, Piața Victoriei, Cetate',
+        'Timișoara',
+      ])
+      .subscribe((result) => {
+        expect(result).toBeTruthy();
+        expect(result?.lat).toBeCloseTo(45.7541);
+        expect(result?.lon).toBeCloseTo(21.225943);
+      });
+
+    // First candidate returns empty list
+    const req1 = httpMock.expectOne((r) =>
+      r.url.startsWith('https://nominatim.openstreetmap.org/search') &&
+      r.params.get('q') === 'Non Existent Street 999'
+    );
+    req1.flush([]);
+
+    // Second candidate returns match
+    const req2 = httpMock.expectOne((r) =>
+      r.url.startsWith('https://nominatim.openstreetmap.org/search') &&
+      r.params.get('q') === 'Opera Română Timișoara, Piața Victoriei, Cetate'
+    );
+    req2.flush(rawNominatimData);
+
+    // Third candidate should not even be requested because take(1) already fulfilled
+    httpMock.expectNone((r) =>
+      r.url.startsWith('https://nominatim.openstreetmap.org/search') &&
+      r.params.get('q') === 'Timișoara'
+    );
+  });
+
+  it('should return null when all candidates fail or candidates list is empty', (done) => {
+    service.geocodeBestMatch(['', '   ']).subscribe((res) => {
+      expect(res).toBeNull();
+      done();
+    });
+    httpMock.expectNone('https://nominatim.openstreetmap.org/search');
+  });
+
   it('should reverse geocode coordinates and map result', () => {
     const rawReverse = {
       place_id: 67890,
