@@ -21,6 +21,11 @@ public record ReservationClientResponse(
         UUID id,
         UUID seatId,
         String status,
-        BigDecimal price
-    ) {}
+        BigDecimal price,
+        String ticketType
+    ) {
+        public HeldSeatClientDto(UUID id, UUID seatId, String status, BigDecimal price) {
+            this(id, seatId, status, price, null);
+        }
+    }
 }

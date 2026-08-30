@@ -133,13 +133,17 @@
         @let eventInfo = eventDetailsMap().get(ticket.eventId);
         @let seatInfo = getSeatDetail(ticket);
         <div class="wallet-pass-card relative flex flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
-          <!-- Pass Header / Banner Image -->
-          <div class="relative h-32 w-full bg-gradient-to-tr from-indigo-950 via-slate-900 to-indigo-900 overflow-hidden border-b border-[var(--color-border)]">
+          <!-- Pass Header / Banner Image (Clickable to Event Details) -->
+          <div
+            class="relative h-32 w-full bg-gradient-to-tr from-indigo-950 via-slate-900 to-indigo-900 overflow-hidden border-b border-[var(--color-border)] cursor-pointer group"
+            [routerLink]="['/events', ticket.eventId]"
+            title="View Event Details"
+          >
             @if (ticket.bannerUrl || eventInfo?.bannerUrl) {
               <img
                 [src]="ticket.bannerUrl || eventInfo?.bannerUrl"
                 [alt]="ticket.eventTitle || eventInfo?.title || 'Event'"
-                class="size-full object-cover opacity-60 transition-transform duration-500 hover:scale-105"
+                class="size-full object-cover opacity-60 transition-transform duration-500 group-hover:scale-105"
               />
             }
             <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-surface)] via-black/40 to-transparent"></div>
@@ -152,7 +156,7 @@
             </div>
 
             <div class="absolute bottom-3 left-4 right-4 z-10">
-              <h2 class="text-base font-extrabold text-white tracking-tight truncate drop-shadow-md">
+              <h2 class="text-base font-extrabold text-white tracking-tight truncate drop-shadow-md group-hover:text-indigo-300 transition-colors">
                 {{ eventInfo?.title || ticket.eventTitle || 'SeatFlow Live Event' }}
               </h2>
             </div>

@@ -1,0 +1,1 @@
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_type VARCHAR(100); 

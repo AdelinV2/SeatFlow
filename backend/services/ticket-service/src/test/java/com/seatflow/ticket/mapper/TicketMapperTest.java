@@ -32,6 +32,7 @@ class TicketMapperTest {
                 .price(new BigDecimal("100.00"))
                 .taxAmount(new BigDecimal("10.00"))
                 .netAmount(new BigDecimal("90.00"))
+                .ticketType("VIP")
                 .ticketCode("CODE-XYZ")
                 .qrCodeData("data:image/png;base64,abc")
                 .status(TicketStatus.VALID)
@@ -58,6 +59,7 @@ class TicketMapperTest {
         assertThat(response.price()).isEqualTo(ticket.getPrice());
         assertThat(response.taxAmount()).isEqualTo(ticket.getTaxAmount());
         assertThat(response.netAmount()).isEqualTo(ticket.getNetAmount());
+        assertThat(response.ticketType()).isEqualTo(ticket.getTicketType());
         assertThat(response.ticketCode()).isEqualTo(ticket.getTicketCode());
         assertThat(response.status()).isEqualTo(ticket.getStatus());
         assertThat(response.createdAt()).isEqualTo(ticket.getCreatedAt());
@@ -71,6 +73,7 @@ class TicketMapperTest {
 
         assertThat(response.qrCodeData()).isEqualTo(ticket.getQrCodeData());
         assertThat(response.updatedAt()).isEqualTo(ticket.getUpdatedAt());
+        assertThat(response.ticketType()).isEqualTo(ticket.getTicketType());
         assertThat(response.ticketCode()).isEqualTo(ticket.getTicketCode());
     }
 

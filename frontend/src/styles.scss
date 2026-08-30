@@ -448,3 +448,14 @@ html {
     transition-duration: 1ms !important;
   }
 }
+
+.seatflow-qr-dialog {
+  .mat-mdc-dialog-container,
+  .mdc-dialog__surface {
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-radius: 1.5rem !important;
+    background: transparent !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75) !important;
+  }
+}

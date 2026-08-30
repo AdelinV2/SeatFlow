@@ -300,6 +300,13 @@ public class PaymentServiceImpl implements PaymentService {
                 paymentId.toString(),
                 new TaxAddress(request.line1(), request.line2(), request.city(), request.state(),
                         request.postalCode(), request.country()));
+
+        if (result != null && result.taxAmount() != null) {
+            payment.setTaxAmount(result.taxAmount());
+            payment.setNetAmount(payment.getAmount().subtract(result.taxAmount()));
+            paymentRepository.save(payment);
+        }
+
         return new TaxPreviewResponse(result.taxAmount(), result.effectiveRate(), result.currency());
     }
 

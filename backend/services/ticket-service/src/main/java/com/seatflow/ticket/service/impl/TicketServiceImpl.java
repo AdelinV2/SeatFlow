@@ -5,6 +5,7 @@ import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.security.context.UserContext;
 import com.seatflow.ticket.client.EventServiceClient;
 import com.seatflow.ticket.client.SeatMapServiceClient;
 import com.seatflow.ticket.client.dto.EventSeatMapClientResponse;
@@ -83,6 +84,7 @@ public class TicketServiceImpl implements TicketService {
                     .price(seat.price())
                     .taxAmount(seat.taxAmount() == null ? BigDecimal.ZERO : seat.taxAmount())
                     .netAmount(seat.netAmount() == null ? BigDecimal.ZERO : seat.netAmount())
+                    .ticketType(seat.ticketType() != null && !seat.ticketType().isBlank() ? seat.ticketType() : "Standard")
                     .ticketCode(ticketCode)
                     .qrCodeData(qrPayload)
                     .status(TicketStatus.VALID)
@@ -168,6 +170,11 @@ public class TicketServiceImpl implements TicketService {
 
         byte[] qrBytes = qrCodeGeneratorService.generateQrCodePng(ticket.getQrCodeData(), 200, 200);
 
+        String attendeeName = ticket.getAttendeeName();
+        if (attendeeName == null || attendeeName.isBlank() || attendeeName.equalsIgnoreCase(ticket.getCustomerEmail())) {
+            attendeeName = UserContext.getCurrentUserName().orElse(ticket.getAttendeeName());
+        }
+
         PdfTicketData data = new PdfTicketData(
                 ticket.getId(),
                 ticket.getTicketCode(),
@@ -180,12 +187,13 @@ public class TicketServiceImpl implements TicketService {
                 enrichment.sectionName(),
                 enrichment.rowLabel(),
                 enrichment.seatNumber(),
-                ticket.getAttendeeName(),
+                attendeeName,
                 ticket.getCustomerEmail(),
                 ticket.getPrice(),
                 ticket.getTaxAmount(),
                 ticket.getNetAmount(),
                 "USD",
+                ticket.getTicketType() != null && !ticket.getTicketType().isBlank() ? ticket.getTicketType() : "Standard",
                 qrBytes
         );
 

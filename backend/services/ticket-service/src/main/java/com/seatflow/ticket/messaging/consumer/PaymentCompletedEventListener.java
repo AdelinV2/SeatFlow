@@ -64,12 +64,21 @@ public class PaymentCompletedEventListener {
         }
 
         int seatCount = seats.size();
-        BigDecimal totalAmount = payload.amount();
+        BigDecimal totalAmount = payload.amount() != null ? payload.amount() : BigDecimal.ZERO;
         BigDecimal totalTax = payload.taxAmount() != null ? payload.taxAmount() : BigDecimal.ZERO;
         BigDecimal totalNet = payload.netAmount() != null ? payload.netAmount() : totalAmount.subtract(totalTax);
 
-        BigDecimal baseSeatTax = totalTax.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR);
-        BigDecimal baseSeatNet = totalNet.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR);
+        // Reconcile fiscal amounts: totalNet + totalTax must equal totalAmount
+        if (totalNet.add(totalTax).compareTo(totalAmount) != 0) {
+            if (totalTax.signum() == 0 && totalNet.compareTo(totalAmount) < 0) {
+                totalTax = totalAmount.subtract(totalNet);
+            } else {
+                totalNet = totalAmount.subtract(totalTax);
+            }
+        }
+
+        BigDecimal baseSeatTax = seatCount > 0 ? totalTax.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR) : BigDecimal.ZERO;
+        BigDecimal baseSeatNet = seatCount > 0 ? totalNet.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR) : BigDecimal.ZERO;
         BigDecimal taxRemainder = totalTax.subtract(baseSeatTax.multiply(BigDecimal.valueOf(seatCount)));
         BigDecimal netRemainder = totalNet.subtract(baseSeatNet.multiply(BigDecimal.valueOf(seatCount)));
 
@@ -84,7 +93,8 @@ public class PaymentCompletedEventListener {
                     seat.seatId(),
                     seat.price(),
                     seatTax,
-                    seatNet
+                    seatNet,
+                    seat.ticketType() != null && !seat.ticketType().isBlank() ? seat.ticketType() : "Standard"
             ));
         }
 

@@ -1,41 +1,31 @@
 :host {
   display: block;
-  color: var(--color-text-primary);
+  width: 100%;
 }
 
 .qr-dialog-shell {
-  min-width: min(28rem, calc(100vw - 2rem));
-  max-width: 34rem;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
   background:
-    radial-gradient(circle at 50% 0%, var(--color-primary-glow), transparent 42%),
-    var(--color-surface-elevated);
-}
-
-.qr-dialog-shell [mat-dialog-title] {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 1.25rem;
-  line-height: 1.25;
+    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.25), transparent 55%),
+    #0f172a;
 }
 
 .qr-dialog-content {
-  max-height: min(70vh, 42rem);
-  padding: 1.25rem 1.25rem 0.5rem;
+  max-height: min(75vh, 38rem);
+  box-sizing: border-box;
+  background: transparent !important;
+  color: #f8fafc !important;
 }
 
 .qr-dialog-actions {
-  padding: 1rem 1.5rem 1.5rem;
+  background: transparent !important;
 }
 
 .qr-code-frame {
   box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.04),
-    0 18px 48px -28px rgba(15, 23, 42, 0.65);
-}
-
-@media (max-width: 30rem) {
-  .qr-dialog-shell {
-    min-width: calc(100vw - 1rem);
-  }
+    0 20px 35px -10px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(99, 102, 241, 0.2);
 }
