@@ -7,5 +7,3 @@ ALTER TABLE seat_holds
 ALTER TABLE seat_holds
     ADD CONSTRAINT chk_seat_holds_seat_number
         CHECK (seat_number IS NULL OR seat_number > 0);
-
-CREATE INDEX idx_seat_holds_pricing_tier_id ON seat_holds(pricing_tier_id);

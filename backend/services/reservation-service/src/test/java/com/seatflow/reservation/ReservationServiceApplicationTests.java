@@ -57,12 +57,12 @@ class ReservationServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3");
+                .containsExactly("1", "2", "3", "4");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true);
     }
 
     @Test
