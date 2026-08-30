@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -15,7 +14,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
@@ -27,9 +26,11 @@ import {
   StripeElements,
   StripePaymentElement,
 } from '@stripe/stripe-js';
+import { EMPTY, Subject } from 'rxjs';
+import { catchError, debounceTime, switchMap } from 'rxjs/operators';
 import { ThemeService } from '../../../core/theme/theme.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
-import { PaymentIntentResponse } from '../../../models/payment.model';
+import { PaymentIntentResponse, TaxPreviewRequest } from '../../../models/payment.model';
 import { EventApiService } from '../../../services/event-api.service';
 import { EventSeatMapResponse } from '../../../models/seat.model';
 import { PaymentApiService } from '../../../services/payment-api.service';
@@ -45,6 +46,50 @@ import { HoldExpiredDialogComponent } from './hold-expired-dialog/hold-expired-d
 
 const defaultStripePublishableKey = 'pk_test_replace_with_your_publishable_key';
 const seatFlowTestPaymentMethod = 'pm_card_visa';
+
+@Component({
+  selector: 'app-cancel-order-dialog',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <div class="w-full rounded-[1.5rem] bg-[var(--color-surface)] p-6 sm:p-7">
+      <p class="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500">Cancel checkout</p>
+      <h2
+        id="cancel-order-dialog-title"
+        class="mt-2 text-xl font-black tracking-tight text-[var(--color-text-primary)]"
+      >
+        Cancel this order?
+      </h2>
+      <p class="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
+        {{ message }}
+      </p>
+      <div class="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          class="btn-spring rounded-xl border border-[var(--color-border)] px-4 py-2.5 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-canvas-subtle)]"
+          (click)="close(false)"
+        >
+          Keep order
+        </button>
+        <button
+          type="button"
+          class="btn-spring rounded-xl bg-rose-500 px-4 py-2.5 text-xs font-black text-white transition-colors hover:bg-rose-600"
+          (click)="close(true)"
+        >
+          Cancel order
+        </button>
+      </div>
+    </div>
+  `,
+})
+class CancelOrderDialogComponent {
+  private readonly dialogRef = inject(MatDialogRef<CancelOrderDialogComponent, boolean>);
+  readonly message = inject<{ message: string }>(MAT_DIALOG_DATA).message;
+
+  close(confirmed: boolean): void {
+    this.dialogRef.close(confirmed);
+  }
+}
 
 export interface CheckoutSeat {
   seatId: string;
@@ -100,7 +145,6 @@ export const STRIPE_LOADER = new InjectionToken<typeof loadStripe>('STRIPE_LOADE
   selector: 'app-checkout',
   standalone: true,
   imports: [
-    CommonModule,
     ReactiveFormsModule,
     RouterLink,
     HoldCountdownComponent,
@@ -142,6 +186,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   readonly paymentElementComplete = signal(false);
   readonly addressElementComplete = signal(false);
   readonly testCardSelected = signal(false);
+  readonly isCancellingOrder = signal(false);
   readonly checkoutSeats = signal<CheckoutSeat[]>([]);
   readonly isSeatDetailsLoading = signal(true);
   readonly isTicketTypesConfirmed = signal(false);
@@ -185,12 +230,60 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   private addressElement: StripeAddressElement | null = null;
   private clientSecret: string | null = null;
   private currentPaymentId: string | null = null;
+  private customerEmailProof: string | undefined;
+  private readonly taxPreviewSubject$ = new Subject<TaxPreviewRequest | null>();
+  private paymentAttemptCounter = 0;
 
   constructor() {
     effect(() => {
       const isDark = this.themeService.isDark();
       this.elements?.update({ appearance: this.stripeAppearance(isDark) });
     });
+
+    this.taxPreviewSubject$
+      .pipe(
+        debounceTime(400),
+        switchMap((address) => {
+          if (!address) {
+            this.taxAmount.set(0);
+            this.taxRate.set(null);
+            this.isTaxLoading.set(false);
+            return EMPTY;
+          }
+          if (
+            !this.currentPaymentId
+            || !address.line1
+            || !address.city
+            || !address.postalCode
+            || !address.country
+          ) {
+            this.isTaxLoading.set(false);
+            return EMPTY;
+          }
+
+          this.isTaxLoading.set(true);
+          const customerEmailProof = this.getCustomerEmailProof();
+          const preview$ = customerEmailProof
+            ? this.paymentApi.previewTax(this.currentPaymentId, address, customerEmailProof)
+            : this.paymentApi.previewTax(this.currentPaymentId, address);
+          return preview$.pipe(
+            catchError(() => {
+              this.taxAmount.set(0);
+              this.taxRate.set(null);
+              this.isTaxLoading.set(false);
+              return EMPTY;
+            }),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((preview) => {
+        this.taxAmount.set(Number(preview.taxAmount) || 0);
+        this.taxRate.set(
+          Number.isFinite(Number(preview.effectiveRate)) ? Number(preview.effectiveRate) : null,
+        );
+        this.isTaxLoading.set(false);
+      });
   }
 
   ngOnInit(): void {
@@ -211,14 +304,20 @@ export class CheckoutComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.paymentElement?.destroy();
-    this.addressElement?.destroy();
+    this.destroyStripeElements();
   }
 
   loadReservation(reservationId: string): void {
     this.isLoading.set(true);
-    this.reservationApi
-      .getReservation(reservationId)
+    const isAuthenticated = this.userContext.isAuthenticated();
+    this.customerEmailProof = isAuthenticated
+      ? undefined
+      : this.reservationApi.getStoredCustomerEmailProof(reservationId)?.trim() || undefined;
+    const reservation$ = isAuthenticated
+      ? this.reservationApi.getReservation(reservationId)
+      : this.reservationApi.getReservation(reservationId, this.customerEmailProof);
+
+    reservation$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (reservation) => {
@@ -333,8 +432,93 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     this.checkoutSeats.update((seats) => seats.map((seat) =>
       seat.seatId === seatId && seat.pricingTiers.some((tier) => tier.id === pricingTierId)
         ? { ...seat, selectedPricingTierId: pricingTierId }
-        : seat,
+      : seat,
     ));
+  }
+
+  backToTicketDetails(): void {
+    if (!this.isTicketTypesConfirmed() || this.isProcessingPayment() || this.isHoldExpired()) {
+      return;
+    }
+
+    this.destroyStripeElements();
+    this.paymentIntent.set(null);
+    this.currentPaymentId = null;
+    this.clientSecret = null;
+    this.isStripeLoading.set(false);
+    this.isStripeReady.set(false);
+    this.stripeError.set(null);
+    this.testCardSelected.set(false);
+    this.paymentElementComplete.set(false);
+    this.addressElementComplete.set(false);
+    this.taxAmount.set(0);
+    this.taxRate.set(null);
+    this.isTaxLoading.set(false);
+    this.isTicketTypesConfirmed.set(false);
+    this.taxPreviewSubject$.next(null);
+    this.paymentAttemptCounter++;
+  }
+
+  cancelOrder(): void {
+    if (this.isCancellingOrder() || this.isHoldExpired()) {
+      return;
+    }
+    const reservation = this.reservation();
+    if (!reservation || reservation.status !== 'PENDING') {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(CancelOrderDialogComponent, {
+      width: '380px',
+      maxWidth: 'calc(100vw - 2rem)',
+      ariaLabel: 'Cancel order',
+      data: { message: 'Cancel this order and release the held seats?' },
+    });
+
+    dialogRef
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((confirmed) => {
+        if (!confirmed || this.isHoldExpired() || this.isCancellingOrder()) {
+          return;
+        }
+
+        this.cancelPendingOrder(reservation);
+      });
+  }
+
+  private cancelPendingOrder(reservation: ReservationResponse): void {
+    this.isCancellingOrder.set(true);
+    this.reservationApi
+      .cancelReservation(reservation.id, this.getCustomerEmailProof())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isCancellingOrder.set(false);
+          this.destroyStripeElements();
+          this.reservation.set({ ...reservation, status: 'CANCELLED' });
+          this.snackBar.open('Order cancelled. Your held seats were released.', 'Close', {
+            duration: 4000,
+            panelClass: 'snack-success',
+          });
+          void this.router.navigate(['/events']);
+        },
+        error: () => {
+          this.isCancellingOrder.set(false);
+          this.snackBar.open('The order could not be cancelled. Please try again.', 'Close', {
+            duration: 5000,
+            panelClass: 'snack-error',
+          });
+        },
+      });
+  }
+
+  handleFormSubmit(): void {
+    if (!this.isTicketTypesConfirmed()) {
+      this.continueToPayment();
+    } else {
+      void this.confirmPayment();
+    }
   }
 
   continueToPayment(): void {
@@ -373,7 +557,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     };
     this.isSavingTicketTypes.set(true);
     this.reservationApi
-      .updateReservationPricing(reservation.id, request, this.guestForm.controls.customerEmail.value)
+      .updateReservationPricing(reservation.id, request, this.getCustomerEmailProof())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (updatedReservation) => {
@@ -426,11 +610,16 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.paymentApi
-      .createPaymentIntent({
-        reservationId,
-        idempotencyKey: `pay-intent-${reservationId}`,
-      })
+    const request = {
+      reservationId,
+      idempotencyKey: `pay-intent-${reservationId}-v${this.paymentAttemptCounter}`,
+    };
+    const customerEmailProof = this.getCustomerEmailProof();
+    const paymentIntent$ = customerEmailProof
+      ? this.paymentApi.createPaymentIntent(request, customerEmailProof)
+      : this.paymentApi.createPaymentIntent(request);
+
+    paymentIntent$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (intent) => this.mountStripeElements(intent),
@@ -479,7 +668,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     this.testCardSelected.set(true);
     this.paymentElementComplete.set(true);
     this.addressElementComplete.set(true);
-    this.previewTax({
+    this.taxPreviewSubject$.next({
       line1: '1 Test Avenue',
       city: 'Bucharest',
       postalCode: '010101',
@@ -577,6 +766,9 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     const returnUrl = `${window.location.origin}/order-confirmation/${this.currentPaymentId}`;
 
     if (this.testCardSelected()) {
+      // Intentional: confirmCardPayment bypasses PaymentElement UI for the SeatFlow test card
+      // shortcut (pm_card_visa). This avoids requiring manual form interaction for the hardcoded
+      // token. For real user flows, confirmPayment() with elements is always used (see below).
       const result = await this.stripe.confirmCardPayment(this.clientSecret!, {
         payment_method: seatFlowTestPaymentMethod,
         receipt_email: customerEmail,
@@ -603,6 +795,23 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     this.handlePaymentResult(result.error?.message, result.paymentIntent?.status);
   }
 
+  private destroyStripeElements(): void {
+    this.paymentElement?.destroy();
+    this.addressElement?.destroy();
+    this.paymentElement = null;
+    this.addressElement = null;
+    this.elements = null;
+  }
+
+  private getCustomerEmailProof(): string | undefined {
+    if (this.userContext.isAuthenticated()) {
+      return undefined;
+    }
+
+    return this.customerEmailProof
+      ?? (this.guestForm.controls.customerEmail.value.trim() || undefined);
+  }
+
   private mountStripeElements(intent: PaymentIntentResponse): void {
     if (!this.stripe || this.isHoldExpired()) {
       return;
@@ -622,7 +831,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     const customerEmail = this.guestForm.controls.customerEmail.value;
 
     this.paymentElement = this.elements.create('payment', {
-      layout: { type: 'tabs', spacedAccordionItems: true },
+      layout: { type: 'tabs' },
       business: { name: 'SeatFlow Test Checkout' },
       wallets: { applePay: 'never', googlePay: 'never', link: 'never' },
       defaultValues: {
@@ -646,7 +855,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     this.addressElement.on('change', (event: StripeAddressElementChangeEvent) => {
       this.addressElementComplete.set(event.complete);
       if (event.complete) {
-        this.previewTax({
+        this.taxPreviewSubject$.next({
           line1: event.value.address.line1,
           line2: event.value.address.line2 ?? undefined,
           city: event.value.address.city,
@@ -655,8 +864,7 @@ export class CheckoutComponent implements OnInit, OnDestroy {
           country: event.value.address.country,
         });
       } else {
-        this.taxAmount.set(0);
-        this.taxRate.set(null);
+        this.taxPreviewSubject$.next(null);
       }
     });
     this.addressElement.on('loaderror', () => this.handleStripeInitializationError());
@@ -673,35 +881,6 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       this.isStripeLoading.set(false);
       this.isStripeReady.set(true);
     });
-  }
-
-  private previewTax(address: {
-    line1: string;
-    line2?: string;
-    city: string;
-    state?: string;
-    postalCode: string;
-    country: string;
-  }): void {
-    if (!this.currentPaymentId || !address.line1 || !address.city || !address.postalCode || !address.country) {
-      return;
-    }
-    this.isTaxLoading.set(true);
-    this.paymentApi
-      .previewTax(this.currentPaymentId, address)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (preview) => {
-          this.taxAmount.set(Number(preview.taxAmount) || 0);
-          this.taxRate.set(Number.isFinite(Number(preview.effectiveRate)) ? Number(preview.effectiveRate) : null);
-          this.isTaxLoading.set(false);
-        },
-        error: () => {
-          this.taxAmount.set(0);
-          this.taxRate.set(null);
-          this.isTaxLoading.set(false);
-        },
-      });
   }
 
   private handlePaymentResult(errorMessage?: string, status?: string): void {

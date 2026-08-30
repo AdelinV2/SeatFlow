@@ -83,7 +83,7 @@ class PaymentServiceImplTest {
         when(paymentMapper.toResponse(any(Payment.class)))
                 .thenReturn(new com.seatflow.payment.web.dto.response.PaymentResponse(
                         UUID.randomUUID(), reservationId, reservationUserId, "cust@example.com",
-                        reservationEventId, "pi_123", amount, "USD", PaymentStatus.INITIATED, null,
+                        reservationEventId, "pi_123", amount, BigDecimal.ZERO, amount, "USD", PaymentStatus.INITIATED, null,
                         Instant.now(), Instant.now()));
     }
 
@@ -217,6 +217,39 @@ class PaymentServiceImplTest {
     }
 
     @Test
+    void idempotentReplayRefreshesStripeIntentWhenTicketPricingChanged() {
+        UUID paymentId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        Payment existing = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .stripePaymentIntentId("pi_existing")
+                .clientSecret("pi_existing_secret")
+                .amount(new BigDecimal("120.00"))
+                .currency("USD")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        ReservationClientResponse repricedReservation = new ReservationClientResponse(
+                reservationId, reservationEventId, reservationUserId, "cust@example.com",
+                "PENDING", Instant.now().plusSeconds(900), new BigDecimal("100.00"), 1,
+                List.of(new SeatHoldClientDto(UUID.randomUUID(), seatId, "HELD", new BigDecimal("100.00"))),
+                Instant.now());
+        when(paymentRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.of(existing));
+        when(reservationServiceClient.getReservation(reservationId)).thenReturn(repricedReservation);
+        when(stripePaymentGateway.updatePaymentIntent(
+                eq("pi_existing"), eq(new BigDecimal("100.00")), eq("USD"), any(), eq("cust@example.com")))
+                .thenReturn(new StripeIntentResult("pi_existing", "pi_updated_secret", "requires_payment_method"));
+
+        service.createPaymentIntent(request(), reservationUserId);
+
+        assertThat(existing.getAmount()).isEqualByComparingTo("100.00");
+        verify(stripePaymentGateway).updatePaymentIntent(
+                eq("pi_existing"), eq(new BigDecimal("100.00")), eq("USD"), any(), eq("cust@example.com"));
+        verify(paymentRepository).saveAndFlush(existing);
+        verify(paymentMapper).toIntentResponse(existing, "pi_updated_secret");
+    }
+
+    @Test
     void createPaymentIntentRejectsIdempotencyKeyReusedWithDifferentReservation() {
         Payment existing = Payment.builder()
                 .id(UUID.randomUUID())
@@ -263,6 +296,50 @@ class PaymentServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         assertThat(service.getPaymentByReservationId(reservationId, reservationUserId, false)).isNotNull();
+    }
+
+    @Test
+    void guestPaymentRejectsAnonymousCallerWithoutEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.getPaymentById(paymentId, null, false, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void guestPaymentAcceptsAnonymousCallerWithMatchingEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThat(service.getPaymentById(paymentId, null, false, " Guest@Example.com ")).isNotNull();
+    }
+
+    @Test
+    void guestPaymentRejectsAnonymousCallerWithWrongEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.getPaymentById(paymentId, null, false, "attacker@example.com"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

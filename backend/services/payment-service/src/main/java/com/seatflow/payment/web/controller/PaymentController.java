@@ -51,11 +51,13 @@ public class PaymentController {
     @ApiResponse(responseCode = "502", description = "Stripe gateway failure",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<PaymentIntentResponse> createPaymentIntent(
-            @Valid @RequestBody CreatePaymentIntentRequest request) {
+            @Valid @RequestBody CreatePaymentIntentRequest request,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
 
         UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
 
-        PaymentIntentResponse response = paymentService.createPaymentIntent(request, authenticatedUserId);
+        PaymentIntentResponse response = paymentService.createPaymentIntent(
+                request, authenticatedUserId, customerEmailProof);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -68,11 +70,14 @@ public class PaymentController {
         content = @Content(schema = @Schema(implementation = PaymentResponse.class)))
     @ApiResponse(responseCode = "404", description = "Payment not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    public ResponseEntity<PaymentResponse> getPayment(@PathVariable UUID paymentId) {
+    public ResponseEntity<PaymentResponse> getPayment(
+            @PathVariable UUID paymentId,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
         boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
 
-        PaymentResponse response = paymentService.getPaymentById(paymentId, authenticatedUserId, isAdmin);
+        PaymentResponse response = paymentService.getPaymentById(
+                paymentId, authenticatedUserId, isAdmin, customerEmailProof);
         return ResponseEntity.ok(response);
     }
 
@@ -87,10 +92,12 @@ public class PaymentController {
             content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     public ResponseEntity<TaxPreviewResponse> previewTax(
             @PathVariable UUID paymentId,
-            @Valid @RequestBody TaxPreviewRequest request) {
+            @Valid @RequestBody TaxPreviewRequest request,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
         boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
-        return ResponseEntity.ok(paymentService.calculateTaxPreview(paymentId, request, authenticatedUserId, isAdmin));
+        return ResponseEntity.ok(paymentService.calculateTaxPreview(
+                paymentId, request, authenticatedUserId, isAdmin, customerEmailProof));
     }
 
     @GetMapping("/reservation/{reservationId}")
@@ -102,11 +109,14 @@ public class PaymentController {
         content = @Content(schema = @Schema(implementation = PaymentResponse.class)))
     @ApiResponse(responseCode = "404", description = "Payment for reservation not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    public ResponseEntity<PaymentResponse> getPaymentByReservation(@PathVariable UUID reservationId) {
+    public ResponseEntity<PaymentResponse> getPaymentByReservation(
+            @PathVariable UUID reservationId,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
         boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
 
-        PaymentResponse response = paymentService.getPaymentByReservationId(reservationId, authenticatedUserId, isAdmin);
+        PaymentResponse response = paymentService.getPaymentByReservationId(
+                reservationId, authenticatedUserId, isAdmin, customerEmailProof);
         return ResponseEntity.ok(response);
     }
 

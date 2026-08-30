@@ -7,12 +7,14 @@ import com.seatflow.payment.gateway.StripePaymentGateway;
 import com.seatflow.payment.gateway.dto.StripeIntentResult;
 import com.seatflow.payment.gateway.dto.StripeTaxResult;
 import com.seatflow.payment.gateway.dto.TaxAddress;
+import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.tax.Calculation;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.tax.CalculationCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.PaymentIntentUpdateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,6 +29,7 @@ import java.util.Map;
 public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
     private final StripeConfig stripeConfig;
+    private final StripeClient stripeClient;
 
     @Override
     public StripeIntentResult createPaymentIntent(
@@ -45,7 +48,7 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
             PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
                     .setAmount(amountInCents)
-                    .setCurrency(currency.toLowerCase())
+                    .setCurrency(currency.toLowerCase(java.util.Locale.ROOT))
                     .putAllMetadata(metadata)
                     .setAutomaticPaymentMethods(
                             PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
@@ -58,11 +61,10 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
             }
 
             RequestOptions requestOptions = RequestOptions.builder()
-                    .setApiKey(stripeConfig.getApiKey())
                     .setIdempotencyKey(idempotencyKey)
                     .build();
 
-            PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
+            PaymentIntent paymentIntent = stripeClient.paymentIntents().create(paramsBuilder.build(), requestOptions);
             log.info("Stripe PaymentIntent created. paymentIntentId={}, status={}",
                     paymentIntent.getId(), paymentIntent.getStatus());
 
@@ -74,6 +76,39 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
         } catch (StripeException ex) {
             log.error("Stripe API exception while creating PaymentIntent. idempotencyKey={}", idempotencyKey, ex);
+            String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
+            throw new BusinessException("Payment gateway failure: " + message, ErrorCode.PAYMENT_FAILED, 502);
+        }
+    }
+
+    @Override
+    public StripeIntentResult updatePaymentIntent(
+            String paymentIntentId,
+            BigDecimal amount,
+            String currency,
+            Map<String, String> metadata,
+            String customerEmail) {
+
+        validateStripeTestConfiguration();
+
+        try {
+            long amountInCents = amount.multiply(BigDecimal.valueOf(100))
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .longValue();
+            PaymentIntent paymentIntent = stripeClient.paymentIntents().retrieve(paymentIntentId);
+            PaymentIntentUpdateParams.Builder paramsBuilder = PaymentIntentUpdateParams.builder()
+                    .setAmount(amountInCents)
+                    .setCurrency(currency.toLowerCase(java.util.Locale.ROOT))
+                    .putAllMetadata(metadata);
+            if (customerEmail != null && !customerEmail.isBlank()) {
+                paramsBuilder.setReceiptEmail(customerEmail);
+            }
+            PaymentIntent updated = stripeClient.paymentIntents().update(paymentIntent.getId(), paramsBuilder.build());
+            log.info("Stripe PaymentIntent updated. paymentIntentId={}, amount={}, status={}",
+                    updated.getId(), amount, updated.getStatus());
+            return new StripeIntentResult(updated.getId(), updated.getClientSecret(), updated.getStatus());
+        } catch (StripeException ex) {
+            log.error("Stripe API exception while updating PaymentIntent. paymentIntentId={}", paymentIntentId, ex);
             String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
             throw new BusinessException("Payment gateway failure: " + message, ErrorCode.PAYMENT_FAILED, 502);
         }
@@ -111,8 +146,7 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
                             .setTaxBehavior(CalculationCreateParams.LineItem.TaxBehavior.INCLUSIVE)
                             .build())
                     .build();
-            Calculation calculation = Calculation.create(params,
-                    RequestOptions.builder().setApiKey(stripeConfig.getApiKey()).build());
+            Calculation calculation = stripeClient.tax().calculations().create(params);
             long taxCents = calculation.getTaxAmountInclusive() == null ? 0L : calculation.getTaxAmountInclusive();
             BigDecimal taxAmount = BigDecimal.valueOf(taxCents, 2);
             BigDecimal netAmount = amount.subtract(taxAmount);
@@ -128,6 +162,12 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
     }
 
     private void validateStripeTestConfiguration() {
+        if (stripeClient == null) {
+            throw new BusinessException(
+                    "Stripe client is not initialized. Check payment-service Stripe configuration.",
+                    ErrorCode.PAYMENT_FAILED,
+                    502);
+        }
         String apiKey = stripeConfig.getApiKey();
         String normalized = apiKey == null ? "" : apiKey.trim();
         String lowerCase = normalized.toLowerCase(java.util.Locale.ROOT);

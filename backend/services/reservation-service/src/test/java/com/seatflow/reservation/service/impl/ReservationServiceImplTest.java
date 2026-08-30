@@ -80,14 +80,6 @@ class ReservationServiceImplTest {
     void setUp() {
         service = new ReservationServiceImpl(reservationRepository, seatHoldRepository, outboxEventRepository,
                 reservationMapper, eventClient, objectMapper, meterRegistry);
-        // Emulate the Spring transactional proxy for the self-invoked transactional method in unit tests
-        try {
-            var field = ReservationServiceImpl.class.getDeclaredField("self");
-            field.setAccessible(true);
-            field.set(service, service);
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException(ex);
-        }
         CorrelationContext.setCorrelationId("test-correlation");
     }
 
@@ -151,6 +143,39 @@ class ReservationServiceImplTest {
         verify(eventClient).getEventSeatPricing(eventId, new HashSet<>(seatIds));
         verify(reservationRepository).saveAndFlush(any(Reservation.class));
         verify(outboxEventRepository).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void createReservationLocksSeatsInSortedUuidOrder() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        UUID firstSeat = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondSeat = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID reservationId = UUID.randomUUID();
+        List<UUID> requestedSeatIds = List.of(secondSeat, firstSeat);
+        List<UUID> sortedSeatIds = List.of(firstSeat, secondSeat);
+        CreateReservationRequest request = buildRequest(eventId, requestedSeatIds,
+                List.of(new BigDecimal("20.00"), new BigDecimal("10.00")), "idem-lock-order");
+
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
+                Instant.now().plusSeconds(3600), requestedSeatIds,
+                Map.of(firstSeat, new BigDecimal("10.00"), secondSeat, new BigDecimal("20.00")));
+
+        when(eventClient.getEventSeatPricing(eventId, new HashSet<>(requestedSeatIds))).thenReturn(pricing);
+        when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-lock-order")).thenReturn(Optional.empty());
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eventId, sortedSeatIds)).thenReturn(List.of());
+        when(reservationMapper.toEntity(any(), any()))
+                .thenReturn(stubReservation(null, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> {
+            Reservation reservation = invocation.getArgument(0);
+            reservation.setId(reservationId);
+            return reservation;
+        });
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(reservationId, eventId));
+
+        service.createReservation(request, null);
+
+        verify(seatHoldRepository).findAndLockSeatsForUpdate(eventId, sortedSeatIds);
     }
 
     @Test
@@ -295,7 +320,7 @@ class ReservationServiceImplTest {
         service.updateReservationPricing(id,
                 new SeatPricingSelectionRequest(List.of(
                         new SeatPricingSelectionRequest.SeatPricingSelection(seatId, tierId))),
-                null, null);
+                null, "guest@example.com");
 
         assertThat(hold.getPrice()).isEqualByComparingTo("35.00");
         assertThat(hold.getTicketType()).isEqualTo("Student");
@@ -306,17 +331,34 @@ class ReservationServiceImplTest {
     }
 
     @Test
-    void getReservationByIdReturnsForAnonymousGuest() {
+    void getReservationByIdRejectsAnonymousGuestWithoutEmailProof() {
         UUID id = UUID.randomUUID();
         Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
         res.setCustomerEmail("guest@example.com");
         when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
-        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, res.getEventId()));
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, null, null));
+        verify(reservationMapper, never()).toResponse(any());
+    }
 
-        ReservationResponse result = service.getReservationById(id, null, null);
+    @Test
+    void updateReservationPricingRejectsAnonymousGuestWithoutEmailProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
 
-        assertThat(result).isNotNull();
-        assertThat(result.id()).isEqualTo(id);
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.updateReservationPricing(id, null, null, null));
+        verify(reservationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void cancelReservationRejectsAnonymousGuestWithoutEmailProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.cancelReservation(id, null, null));
+        verify(reservationRepository, never()).save(any());
     }
 
     @Test

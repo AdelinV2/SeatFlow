@@ -28,30 +28,29 @@
     <p class="relative mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-rose-500">
       Time is up
     </p>
-    <h2
-      mat-dialog-title
-      class="relative m-0 text-2xl font-black tracking-tight text-[var(--color-text-primary)]"
-    >
-      Your seat hold expired
-    </h2>
+    <div class="relative m-0 text-2xl font-black tracking-tight text-[var(--color-text-primary)]">
+      <h2 mat-dialog-title>Your seat hold expired</h2>
+    </div>
 
-    <mat-dialog-content
-      class="relative mt-3 p-0 text-sm leading-6 text-[var(--color-text-secondary)]"
-    >
-      To keep every booking fair, these seats have returned to the event. No payment was taken.
-    </mat-dialog-content>
+    <div class="relative mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">
+      <mat-dialog-content>
+        To keep every booking fair, these seats have returned to the event. No payment was taken.
+      </mat-dialog-content>
+    </div>
 
-    <mat-dialog-actions class="relative mt-7 w-full p-0">
-      <app-tactile-button
-        class="w-full"
-        variant="primary"
-        size="lg"
-        [fullWidth]="true"
-        (clicked)="returnToEvent()"
-      >
-        Choose seats again
-        <span aria-hidden="true">→</span>
-      </app-tactile-button>
-    </mat-dialog-actions>
+    <div class="relative mt-7 w-full">
+      <mat-dialog-actions>
+        <app-tactile-button
+          class="w-full"
+          variant="primary"
+          size="lg"
+          [fullWidth]="true"
+          [mat-dialog-close]="'return-to-event'"
+        >
+          Choose seats again
+          <span aria-hidden="true">→</span>
+        </app-tactile-button>
+      </mat-dialog-actions>
+    </div>
   </div>
 </div>

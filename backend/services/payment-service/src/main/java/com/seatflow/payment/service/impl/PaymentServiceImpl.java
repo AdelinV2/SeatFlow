@@ -51,8 +51,14 @@ public class PaymentServiceImpl implements PaymentService {
     private final MeterRegistry meterRegistry;
 
     @Override
-    @Transactional
     public PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, UUID authenticatedUserId) {
+        return createPaymentIntent(request, authenticatedUserId, null);
+    }
+
+    @Override
+    public PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request,
+                                                     UUID authenticatedUserId,
+                                                     String customerEmailProof) {
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
             log.info("Processing PaymentIntent creation. reservationId={}, authenticatedUserId={}, idempotencyKey={}",
@@ -63,6 +69,7 @@ public class PaymentServiceImpl implements PaymentService {
             if (existingIdempotentPayment.isPresent()) {
                 Payment existing = existingIdempotentPayment.get();
                 if (existing.getReservationId().equals(request.reservationId())) {
+                    refreshExistingPaymentIfReservationTotalChanged(existing, authenticatedUserId, customerEmailProof);
                     log.info("Idempotent replay for paymentId={}, idempotencyKey={}", existing.getId(), request.idempotencyKey());
                     return paymentMapper.toIntentResponse(existing, existing.getClientSecret());
                 } else {
@@ -80,7 +87,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
 
             // 3. Fetch and validate reservation from reservation-service
-            ReservationClientResponse reservation = reservationServiceClient.getReservation(request.reservationId());
+            ReservationClientResponse reservation = getReservation(request.reservationId(), customerEmailProof);
 
             if (!"PENDING".equalsIgnoreCase(reservation.status())) {
                 throw new ValidationException("Cannot process payment for reservation with status: " + reservation.status(),
@@ -135,7 +142,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .status(PaymentStatus.INITIATED)
                     .build();
 
-            Payment savedPayment = paymentRepository.saveAndFlush(payment);
+            Payment savedPayment = persistPayment(payment);
 
             meterRegistry.counter("seatflow.payments.intent.created.total", "status", "INITIATED").increment();
             log.info("Payment entity persisted in INITIATED status. paymentId={}, stripePaymentIntentId={}, amount={}",
@@ -150,6 +157,65 @@ public class PaymentServiceImpl implements PaymentService {
         } finally {
             timer.stop(meterRegistry.timer("seatflow.payments.intent.duration"));
         }
+    }
+
+    @Transactional
+    private Payment persistPayment(Payment payment) {
+        return paymentRepository.saveAndFlush(payment);
+    }
+
+    private void refreshExistingPaymentIfReservationTotalChanged(Payment payment,
+                                                                  UUID authenticatedUserId,
+                                                                  String customerEmailProof) {
+        // Older persisted test fixtures may not have Stripe identifiers. Keep their
+        // idempotent replay behavior intact; real payment rows always have both values.
+        if (payment.getStripePaymentIntentId() == null || payment.getAmount() == null) {
+            return;
+        }
+        if (payment.getStatus() == PaymentStatus.SUCCESS) {
+            return;
+        }
+
+        ReservationClientResponse reservation = getReservation(payment.getReservationId(), customerEmailProof);
+        if (!"PENDING".equalsIgnoreCase(reservation.status())) {
+            throw new ValidationException("Cannot refresh payment for reservation with status: " + reservation.status(),
+                    ErrorCode.INVALID_REQUEST);
+        }
+        if (reservation.expiresAt() == null || reservation.expiresAt().isBefore(Instant.now())) {
+            throw new ValidationException("Reservation hold has expired", ErrorCode.RESERVATION_EXPIRED);
+        }
+        if (reservation.userId() != null
+                && (authenticatedUserId == null || !reservation.userId().equals(authenticatedUserId))
+                && !UserContext.hasRole(SecurityRoles.ROLE_ADMIN)) {
+            throw new ResourceNotFoundException("Reservation", payment.getReservationId());
+        }
+
+        BigDecimal chargeAmount = resolveChargeAmount(reservation);
+        if (payment.getAmount().compareTo(chargeAmount) == 0) {
+            return;
+        }
+
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("reservationId", reservation.id().toString());
+        metadata.put("eventId", reservation.eventId().toString());
+        metadata.put("customerEmail", reservation.customerEmail());
+        if (reservation.userId() != null) {
+            metadata.put("userId", reservation.userId().toString());
+        }
+
+        StripeIntentResult stripeResult = stripePaymentGateway.updatePaymentIntent(
+                payment.getStripePaymentIntentId(),
+                chargeAmount,
+                payment.getCurrency(),
+                metadata,
+                reservation.customerEmail());
+        payment.setAmount(chargeAmount);
+        if (stripeResult.clientSecret() != null && !stripeResult.clientSecret().isBlank()) {
+            payment.setClientSecret(stripeResult.clientSecret());
+        }
+        persistPayment(payment);
+        log.info("Payment amount refreshed after reservation pricing update. paymentId={}, amount={}",
+                payment.getId(), chargeAmount);
     }
 
     private BigDecimal resolveChargeAmount(ReservationClientResponse reservation) {
@@ -175,25 +241,49 @@ public class PaymentServiceImpl implements PaymentService {
         return reservation.totalAmount();
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
-
-        assertAuthorized(payment, authenticatedUserId, isAdmin);
-        return paymentMapper.toResponse(payment);
+    private ReservationClientResponse getReservation(UUID reservationId, String customerEmailProof) {
+        if (customerEmailProof == null || customerEmailProof.isBlank()) {
+            return reservationServiceClient.getReservation(reservationId);
+        }
+        return reservationServiceClient.getReservation(reservationId, customerEmailProof.trim());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
-                                                  TaxPreviewRequest request,
-                                                  UUID authenticatedUserId,
-                                                  boolean isAdmin) {
+    public PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin) {
+        return getPaymentById(paymentId, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentById(UUID paymentId,
+                                          UUID authenticatedUserId,
+                                          boolean isAdmin,
+                                          String customerEmailProof) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
-        assertAuthorized(payment, authenticatedUserId, isAdmin);
+
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        return paymentMapper.toResponse(payment);
+    }
+
+    @Override
+    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                                   TaxPreviewRequest request,
+                                                   UUID authenticatedUserId,
+                                                   boolean isAdmin) {
+        return calculateTaxPreview(paymentId, request, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                                   TaxPreviewRequest request,
+                                                   UUID authenticatedUserId,
+                                                   boolean isAdmin,
+                                                   String customerEmailProof) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
         StripeTaxResult result = stripePaymentGateway.calculateInclusiveTax(
                 payment.getAmount(),
                 payment.getCurrency(),
@@ -206,14 +296,26 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin) {
+        return getPaymentByReservationId(reservationId, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentByReservationId(UUID reservationId,
+                                                     UUID authenticatedUserId,
+                                                     boolean isAdmin,
+                                                     String customerEmailProof) {
         Payment payment = paymentRepository.findByReservationId(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment for reservation", reservationId));
 
-        assertAuthorized(payment, authenticatedUserId, isAdmin);
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
         return paymentMapper.toResponse(payment);
     }
 
-    private void assertAuthorized(Payment payment, UUID authenticatedUserId, boolean isAdmin) {
+    private void assertAuthorized(Payment payment,
+                                  UUID authenticatedUserId,
+                                  boolean isAdmin,
+                                  String customerEmailProof) {
         if (isAdmin) {
             return;
         }
@@ -224,13 +326,14 @@ public class PaymentServiceImpl implements PaymentService {
             }
             return;
         }
-        // Guest payment (userId == null): accessible anonymously (guest checkout flow, ADR-001)
-        // or by an authenticated caller whose verified email matches the payment's customer email.
-        // This prevents an authenticated user from enumerating another guest's payment.
+        // Guest payment: require proof of the email used during checkout. An authenticated
+        // caller whose verified JWT email matches the payment also qualifies (ADR-001).
         String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
-        boolean anonymous = authenticatedUserId == null && callerEmail == null;
-        boolean emailMatches = callerEmail != null && callerEmail.equalsIgnoreCase(payment.getCustomerEmail());
-        if (!anonymous && !emailMatches) {
+        boolean jwtEmailMatches = callerEmail != null
+                && callerEmail.equalsIgnoreCase(payment.getCustomerEmail());
+        boolean proofMatches = customerEmailProof != null
+                && customerEmailProof.trim().equalsIgnoreCase(payment.getCustomerEmail());
+        if (!jwtEmailMatches && !proofMatches) {
             throw new ResourceNotFoundException("Payment", payment.getId());
         }
     }

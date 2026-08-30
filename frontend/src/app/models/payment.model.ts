@@ -17,11 +17,11 @@ export interface PaymentStatusResponse {
   id: string;
   reservationId: string;
   customerEmail: string;
-  eventId?: string;
   amount: number;
+  taxAmount: number;
+  netAmount: number;
   currency: string;
   status: PaymentStatus;
-  failureReason?: string;
   createdAt: string;
 }
 

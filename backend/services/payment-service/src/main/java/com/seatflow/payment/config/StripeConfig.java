@@ -1,7 +1,9 @@
 package com.seatflow.payment.config;
 
+import com.stripe.StripeClient;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -13,5 +15,10 @@ public class StripeConfig {
 
     @Value("${stripe.webhook-secret:whsec_dummy_secret}")
     private String webhookSecret;
+
+    @Bean
+    public StripeClient stripeClient(StripeConfig config) {
+        return new StripeClient(config.getApiKey());
+    }
 
 }

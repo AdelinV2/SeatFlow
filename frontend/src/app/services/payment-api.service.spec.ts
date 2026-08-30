@@ -41,6 +41,21 @@ describe('PaymentApiService', () => {
     });
   });
 
+  it('adds a normalized guest email proof header to payment requests', () => {
+    const request: TaxPreviewRequest = {
+      line1: '1 Test Avenue',
+      city: 'Bucharest',
+      postalCode: '010101',
+      country: 'RO',
+    };
+
+    service.previewTax('payment-007', request, ' guest@example.com ').subscribe();
+
+    const httpRequest = httpTesting.expectOne('/api/payments/payment-007/tax-preview');
+    expect(httpRequest.request.headers.get('X-Customer-Email')).toBe('guest@example.com');
+    httpRequest.flush({ taxAmount: 19, effectiveRate: 19, currency: 'USD' });
+  });
+
   it('loads payment status by payment id', () => {
     service.getPaymentStatus('payment-007').subscribe((response) => {
       expect(response.status).toBe('SUCCESS');

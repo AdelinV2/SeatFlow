@@ -129,6 +129,15 @@ class ReservationServiceClientTest {
     }
 
     @Test
+    void forwardsGuestEmailProofToReservationService() {
+        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
+
+        client.getReservation(reservationId, " guest@example.com ");
+
+        verify(headersSpec).header("X-Customer-Email", "guest@example.com");
+    }
+
+    @Test
     void getReservationMapsNotFoundToResourceNotFoundException() {
         assertErrorHandler(0, ResourceNotFoundException.class);
     }

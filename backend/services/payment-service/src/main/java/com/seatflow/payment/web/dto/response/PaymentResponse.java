@@ -16,6 +16,8 @@ public record PaymentResponse(
     @Schema(description = "Target event identifier") UUID eventId,
     @Schema(description = "Stripe PaymentIntent ID") String stripePaymentIntentId,
     @Schema(description = "Payment amount") BigDecimal amount,
+    @Schema(description = "Tax included in the payment amount") BigDecimal taxAmount,
+    @Schema(description = "Net amount excluding included tax") BigDecimal netAmount,
     @Schema(description = "Payment currency ISO code") String currency,
     @Schema(description = "Payment status") PaymentStatus status,
     @Schema(description = "Failure reason if payment was unsuccessful") String failureReason,

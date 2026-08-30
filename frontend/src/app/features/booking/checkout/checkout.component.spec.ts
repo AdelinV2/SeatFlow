@@ -53,10 +53,14 @@ describe('CheckoutComponent', () => {
   beforeEach(async () => {
     reservationApi = jasmine.createSpyObj<ReservationApiService>('ReservationApiService', [
       'getReservation',
+      'getStoredCustomerEmailProof',
       'updateReservationPricing',
+      'cancelReservation',
     ]);
+    reservationApi.getStoredCustomerEmailProof.and.returnValue('guest@example.com');
     reservationApi.getReservation.and.returnValue(of(reservation));
     reservationApi.updateReservationPricing.and.returnValue(of(reservation));
+    reservationApi.cancelReservation.and.returnValue(of(void 0));
 
     eventApi = jasmine.createSpyObj<EventApiService>('EventApiService', ['getEventSeatMap']);
     eventApi.getEventSeatMap.and.returnValue(
@@ -200,7 +204,11 @@ describe('CheckoutComponent', () => {
   it('loads authoritative seat rows and pricing tiers before creating the payment intent', async () => {
     await initializeCheckout();
 
-    expect(reservationApi.getReservation).toHaveBeenCalledWith('reservation-007');
+    expect(reservationApi.getStoredCustomerEmailProof).toHaveBeenCalledWith('reservation-007');
+    expect(reservationApi.getReservation).toHaveBeenCalledWith(
+      'reservation-007',
+      'guest@example.com',
+    );
     expect(eventApi.getEventSeatMap).toHaveBeenCalledWith('event-009');
     expect(component.checkoutSeats().map((seat) => `${seat.rowLabel}-${seat.seatNumber}`)).toEqual([
       'A-12',
@@ -231,8 +239,8 @@ describe('CheckoutComponent', () => {
     );
     expect(paymentApi.createPaymentIntent).toHaveBeenCalledWith({
       reservationId: 'reservation-007',
-      idempotencyKey: 'pay-intent-reservation-007',
-    });
+      idempotencyKey: 'pay-intent-reservation-007-v0',
+    }, 'guest@example.com');
     expect(component.grossTotal()).toBe(105);
     expect(component.currencyCode()).toBe('USD');
     expect(paymentElement.mount).toHaveBeenCalled();
@@ -249,6 +257,25 @@ describe('CheckoutComponent', () => {
       jasmine.objectContaining({
         developerTools: { assistant: { enabled: false } },
       }),
+    );
+  });
+
+  it('passes the stored guest proof to tax preview requests', async () => {
+    await initializeCheckout();
+    await startPayment();
+
+    component.applyTestCard();
+    await new Promise<void>((resolve) => setTimeout(resolve, 450));
+
+    expect(paymentApi.previewTax).toHaveBeenCalledWith(
+      'payment-007',
+      {
+        line1: '1 Test Avenue',
+        city: 'Bucharest',
+        postalCode: '010101',
+        country: 'RO',
+      },
+      'guest@example.com',
     );
   });
 
@@ -313,6 +340,45 @@ describe('CheckoutComponent', () => {
       }),
     );
     expect(navigate).toHaveBeenCalledWith(['/order-confirmation', 'payment-007']);
+  });
+
+  it('returns from payment details to ticket details and tears down Stripe elements', async () => {
+    await initializeCheckout();
+    await startPayment();
+
+    component.backToTicketDetails();
+
+    expect(component.isTicketTypesConfirmed()).toBeFalse();
+    expect(component.isStripeReady()).toBeFalse();
+    expect(component.testCardSelected()).toBeFalse();
+    expect(paymentElement.destroy).toHaveBeenCalled();
+    expect(addressElement.destroy).toHaveBeenCalled();
+  });
+
+  it('cancels the pending order after confirmation and releases the held seats', async () => {
+    await initializeCheckout();
+    dialog.open.and.returnValue({ afterClosed: () => of(true) } as never);
+    const navigate = spyOn(router, 'navigate').and.resolveTo(true);
+
+    component.cancelOrder();
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      jasmine.any(Function),
+      jasmine.objectContaining({
+        width: '380px',
+        data: { message: 'Cancel this order and release the held seats?' },
+      }),
+    );
+    expect(reservationApi.cancelReservation).toHaveBeenCalledWith(
+      'reservation-007',
+      'guest@example.com',
+    );
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Order cancelled. Your held seats were released.',
+      'Close',
+      jasmine.objectContaining({ panelClass: 'snack-success' }),
+    );
+    expect(navigate).toHaveBeenCalledWith(['/events']);
   });
 
   it('freezes checkout and opens the non-dismissible dialog when the countdown expires', async () => {

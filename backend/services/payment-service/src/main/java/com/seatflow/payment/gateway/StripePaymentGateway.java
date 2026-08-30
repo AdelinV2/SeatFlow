@@ -17,6 +17,14 @@ public interface StripePaymentGateway {
             String customerEmail
     );
 
+    StripeIntentResult updatePaymentIntent(
+            String paymentIntentId,
+            BigDecimal amount,
+            String currency,
+            Map<String, String> metadata,
+            String customerEmail
+    );
+
     StripeTaxResult calculateInclusiveTax(BigDecimal amount,
                                           String currency,
                                           String reference,

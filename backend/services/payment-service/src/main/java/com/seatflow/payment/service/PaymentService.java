@@ -12,14 +12,34 @@ public interface PaymentService {
 
     PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, UUID authenticatedUserId);
 
+    PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request,
+                                              UUID authenticatedUserId,
+                                              String customerEmailProof);
+
     TaxPreviewResponse calculateTaxPreview(UUID paymentId,
                                            TaxPreviewRequest request,
                                            UUID authenticatedUserId,
                                            boolean isAdmin);
 
+    TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                           TaxPreviewRequest request,
+                                           UUID authenticatedUserId,
+                                           boolean isAdmin,
+                                           String customerEmailProof);
+
     PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin);
 
+    PaymentResponse getPaymentById(UUID paymentId,
+                                   UUID authenticatedUserId,
+                                   boolean isAdmin,
+                                   String customerEmailProof);
+
     PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin);
+
+    PaymentResponse getPaymentByReservationId(UUID reservationId,
+                                              UUID authenticatedUserId,
+                                              boolean isAdmin,
+                                              String customerEmailProof);
 
     int claimGuestPayments(UUID userId, String customerEmail);
 }

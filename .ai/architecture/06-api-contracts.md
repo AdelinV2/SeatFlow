@@ -156,6 +156,10 @@ This document defines the complete catalog of REST API endpoints exposed across 
 ```
 *Note: `customerEmail` is optional if an authenticated JWT Bearer token is provided, in which case it is extracted from token claims. For unauthenticated guests, `customerEmail` is required.*
 
+> **Guest Authorization:** All guest-accessible endpoints in the reservation service
+> require the `X-Customer-Email` header containing the email used during reservation
+> creation. This serves as a proof-of-ownership for unauthenticated callers (ADR-001).
+
 **Response Body (201 Created):**
 ```json
 {
@@ -183,6 +187,23 @@ This document defines the complete catalog of REST API endpoints exposed across 
 }
 ```
 
+#### `PUT /api/reservations/{reservationId}/pricing`
+Updates the pricing tier selections for held seats before payment.
+
+**Headers:**
+
+| Header | Required | Description |
+|---|---|---|
+| `X-Customer-Email` | Guests | Email proof for guest reservation authorization |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `seats` | array | Yes | Array of `{ seatId: UUID, pricingTierId: UUID }` selections |
+
+**Response:** Full `ReservationResponse` with updated pricing.
+
 ---
 
 ### 2.5 Payment Service (`/api/payments`)
@@ -191,6 +212,8 @@ This document defines the complete catalog of REST API endpoints exposed across 
 |---|---|---|---|
 | `POST` | `/api/payments/intent` | Public / Customer | Create Stripe PaymentIntent for a reservation |
 | `GET` | `/api/payments/{paymentId}` | Public / Customer | Get payment status |
+| `GET` | `/api/payments/reservation/{reservationId}` | Public / Customer | Get payment status for a reservation |
+| `POST` | `/api/payments/{paymentId}/tax-preview` | Public / Customer | Preview tax included in the payment amount |
 | `POST` | `/api/payments/webhook` | Public (Stripe Sig) | Handle Stripe async webhook events |
 
 #### `POST /api/payments/intent`
@@ -212,6 +235,31 @@ This document defines the complete catalog of REST API endpoints exposed across 
 }
 ```
 *Note: `amount` is tax-inclusive ($120.00 total). Automatic Stripe Tax calculation is enabled.*
+
+#### `POST /api/payments/{paymentId}/tax-preview`
+Calculates the tax included in the tax-inclusive payment amount using Stripe Tax.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `line1` | string | Yes | Street address line 1 |
+| `line2` | string | No | Street address line 2 |
+| `city` | string | Yes | City name |
+| `state` | string | No | State or province |
+| `postalCode` | string | Yes | Postal / ZIP code |
+| `country` | string | Yes | ISO 3166-1 alpha-2 country code |
+
+**Response Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `taxAmount` | BigDecimal | Included tax amount |
+| `effectiveRate` | BigDecimal | Effective tax rate as a percentage |
+| `currency` | string | ISO 4217 currency code |
+
+> **Guest Authorization:** Guest callers must include `X-Customer-Email` with the
+> email used for the reservation. Registered callers are authorized by their JWT.
 
 #### `GET /api/payments/{paymentId}`
 **Response Body (200 OK):**

@@ -13,6 +13,7 @@ import com.seatflow.reservation.client.exception.EventClientUnavailableException
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -44,6 +47,7 @@ public class EventClientImpl implements EventClient {
     private final RestClient.Builder loadBalancedBuilder;
     private final CircuitBreaker circuitBreaker;
     private final String serviceId;
+    private final ExecutorService httpExecutor;
     private volatile RestClient restClient;
 
     public EventClientImpl(
@@ -53,6 +57,12 @@ public class EventClientImpl implements EventClient {
         this.loadBalancedBuilder = loadBalancedBuilder;
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
         this.serviceId = serviceId;
+        this.httpExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    @PreDestroy
+    void shutdownHttpExecutor() {
+        httpExecutor.shutdownNow();
     }
 
     private RestClient client() {
@@ -71,6 +81,7 @@ public class EventClientImpl implements EventClient {
     private RestClient buildClient() {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
+                .executor(httpExecutor)
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(READ_TIMEOUT);

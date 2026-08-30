@@ -109,19 +109,29 @@ public class ReservationServiceClientImpl implements ReservationServiceClient {
 
     @Override
     public ReservationClientResponse getReservation(UUID reservationId) {
+        return getReservation(reservationId, null);
+    }
+
+    @Override
+    public ReservationClientResponse getReservation(UUID reservationId, String customerEmailProof) {
         try {
-            return circuitBreaker.executeSupplier(() -> fetchReservation(reservationId));
+            return circuitBreaker.executeSupplier(() -> fetchReservation(reservationId, customerEmailProof));
         } catch (CallNotPermittedException e) {
             log.error("Circuit breaker open for reservation-service call on reservationId={}", reservationId, e);
             throw new ReservationClientUnavailableException("Reservation service is temporarily unavailable", e);
         }
     }
 
-    private ReservationClientResponse fetchReservation(UUID reservationId) {
+    private ReservationClientResponse fetchReservation(UUID reservationId, String customerEmailProof) {
         log.debug("Fetching reservation details from reservation-service for reservationId={}", reservationId);
 
-        ReservationClientResponse response = client().get()
-                .uri("/api/reservations/{reservationId}", reservationId)
+        RestClient.RequestHeadersSpec<?> request = client().get()
+                .uri("/api/reservations/{reservationId}", reservationId);
+        if (customerEmailProof != null && !customerEmailProof.isBlank()) {
+            request = request.header("X-Customer-Email", customerEmailProof.trim());
+        }
+
+        ReservationClientResponse response = request
                 .retrieve()
                 .onStatus(status -> status.value() == 404, (req, res) -> {
                     throw new ResourceNotFoundException("Reservation", reservationId);

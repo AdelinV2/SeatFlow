@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 
 export interface CreateReservationRequest {
   eventId: string;
@@ -48,9 +48,28 @@ export interface ReservationResponse {
 export class ReservationApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/reservations';
+  private readonly guestProofStoragePrefix = 'seatflow:reservation-email:';
 
   createReservation(request: CreateReservationRequest): Observable<ReservationResponse> {
-    return this.http.post<ReservationResponse>(this.baseUrl, request);
+    return this.http.post<ReservationResponse>(this.baseUrl, request).pipe(
+      tap((reservation) => this.rememberGuestProof(reservation.id, request.customerEmail)),
+    );
+  }
+
+  getStoredCustomerEmailProof(reservationId: string): string | undefined {
+    try {
+      return globalThis.sessionStorage.getItem(this.guestProofStoragePrefix + reservationId) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  clearStoredCustomerEmailProof(reservationId: string): void {
+    try {
+      globalThis.sessionStorage.removeItem(this.guestProofStoragePrefix + reservationId);
+    } catch {
+      // Session storage can be unavailable in privacy-restricted browser contexts.
+    }
   }
 
   getReservation(
@@ -85,5 +104,17 @@ export class ReservationApiService {
   private guestProofHeaders(customerEmailProof?: string): HttpHeaders | undefined {
     const normalizedEmail = customerEmailProof?.trim();
     return normalizedEmail ? new HttpHeaders({ 'X-Customer-Email': normalizedEmail }) : undefined;
+  }
+
+  private rememberGuestProof(reservationId: string, customerEmail?: string): void {
+    const normalizedEmail = customerEmail?.trim();
+    if (!normalizedEmail) {
+      return;
+    }
+    try {
+      globalThis.sessionStorage.setItem(this.guestProofStoragePrefix + reservationId, normalizedEmail);
+    } catch {
+      // Session storage can be unavailable in privacy-restricted browser contexts.
+    }
   }
 }
