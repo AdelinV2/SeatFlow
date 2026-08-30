@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/06-api-contracts.md` (Section 2.4, 2.5), `.ai/architecture/07-frontend-specification.md` (Section 4.7, 4.8), `frontend/AGENTS.md`
 - **Related ADRs:** `ADR-001` (Hybrid Guest Checkout), `ADR-004` (Stripe Tax & Tax-Inclusive Pricing)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -288,10 +288,10 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] Checkout page loads reservation details and displays countdown ring.
-- [ ] Hold expiration modal opens upon timer reaching `00:00`.
-- [ ] Guest checkout requires valid email and name; authenticated checkout auto-populates.
-- [ ] Stripe Elements mounts cleanly and processes confirmation redirect.
-- [ ] Tax-inclusive price breakdown is transparently rendered.
-- [ ] Unit tests pass with 100% success.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/007-hold-countdown-and-stripe-hybrid-checkout.md`.
+- [x] Checkout page loads reservation details and displays countdown ring.
+- [x] Hold expiration modal opens upon timer reaching `00:00`.
+- [x] Guest checkout requires valid email and name; authenticated checkout auto-populates.
+- [x] Stripe Elements mounts cleanly and processes confirmation redirect.
+- [x] Tax-inclusive price breakdown is transparently rendered.
+- [x] Unit tests pass with 100% success.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/007-hold-countdown-and-stripe-hybrid-checkout.md`.

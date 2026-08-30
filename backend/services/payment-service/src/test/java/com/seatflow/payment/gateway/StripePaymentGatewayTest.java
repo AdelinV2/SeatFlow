@@ -67,8 +67,20 @@ class StripePaymentGatewayTest {
             assertThat(captured.getCurrency()).isEqualTo("usd");
             assertThat(captured.getMetadata()).containsEntry("reservationId", "r1");
             assertThat(captured.getMetadata()).containsEntry("customerEmail", "a@b.com");
-            assertThat(captured.getExtraParams()).containsEntry("automatic_tax", Map.of("enabled", true));
+            assertThat(captured.getExtraParams()).isNull();
         }
+    }
+
+    @Test
+    void createPaymentIntentRejectsMissingOrLiveStripeKeyBeforeCallingStripe() {
+        when(stripeConfig.getApiKey()).thenReturn("pk_test_not_a_secret_key");
+
+        assertThatThrownBy(() -> gateway.createPaymentIntent(
+                new BigDecimal("10.00"), "USD", "idem-invalid-key", Map.of(), "a@b.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("publishable key")
+                .hasMessageContaining("sk_test_")
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.PAYMENT_FAILED));
     }
 
     @Test

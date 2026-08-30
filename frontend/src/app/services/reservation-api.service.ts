@@ -16,7 +16,18 @@ export interface ReservationSeatDetail {
   status?: 'HELD' | 'CONFIRMED' | 'RELEASED' | 'EXPIRED';
   rowNumber?: string;
   seatNumber?: number;
+  pricingTierId?: string;
+  ticketType?: string;
   price: number;
+}
+
+export interface SeatPricingSelection {
+  seatId: string;
+  pricingTierId: string;
+}
+
+export interface UpdateReservationPricingRequest {
+  seats: SeatPricingSelection[];
 }
 
 export interface ReservationResponse {
@@ -49,6 +60,18 @@ export class ReservationApiService {
     return this.http.get<ReservationResponse>(`${this.baseUrl}/${reservationId}`, {
       headers: this.guestProofHeaders(customerEmailProof),
     });
+  }
+
+  updateReservationPricing(
+    reservationId: string,
+    request: UpdateReservationPricingRequest,
+    customerEmailProof?: string,
+  ): Observable<ReservationResponse> {
+    return this.http.put<ReservationResponse>(
+      `${this.baseUrl}/${reservationId}/pricing`,
+      request,
+      { headers: this.guestProofHeaders(customerEmailProof) },
+    );
   }
 
   cancelReservation(reservationId: string, customerEmailProof?: string): Observable<void> {

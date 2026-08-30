@@ -70,6 +70,18 @@ class EventClientImplTest {
                 eventId, UUID.randomUUID(), "Concert", status, eventDate, "Grand Arena", 1000, 1L, List.of(section));
     }
 
+    private EventSeatMapClientResponse buildSeatMapResponse(String status, Instant eventDate,
+                                                             List<UUID> seatIds, BigDecimal price) {
+        UUID sectionId = UUID.randomUUID();
+        PricingTierClientDto tier = new PricingTierClientDto(UUID.randomUUID(), sectionId, "Standard", price, "USD");
+        List<SeatMapSeatClientDto> seats = seatIds.stream()
+                .map(seatId -> new SeatMapSeatClientDto(seatId, "A", seatIds.indexOf(seatId) + 1, 0, 0, true))
+                .toList();
+        SeatMapSectionClientDto section = new SeatMapSectionClientDto(sectionId, "SEC-A", 1, seats.size(), seats, List.of(tier));
+        return new EventSeatMapClientResponse(
+                eventId, UUID.randomUUID(), "Concert", status, eventDate, "Grand Arena", 1000, 1L, List.of(section));
+    }
+
     private void stubBody(EventSeatMapClientResponse body) {
         when(responseSpec.body(EventSeatMapClientResponse.class)).thenReturn(body);
     }
@@ -85,6 +97,20 @@ class EventClientImplTest {
         assertThat(details.eventId()).isEqualTo(eventId);
         assertThat(details.eventStatus()).isEqualTo("PUBLISHED");
         assertThat(details.seatPrices()).containsEntry(seatId, price);
+    }
+
+    @Test
+    void getEventSeatPricingOnlyReturnsPricesForRequestedSeats() {
+        UUID requestedSeat = UUID.randomUUID();
+        UUID unrequestedSeat = UUID.randomUUID();
+        BigDecimal price = new BigDecimal("20.00");
+        stubBody(buildSeatMapResponse("PUBLISHED", Instant.now().plusSeconds(3600),
+                List.of(requestedSeat, unrequestedSeat), price));
+
+        EventPricingDetails details = eventClient.getEventSeatPricing(eventId, Set.of(requestedSeat));
+
+        assertThat(details.seatPrices()).containsOnlyKeys(requestedSeat);
+        assertThat(details.seatPrices().get(requestedSeat)).isEqualByComparingTo(price);
     }
 
     @Test

@@ -7,8 +7,10 @@ import com.seatflow.payment.model.enums.PaymentStatus;
 import com.seatflow.payment.service.PaymentService;
 import com.seatflow.payment.service.StripeWebhookService;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -100,6 +102,23 @@ class PaymentControllerTest {
 
         mockMvc.perform(get("/api/payments/reservation/" + UUID.randomUUID()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void taxPreviewReturnsStripeCalculatedRate() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        TaxPreviewRequest request = new TaxPreviewRequest(
+                "1 Test Avenue", null, "Bucharest", null, "010101", "RO");
+        when(paymentService.calculateTaxPreview(any(), any(), any(), anyBoolean()))
+                .thenReturn(new TaxPreviewResponse(new BigDecimal("19.00"), new BigDecimal("23.46"), "USD"));
+
+        mockMvc.perform(post("/api/payments/" + paymentId + "/tax-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taxAmount").value(19.00))
+                .andExpect(jsonPath("$.effectiveRate").value(23.46))
+                .andExpect(jsonPath("$.currency").value("USD"));
     }
 
     @Test

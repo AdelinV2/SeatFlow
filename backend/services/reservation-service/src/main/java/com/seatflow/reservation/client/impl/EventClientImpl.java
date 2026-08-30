@@ -8,6 +8,7 @@ import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.client.exception.EventClientUnavailableException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -127,14 +128,31 @@ public class EventClientImpl implements EventClient {
         }
 
         Map<UUID, BigDecimal> seatPrices = new HashMap<>();
+        Map<UUID, SeatPricingDetails> seatDetails = new HashMap<>();
         for (SeatMapSectionClientDto section : sections) {
-            BigDecimal sectionPrice = (section.pricingTiers() != null && !section.pricingTiers().isEmpty())
-                    ? section.pricingTiers().get(0).price()
-                    : BigDecimal.ZERO;
+            var pricingTiers = section.pricingTiers() == null
+                    ? List.<com.seatflow.reservation.client.dto.PricingTierClientDto>of()
+                    : section.pricingTiers().stream()
+                            .filter(tier -> tier.id() != null && tier.price() != null && tier.price().signum() > 0)
+                            .toList();
+            BigDecimal sectionPrice = pricingTiers.isEmpty()
+                    ? BigDecimal.ZERO
+                    : pricingTiers.getFirst().price();
             if (section.seats() != null) {
                 for (SeatMapSeatClientDto seat : section.seats()) {
-                    if (seat.seatId() != null && Boolean.TRUE.equals(seat.isActive())) {
+                    // The event service returns the complete seat map. Only requested seats
+                    // belong to this reservation; including the rest inflates the reservation
+                    // total by the price of every seat in the venue.
+                    if (seat.seatId() != null
+                            && requestedSeatIds.contains(seat.seatId())
+                            && Boolean.TRUE.equals(seat.isActive())) {
                         seatPrices.put(seat.seatId(), sectionPrice);
+                        seatDetails.put(seat.seatId(), new SeatPricingDetails(
+                                section.sectionId(),
+                                section.name(),
+                                seat.rowLabel(),
+                                seat.seatNumber(),
+                                pricingTiers));
                     }
                 }
             }
@@ -147,6 +165,12 @@ public class EventClientImpl implements EventClient {
             throw new ValidationException("Requested seats not found in event seat map: " + missing, ErrorCode.INVALID_REQUEST);
         }
 
-        return new EventPricingDetails(eventId, response.status(), eventDate, new ArrayList<>(requestedSeatIds), seatPrices);
+        return new EventPricingDetails(
+                eventId,
+                response.status(),
+                eventDate,
+                new ArrayList<>(requestedSeatIds),
+                seatPrices,
+                seatDetails);
     }
 }

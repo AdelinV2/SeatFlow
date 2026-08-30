@@ -1,0 +1,668 @@
+<main class="checkout-page relative min-h-screen overflow-hidden pb-24 pt-6 sm:pt-10 lg:pb-20">
+  <div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <a
+      routerLink="/events"
+      class="btn-spring mb-7 inline-flex items-center gap-2 rounded-xl text-sm font-bold text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-primary-hover)]"
+    >
+      <svg
+        class="size-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" />
+      </svg>
+      Back to events
+    </a>
+
+    @if (isLoading()) {
+      <div class="space-y-7" aria-label="Loading checkout">
+        <div class="mx-auto max-w-2xl space-y-3 text-center">
+          <div class="skeleton-shimmer mx-auto h-5 w-32 rounded-full"></div>
+          <div class="skeleton-shimmer mx-auto h-12 w-4/5 rounded-2xl"></div>
+          <div class="skeleton-shimmer mx-auto h-5 w-3/5 rounded-xl"></div>
+        </div>
+        <div class="grid gap-7 lg:grid-cols-[minmax(0,1fr)_24rem]">
+          <div class="skeleton-shimmer h-[42rem] rounded-[2rem]"></div>
+          <div class="skeleton-shimmer h-[34rem] rounded-[2rem]"></div>
+        </div>
+      </div>
+    } @else if (reservation(); as booking) {
+      <header class="animate-fade-in-up mx-auto mb-8 max-w-3xl text-center">
+        <div
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400"
+        >
+          <span class="relative flex size-2">
+            <span
+              class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60"
+            ></span>
+            <span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+          </span>
+          Seats secured
+        </div>
+        <h1
+          class="text-3xl font-black tracking-[-0.035em] text-[var(--color-text-primary)] sm:text-4xl lg:text-5xl"
+        >
+          You’re one step from the
+          <span class="checkout-gradient-text">best seat in the house.</span>
+        </h1>
+        <p
+          class="mx-auto mt-4 max-w-2xl text-sm leading-6 text-[var(--color-text-secondary)] sm:text-base"
+        >
+          Complete this test checkout before your hold expires. Your final total will not change.
+        </p>
+
+        <div class="mx-auto mt-7 flex max-w-xl items-center" aria-label="Checkout progress">
+          <div class="flex w-14 flex-col items-center gap-1.5 text-emerald-600">
+            <span
+              class="flex size-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/20"
+              >✓</span
+            >
+            <small class="text-[10px] font-black uppercase tracking-wider">Seats</small>
+          </div>
+          <div class="mt-4 h-px flex-1 bg-gradient-to-r from-emerald-500 to-indigo-500"></div>
+          <div class="flex w-14 flex-col items-center gap-1.5 text-indigo-500">
+            <span
+              class="flex size-8 items-center justify-center rounded-full border border-indigo-400 bg-[var(--color-surface)] text-xs font-black shadow-[0_0_0_.3rem_var(--color-primary-glow)]"
+              >2</span
+            >
+            <small class="text-[10px] font-black uppercase tracking-wider">Details</small>
+          </div>
+          <div class="mt-4 h-px flex-1 bg-[var(--color-border)]"></div>
+          <div class="flex w-14 flex-col items-center gap-1.5 text-[var(--color-text-muted)]">
+            <span
+              class="flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-black"
+              >3</span
+            >
+            <small class="text-[10px] font-black uppercase tracking-wider">Tickets</small>
+          </div>
+        </div>
+      </header>
+
+      <section
+        class="animate-fade-in-up mb-7 flex flex-col gap-4 rounded-2xl border border-amber-400/35 bg-amber-500/[0.08] p-4 shadow-lg shadow-amber-500/5 sm:flex-row sm:items-center sm:p-5"
+        aria-labelledby="test-payment-warning"
+      >
+        <div
+          class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        >
+          <svg
+            class="size-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 9v4m0 4h.01M10.3 4.2 2.7 17.4A1.75 1.75 0 0 0 4.2 20h15.6a1.75 1.75 0 0 0 1.5-2.6L13.7 4.2a1.96 1.96 0 0 0-3.4 0Z"
+            />
+          </svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h2
+            id="test-payment-warning"
+            class="text-sm font-black text-amber-800 dark:text-amber-200"
+          >
+            Test website — never enter real card information
+          </h2>
+          <p class="mt-1 text-xs leading-5 text-amber-800/75 dark:text-amber-100/65 sm:text-sm">
+            No purchase is real. Use the <strong>SeatFlow test card</strong> button below to add
+            every payment detail safely.
+          </p>
+        </div>
+        <span
+          class="shrink-0 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300"
+        >
+          Stripe test mode
+        </span>
+      </section>
+
+      <div class="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_24rem] xl:gap-9">
+        <form
+          class="animate-fade-in-up overflow-hidden rounded-[2rem] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-diffuse)]"
+          [formGroup]="guestForm"
+          (ngSubmit)="confirmPayment()"
+          novalidate
+        >
+          <section
+            class="border-b border-[var(--color-border)] p-5 sm:p-7 lg:p-8"
+            aria-labelledby="customer-heading"
+          >
+            <div class="mb-6 flex items-start gap-4">
+              <span
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/10 text-[11px] font-black tracking-wider text-indigo-500"
+                >01</span
+              >
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2
+                    id="customer-heading"
+                    class="text-xl font-black tracking-tight text-[var(--color-text-primary)]"
+                  >
+                    Ticket delivery
+                  </h2>
+                  @if (userContext.isAuthenticated()) {
+                    <span
+                      class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-500"
+                    >
+                      Filled from profile
+                    </span>
+                  }
+                </div>
+                <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+                  We’ll use these details on your digital tickets.
+                </p>
+              </div>
+            </div>
+
+            <div class="grid gap-5 sm:grid-cols-2">
+              <label class="field-group">
+                <span>Attendee name</span>
+                <div
+                  class="field-shell"
+                  [class.field-shell--invalid]="
+                    guestForm.controls.customerName.invalid &&
+                    guestForm.controls.customerName.touched
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="8" r="3.5" />
+                    <path stroke-linecap="round" d="M5 20c.7-4 3.2-6 7-6s6.3 2 7 6" />
+                  </svg>
+                  <input
+                    formControlName="customerName"
+                    type="text"
+                    autocomplete="name"
+                    placeholder="Your full name"
+                    [readOnly]="userContext.isAuthenticated()"
+                  />
+                </div>
+                @if (
+                  guestForm.controls.customerName.invalid && guestForm.controls.customerName.touched
+                ) {
+                  <small>Enter at least 2 characters.</small>
+                }
+              </label>
+
+              <label class="field-group">
+                <span>Email for tickets</span>
+                <div
+                  class="field-shell"
+                  [class.field-shell--invalid]="
+                    guestForm.controls.customerEmail.invalid &&
+                    guestForm.controls.customerEmail.touched
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <rect x="3" y="5" width="18" height="14" rx="3" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m5 8 7 5 7-5" />
+                  </svg>
+                  <input
+                    formControlName="customerEmail"
+                    type="email"
+                    autocomplete="email"
+                    inputmode="email"
+                    placeholder="you@example.com"
+                    [readOnly]="userContext.isAuthenticated()"
+                  />
+                </div>
+                @if (
+                  guestForm.controls.customerEmail.invalid &&
+                  guestForm.controls.customerEmail.touched
+                ) {
+                  <small>Enter a valid email address.</small>
+                }
+              </label>
+            </div>
+          </section>
+
+           @if (!isTicketTypesConfirmed()) {
+             <section
+               class="border-b border-[var(--color-border)] p-5 sm:p-7 lg:p-8"
+               aria-labelledby="ticket-types-heading"
+             >
+               <div class="mb-5 flex items-start gap-4">
+                 <span
+                   class="flex size-10 shrink-0 items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/10 text-[11px] font-black tracking-wider text-indigo-500"
+                   >02</span
+                 >
+                 <div>
+                   <h2
+                     id="ticket-types-heading"
+                     class="text-xl font-black tracking-tight text-[var(--color-text-primary)]"
+                   >
+                     Choose ticket type
+                   </h2>
+                   <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+                     Select the ticket type available for each held seat.
+                   </p>
+                 </div>
+               </div>
+
+               @if (isSeatDetailsLoading()) {
+                 <div class="space-y-3" aria-label="Loading ticket types">
+                   <div class="skeleton-shimmer h-16 rounded-xl"></div>
+                   <div class="skeleton-shimmer h-16 rounded-xl"></div>
+                 </div>
+               } @else {
+                 <div class="space-y-3">
+                   @for (seat of checkoutSeats(); track seat.seatId; let index = $index) {
+                     <label class="ticket-type-row">
+                       <span class="ticket-type-seat">
+                         <span class="ticket-type-index">{{ index + 1 }}</span>
+                         <span>
+                           <strong>{{ seat.sectionName }} · Row {{ seat.rowLabel }} · Seat {{ seat.seatNumber }}</strong>
+                           <small>Ticket type</small>
+                         </span>
+                       </span>
+                       <select
+                         [value]="seat.selectedPricingTierId"
+                         [disabled]="isSavingTicketTypes() || isHoldExpired()"
+                         [attr.aria-label]="'Ticket type for row ' + seat.rowLabel + ', seat ' + seat.seatNumber"
+                         (change)="selectTicketType(seat.seatId, $any($event.target).value)"
+                       >
+                         @for (tier of seat.pricingTiers; track tier.id) {
+                           <option [value]="tier.id">
+                             {{ tier.categoryName }} · {{ tier.price | sfCurrency: tier.currency }}
+                           </option>
+                         }
+                       </select>
+                     </label>
+                   }
+                 </div>
+               }
+             </section>
+           }
+
+           @if (isTicketTypesConfirmed()) {
+           <section class="p-5 sm:p-7 lg:p-8" aria-labelledby="payment-heading">
+            <div class="mb-6 flex items-start gap-4">
+              <span
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/10 text-[11px] font-black tracking-wider text-indigo-500"
+               >03</span
+              >
+              <div>
+                <h2
+                  id="payment-heading"
+                  class="text-xl font-black tracking-tight text-[var(--color-text-primary)]"
+                >
+                  Test payment
+                </h2>
+                <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+                  Securely simulated by Stripe. Real charges are disabled.
+                </p>
+              </div>
+            </div>
+
+            @if (stripeError()) {
+              <div class="rounded-2xl border border-rose-400/25 bg-rose-500/[0.07] p-5 text-center">
+                <div
+                  class="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-rose-500/10 text-rose-500"
+                >
+                  !
+                </div>
+                <p class="text-sm font-bold text-[var(--color-text-primary)]">
+                  {{ stripeError() }}
+                </p>
+                <button
+                  type="button"
+                  class="btn-spring mt-4 rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm font-bold text-[var(--color-text-secondary)] hover:text-indigo-500"
+                  (click)="initializeStripe(booking.id)"
+                >
+                  Try again
+                </button>
+              </div>
+            } @else {
+              <button
+                type="button"
+                class="test-card-button group relative mb-5 flex w-full items-center gap-4 overflow-hidden rounded-2xl border p-4 text-left transition-all duration-300"
+                [class.test-card-button--selected]="testCardSelected()"
+                [disabled]="!isStripeReady() || isHoldExpired()"
+                (click)="applyTestCard()"
+              >
+                <span class="test-card-button__glow" aria-hidden="true"></span>
+                <span
+                  class="relative flex size-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/25"
+                >
+                  <svg
+                    class="size-6"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                    <path d="M2.5 9h19" />
+                    <path stroke-linecap="round" d="M6 15h4" />
+                  </svg>
+                </span>
+                <span class="relative min-w-0 flex-1">
+                  <strong class="block text-sm font-black text-[var(--color-text-primary)]">
+                    {{ testCardSelected() ? 'SeatFlow test card added' : 'Use SeatFlow test card' }}
+                  </strong>
+                  <span class="mt-1 block text-xs leading-5 text-[var(--color-text-muted)]">
+                    {{
+                      testCardSelected()
+                        ? 'Visa •••• 4242 · safe testing details ready'
+                        : 'One click adds Stripe’s default safe testing payment'
+                    }}
+                  </span>
+                </span>
+                <span
+                  class="relative flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-black"
+                  aria-hidden="true"
+                >
+                  {{ testCardSelected() ? '✓' : '→' }}
+                </span>
+              </button>
+
+              @if (testCardSelected()) {
+                <div
+                  class="test-card-preview mb-5 overflow-hidden rounded-[1.6rem] p-5 text-white shadow-2xl shadow-indigo-900/20 sm:p-6"
+                >
+                  <div class="relative z-10 flex items-start justify-between">
+                    <div>
+                      <span
+                        class="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-100/70"
+                        >SeatFlow test</span
+                      >
+                      <p class="mt-1 text-lg font-black tracking-tight">Virtual Visa</p>
+                    </div>
+                    <span class="text-xl font-black italic tracking-[-0.08em]">VISA</span>
+                  </div>
+                  <div
+                    class="relative z-10 mt-8 flex items-center gap-2 font-mono text-lg tracking-[0.17em] sm:text-xl"
+                  >
+                    <span>4242</span><span>4242</span><span>4242</span><span>4242</span>
+                  </div>
+                  <div class="relative z-10 mt-6 flex items-end justify-between">
+                    <div class="flex gap-7">
+                      <div><small>Expires</small><strong>12 / 34</strong></div>
+                      <div><small>CVC</small><strong>123</strong></div>
+                    </div>
+                    <div class="test-card-chip" aria-hidden="true"></div>
+                  </div>
+                </div>
+
+                <div
+                  class="mb-5 flex items-center justify-between gap-4 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.07] px-4 py-3"
+                >
+                  <div
+                    class="flex items-center gap-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-300"
+                  >
+                    <span
+                      class="flex size-6 items-center justify-center rounded-full bg-emerald-500/15"
+                      >✓</span
+                    >
+                    Safe testing profile selected
+                  </div>
+                  <button
+                    type="button"
+                    class="text-xs font-black text-indigo-500 hover:text-indigo-400"
+                    (click)="useManualPaymentEntry()"
+                  >
+                    Enter manually
+                  </button>
+                </div>
+              }
+
+              <div [class.hidden]="testCardSelected()">
+                @if (isStripeLoading()) {
+                  <div class="space-y-4" aria-label="Loading secure payment form">
+                    <div class="skeleton-shimmer h-14 rounded-xl"></div>
+                    <div class="grid grid-cols-2 gap-3">
+                      <div class="skeleton-shimmer h-14 rounded-xl"></div>
+                      <div class="skeleton-shimmer h-14 rounded-xl"></div>
+                    </div>
+                    <div class="skeleton-shimmer h-28 rounded-xl"></div>
+                  </div>
+                }
+
+                <div class="stripe-section" [class.stripe-section--loading]="isStripeLoading()">
+                  <div
+                    #paymentElementContainer
+                    class="stripe-element-container"
+                    aria-label="Stripe test payment details"
+                  ></div>
+                  <div
+                    class="my-6 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.17em] text-[var(--color-text-muted)]"
+                  >
+                    <span class="h-px flex-1 bg-[var(--color-border)]"></span>
+                    Billing address for tax
+                    <span class="h-px flex-1 bg-[var(--color-border)]"></span>
+                  </div>
+                  <div
+                    #addressElementContainer
+                    class="stripe-element-container"
+                    aria-label="Stripe test billing address"
+                  ></div>
+                </div>
+              </div>
+            }
+
+            <div
+              class="mt-6 flex items-center justify-center gap-2 text-[11px] font-semibold text-[var(--color-text-muted)]"
+            >
+              <svg
+                class="size-3.5 text-emerald-500"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <rect x="5" y="10" width="14" height="10" rx="2" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+              </svg>
+              Test data is encrypted and handled by Stripe Elements
+            </div>
+           </section>
+           }
+        </form>
+
+        <aside
+          class="animate-fade-in-up lg:sticky lg:top-24"
+          aria-labelledby="order-summary-heading"
+        >
+          <div
+            class="overflow-hidden rounded-[2rem] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-diffuse)]"
+          >
+            <div
+              class="relative overflow-hidden border-b border-[var(--color-border)] bg-gradient-to-br from-indigo-500/[0.06] to-[var(--color-surface)] p-5 sm:p-6"
+            >
+              <div class="relative flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">
+                    Reservation {{ reservationReference() }}
+                  </p>
+                  <h2
+                    id="order-summary-heading"
+                    class="mt-1.5 text-xl font-black tracking-tight text-[var(--color-text-primary)]"
+                  >
+                    Order summary
+                  </h2>
+                </div>
+                <span
+                  class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-sm"
+                >
+                  <app-hold-countdown
+                    [expiresAt]="booking.expiresAt"
+                    (expired)="handleHoldExpired()"
+                  />
+                </span>
+              </div>
+            </div>
+
+            <div class="p-5 sm:p-6">
+              <div class="mb-5 flex items-center justify-between">
+                <span
+                  class="text-xs font-black uppercase tracking-[0.16em] text-[var(--color-text-muted)]"
+                  >Your seats</span
+                >
+                <span
+                  class="rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-black text-indigo-500"
+                >
+                  {{ booking.seatCount ?? booking.seats.length }}
+                </span>
+              </div>
+
+               <div class="seat-summary-list max-h-64 space-y-2 overflow-y-auto pr-1">
+                 @for (seat of checkoutSeats(); track seat.seatId; let index = $index) {
+                   <div
+                    class="flex items-center gap-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-canvas-subtle)]/60 p-3 transition-transform hover:translate-x-0.5"
+                  >
+                    <span
+                      class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-xs font-black text-indigo-500"
+                    >
+                      {{ index + 1 }}
+                    </span>
+                    <div class="min-w-0 flex-1">
+                      <strong class="block truncate text-sm text-[var(--color-text-primary)]">
+                         {{ seat.sectionName }} · Row {{ seat.rowLabel }} · Seat {{ seat.seatNumber || index + 1 }}
+                       </strong>
+                       <span class="text-[11px] text-[var(--color-text-muted)]">
+                         {{ selectedTier(seat)?.categoryName || 'Ticket' }} · Tax-inclusive
+                       </span>
+                     </div>
+                     <strong class="text-sm tabular-nums text-[var(--color-text-primary)]">
+                       {{ selectedTier(seat)?.price | sfCurrency: (selectedTier(seat)?.currency || currencyCode()) }}
+                     </strong>
+                   </div>
+                 }
+              </div>
+
+              <div class="my-5 border-t border-dashed border-[var(--color-border)]"></div>
+
+              <div class="space-y-3 text-sm">
+                <div class="flex items-center justify-between text-[var(--color-text-secondary)]">
+                  <span>Tickets subtotal</span>
+                  <span class="font-bold tabular-nums">{{
+                    grossTotal() | sfCurrency: currencyCode()
+                  }}</span>
+                </div>
+                <div
+                  class="flex items-start justify-between gap-4 text-[var(--color-text-secondary)]"
+                >
+                  <span class="inline-flex items-center gap-1.5">
+                    VAT / taxes
+                    <span
+                      class="group relative flex size-4 cursor-help items-center justify-center rounded-full border border-[var(--color-border)] text-[9px] font-black"
+                      title="Stripe calculates the included tax from the test billing address."
+                      >i</span
+                    >
+                  </span>
+                  <span
+                    class="text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400"
+                    >
+                    @if (isTaxLoading()) {
+                      Checking…
+                    } @else if (taxRate() !== null) {
+                      {{ taxAmount() | sfCurrency: currencyCode() }} included ({{ taxRate() }}%)
+                    } @else {
+                      Included in total
+                    }
+                   </span>
+                </div>
+                <div class="flex items-center justify-between text-[var(--color-text-secondary)]">
+                  <span>Booking fees</span>
+                  <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                    >No hidden fees</span
+                  >
+                </div>
+              </div>
+
+              <div class="my-5 border-t border-[var(--color-border)]"></div>
+
+              <div class="flex items-end justify-between gap-4">
+                <div>
+                  <span class="block text-xs font-bold text-[var(--color-text-muted)]"
+                    >Total due</span
+                  >
+                  <span class="mt-0.5 block text-[10px] text-[var(--color-text-muted)]"
+                    >Gross, tax-inclusive</span
+                  >
+                </div>
+                <strong
+                  class="text-2xl font-black tracking-tight text-[var(--color-text-primary)] tabular-nums"
+                >
+                  {{ grossTotal() | sfCurrency: currencyCode() }}
+                </strong>
+              </div>
+
+               @if (!isTicketTypesConfirmed()) {
+                 <app-tactile-button
+                   class="mt-6 w-full"
+                   type="button"
+                   variant="primary"
+                   size="lg"
+                   [fullWidth]="true"
+                   [loading]="isSavingTicketTypes()"
+                   [disabled]="isSeatDetailsLoading() || checkoutSeats().length === 0 || isSavingTicketTypes() || isHoldExpired()"
+                   (clicked)="continueToPayment()"
+                 >
+                   Continue to payment
+                 </app-tactile-button>
+               } @else {
+               <app-tactile-button
+                class="mt-6 w-full"
+                type="button"
+                variant="primary"
+                size="lg"
+                [fullWidth]="true"
+                [loading]="isProcessingPayment()"
+                [disabled]="paymentDisabled()"
+                (clicked)="confirmPayment()"
+              >
+                <svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <rect x="5" y="10" width="14" height="10" rx="2" />
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                </svg>
+                {{ isProcessingPayment() ? 'Processing test payment…' : 'Complete test payment' }}
+               </app-tactile-button>
+               }
+
+              <p class="mt-4 text-center text-[10px] leading-4 text-[var(--color-text-muted)]">
+                By continuing, you agree to SeatFlow’s test checkout terms. No money is transferred.
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="mt-4 flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]"
+          >
+            <span class="inline-flex items-center gap-1.5"
+              ><span class="text-emerald-500">●</span> Test mode</span
+            >
+            <span class="h-3 w-px bg-[var(--color-border)]"></span>
+            <span>Powered by Stripe</span>
+          </div>
+        </aside>
+      </div>
+    }
+  </div>
+</main>

@@ -34,6 +34,8 @@ yarn-error.log
 .env
 .env.*
 !.env.example
+# Runtime browser configuration is local/deployment-specific.
+/public/env.js
 .sass-cache/
 /connect.lock
 /coverage

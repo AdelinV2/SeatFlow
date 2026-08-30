@@ -1,0 +1,57 @@
+<div class="expired-dialog overflow-hidden rounded-[1.75rem] bg-[var(--color-surface)]">
+  <div class="relative flex flex-col items-center px-7 pb-7 pt-9 text-center sm:px-9">
+    <div
+      class="expired-glow pointer-events-none absolute inset-x-0 top-0 h-40"
+      aria-hidden="true"
+    ></div>
+
+    <div
+      class="relative mb-5 flex size-20 items-center justify-center rounded-full border border-rose-400/30 bg-rose-500/10 text-rose-500 shadow-lg shadow-rose-500/10"
+    >
+      <span
+        class="expired-ring absolute inset-0 rounded-full border border-rose-400/30"
+        aria-hidden="true"
+      ></span>
+      <svg
+        class="size-9"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2" />
+      </svg>
+    </div>
+
+    <p class="relative mb-2 text-[11px] font-black uppercase tracking-[0.22em] text-rose-500">
+      Time is up
+    </p>
+    <h2
+      mat-dialog-title
+      class="relative m-0 text-2xl font-black tracking-tight text-[var(--color-text-primary)]"
+    >
+      Your seat hold expired
+    </h2>
+
+    <mat-dialog-content
+      class="relative mt-3 p-0 text-sm leading-6 text-[var(--color-text-secondary)]"
+    >
+      To keep every booking fair, these seats have returned to the event. No payment was taken.
+    </mat-dialog-content>
+
+    <mat-dialog-actions class="relative mt-7 w-full p-0">
+      <app-tactile-button
+        class="w-full"
+        variant="primary"
+        size="lg"
+        [fullWidth]="true"
+        (clicked)="returnToEvent()"
+      >
+        Choose seats again
+        <span aria-hidden="true">→</span>
+      </app-tactile-button>
+    </mat-dialog-actions>
+  </div>
+</div>

@@ -11,6 +11,8 @@ import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.PricingTierClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.messaging.event.ReservationCancelledEvent;
 import com.seatflow.reservation.messaging.event.ReservationConfirmedEvent;
@@ -27,6 +29,7 @@ import com.seatflow.reservation.repository.SeatHoldRepository;
 import com.seatflow.reservation.repository.projection.ActiveSeatHoldProjection;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.EventSeatStatusResponse;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
@@ -145,11 +148,20 @@ public class ReservationServiceImpl implements ReservationService {
 
         Map<UUID, BigDecimal> priceMap = eventPricing.seatPrices();
         for (UUID seatId : request.seatIds()) {
+            SeatPricingDetails details = eventPricing.seatDetails().get(seatId);
+            PricingTierClientDto defaultTier = details == null ? null : details.pricingTiers().stream()
+                    .filter(tier -> tier.price() != null && tier.price().compareTo(priceMap.get(seatId)) == 0)
+                    .findFirst()
+                    .orElse(null);
             SeatHold hold = SeatHold.builder()
                     .eventId(request.eventId())
                     .seatId(seatId)
                     .status(SeatHoldStatus.HELD)
                     .price(priceMap.getOrDefault(seatId, BigDecimal.ZERO))
+                    .rowLabel(details == null ? null : details.rowLabel())
+                    .seatNumber(details == null ? null : details.seatNumber())
+                    .pricingTierId(defaultTier == null ? null : defaultTier.id())
+                    .ticketType(defaultTier == null ? null : defaultTier.categoryName())
                     .build();
             reservation.addSeatHold(hold);
         }
@@ -207,6 +219,69 @@ public class ReservationServiceImpl implements ReservationService {
         }
 
         return reservationMapper.toResponse(reservation);
+    }
+
+    @Override
+    @Transactional
+    public ReservationResponse updateReservationPricing(UUID reservationId,
+                                                        SeatPricingSelectionRequest request,
+                                                        UUID authenticatedUserId,
+                                                        String customerEmailProof) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+
+        if (!isOwnerOrAdmin(reservation, authenticatedUserId, customerEmailProof)) {
+            throw new ResourceNotFoundException("Reservation", reservationId);
+        }
+        if (reservation.getStatus() != ReservationStatus.PENDING) {
+            throw new ConflictException("Ticket types can only be changed while the reservation is pending", ErrorCode.CONFLICT);
+        }
+        if (reservation.getExpiresAt() == null || !reservation.getExpiresAt().isAfter(Instant.now())) {
+            throw new ValidationException("Reservation hold has expired", ErrorCode.RESERVATION_EXPIRED);
+        }
+
+        Map<UUID, SeatPricingSelectionRequest.SeatPricingSelection> selections = request.seats().stream()
+                .collect(Collectors.toMap(
+                        SeatPricingSelectionRequest.SeatPricingSelection::seatId,
+                        selection -> selection,
+                        (first, duplicate) -> first));
+        Set<UUID> heldSeatIds = reservation.getSeatHolds().stream()
+                .filter(hold -> hold.getStatus() == SeatHoldStatus.HELD)
+                .map(SeatHold::getSeatId)
+                .collect(Collectors.toSet());
+        if (selections.size() != request.seats().size() || !selections.keySet().equals(heldSeatIds)) {
+            throw new ValidationException("A pricing tier must be selected for every held seat", ErrorCode.INVALID_REQUEST);
+        }
+
+        EventPricingDetails eventPricing = eventClient.getEventSeatPricing(reservation.getEventId(), heldSeatIds);
+        BigDecimal total = BigDecimal.ZERO;
+        for (SeatHold hold : reservation.getSeatHolds()) {
+            if (hold.getStatus() != SeatHoldStatus.HELD) {
+                continue;
+            }
+            SeatPricingSelectionRequest.SeatPricingSelection selection = selections.get(hold.getSeatId());
+            SeatPricingDetails seatDetails = eventPricing.seatDetails().get(hold.getSeatId());
+            if (seatDetails == null) {
+                throw new ValidationException("Seat pricing is unavailable for " + hold.getSeatId(), ErrorCode.INVALID_REQUEST);
+            }
+            PricingTierClientDto tier = seatDetails.pricingTiers().stream()
+                    .filter(candidate -> candidate.id().equals(selection.pricingTierId()))
+                    .findFirst()
+                    .orElseThrow(() -> new ValidationException(
+                            "Selected ticket type is not available for seat " + hold.getSeatId(),
+                            ErrorCode.INVALID_REQUEST));
+            hold.setPrice(tier.price());
+            hold.setPricingTierId(tier.id());
+            hold.setTicketType(tier.categoryName());
+            hold.setRowLabel(seatDetails.rowLabel());
+            hold.setSeatNumber(seatDetails.seatNumber());
+            total = total.add(tier.price());
+        }
+        reservation.setTotalAmount(total);
+        Reservation saved = reservationRepository.saveAndFlush(reservation);
+        log.info("Reservation ticket types updated. reservationId={}, seatsCount={}, totalAmount={}",
+                reservationId, heldSeatIds.size(), total);
+        return reservationMapper.toResponse(saved);
     }
 
     @Override

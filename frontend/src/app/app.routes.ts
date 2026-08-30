@@ -28,6 +28,11 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'checkout/:reservationId',
+    loadComponent: () =>
+      import('./features/booking/checkout/checkout.component').then((m) => m.CheckoutComponent),
+  },
+  {
     path: 'auth/login',
     canActivate: [guestGuard],
     loadComponent: () =>

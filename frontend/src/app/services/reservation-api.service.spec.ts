@@ -8,6 +8,7 @@ import {
   CreateReservationRequest,
   ReservationApiService,
   ReservationResponse,
+  UpdateReservationPricingRequest,
 } from './reservation-api.service';
 
 describe('ReservationApiService', () => {
@@ -90,5 +91,29 @@ describe('ReservationApiService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.headers.get('X-Customer-Email')).toBe('guest@example.com');
     req.flush(null);
+  });
+
+  it('should update ticket types with optional guest proof header', () => {
+    const request: UpdateReservationPricingRequest = {
+      seats: [{ seatId: 's-1', pricingTierId: 'tier-student' }],
+    };
+
+    service.updateReservationPricing('res-999', request, 'guest@example.com').subscribe((res) => {
+      expect(res.id).toBe('res-999');
+    });
+
+    const req = httpMock.expectOne('/api/reservations/res-999/pricing');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.headers.get('X-Customer-Email')).toBe('guest@example.com');
+    expect(req.request.body).toEqual(request);
+    req.flush({
+      id: 'res-999',
+      eventId: 'ev-101',
+      customerEmail: 'guest@example.com',
+      status: 'PENDING',
+      expiresAt: '2026-10-10T18:15:00Z',
+      totalAmount: 35,
+      seats: [{ seatId: 's-1', pricingTierId: 'tier-student', price: 35 }],
+    });
   });
 });

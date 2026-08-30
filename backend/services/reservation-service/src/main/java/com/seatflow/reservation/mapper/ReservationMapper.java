@@ -57,7 +57,11 @@ public interface ReservationMapper {
                 seatHold.getId(),
                 seatHold.getSeatId(),
                 seatHold.getStatus(),
-                seatHold.getPrice()
+                seatHold.getPrice(),
+                seatHold.getRowLabel(),
+                seatHold.getSeatNumber(),
+                seatHold.getPricingTierId(),
+                seatHold.getTicketType()
         );
     }
 

@@ -32,6 +32,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 // Public payment creation & status retrieval (Hybrid Guest Flow - ADR-001)
                 .requestMatchers(HttpMethod.POST, "/api/payments/intent").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/*/tax-preview").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/payments/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/payments/reservation/*").permitAll()
                 // Public Stripe Webhook endpoint

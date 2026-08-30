@@ -6,7 +6,9 @@ import com.seatflow.common.security.context.UserContext;
 import com.seatflow.payment.service.PaymentService;
 import com.seatflow.payment.service.StripeWebhookService;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -72,6 +74,23 @@ public class PaymentController {
 
         PaymentResponse response = paymentService.getPaymentById(paymentId, authenticatedUserId, isAdmin);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{paymentId}/tax-preview")
+    @Operation(
+            summary = "Preview Stripe Tax for a billing address",
+            description = "Calculates the tax included in the tax-inclusive payment amount using Stripe Tax."
+    )
+    @ApiResponse(responseCode = "200", description = "Tax preview calculated",
+            content = @Content(schema = @Schema(implementation = TaxPreviewResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid billing address",
+            content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<TaxPreviewResponse> previewTax(
+            @PathVariable UUID paymentId,
+            @Valid @RequestBody TaxPreviewRequest request) {
+        UUID authenticatedUserId = UserContext.getCurrentUserIdAsUuid().orElse(null);
+        boolean isAdmin = UserContext.hasRole(SecurityRoles.ROLE_ADMIN);
+        return ResponseEntity.ok(paymentService.calculateTaxPreview(paymentId, request, authenticatedUserId, isAdmin));
     }
 
     @GetMapping("/reservation/{reservationId}")

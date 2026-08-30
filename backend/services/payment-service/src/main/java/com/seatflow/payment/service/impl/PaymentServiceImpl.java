@@ -8,16 +8,21 @@ import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.payment.client.ReservationServiceClient;
 import com.seatflow.payment.client.dto.ReservationClientResponse;
+import com.seatflow.payment.client.dto.SeatHoldClientDto;
 import com.seatflow.payment.gateway.StripePaymentGateway;
 import com.seatflow.payment.gateway.dto.StripeIntentResult;
+import com.seatflow.payment.gateway.dto.StripeTaxResult;
+import com.seatflow.payment.gateway.dto.TaxAddress;
 import com.seatflow.payment.mapper.PaymentMapper;
 import com.seatflow.payment.model.entity.Payment;
 import com.seatflow.payment.model.enums.PaymentStatus;
 import com.seatflow.payment.repository.PaymentRepository;
 import com.seatflow.payment.service.PaymentService;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +32,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -92,6 +99,11 @@ public class PaymentServiceImpl implements PaymentService {
                 }
             }
 
+            // Seat prices are the line-item source of truth. Recalculate the amount from the
+            // held seats so legacy reservations created before the seat-map filtering fix cannot
+            // charge the price of every seat in the venue.
+            BigDecimal chargeAmount = resolveChargeAmount(reservation);
+
             // 5. Create Stripe PaymentIntent via Gateway
             Map<String, String> metadata = new HashMap<>();
             metadata.put("reservationId", reservation.id().toString());
@@ -102,7 +114,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
 
             StripeIntentResult stripeResult = stripePaymentGateway.createPaymentIntent(
-                    reservation.totalAmount(),
+                    chargeAmount,
                     "USD",
                     request.idempotencyKey(),
                     metadata,
@@ -118,7 +130,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .stripePaymentIntentId(stripeResult.paymentIntentId())
                     .clientSecret(stripeResult.clientSecret())
                     .idempotencyKey(request.idempotencyKey())
-                    .amount(reservation.totalAmount())
+                    .amount(chargeAmount)
                     .currency("USD")
                     .status(PaymentStatus.INITIATED)
                     .build();
@@ -140,6 +152,29 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    private BigDecimal resolveChargeAmount(ReservationClientResponse reservation) {
+        List<SeatHoldClientDto> seats = reservation.seats();
+        if (seats != null && !seats.isEmpty()) {
+            BigDecimal seatTotal = seats.stream()
+                    .map(SeatHoldClientDto::price)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (seatTotal.signum() <= 0) {
+                throw new ValidationException("Reservation does not contain valid seat prices", ErrorCode.INVALID_REQUEST);
+            }
+            if (reservation.totalAmount() == null || reservation.totalAmount().compareTo(seatTotal) != 0) {
+                log.warn("Correcting reservation total from seat line items. reservationId={}, storedTotal={}, seatTotal={}",
+                        reservation.id(), reservation.totalAmount(), seatTotal);
+            }
+            return seatTotal;
+        }
+
+        if (reservation.totalAmount() == null || reservation.totalAmount().signum() <= 0) {
+            throw new ValidationException("Reservation total must be positive", ErrorCode.INVALID_REQUEST);
+        }
+        return reservation.totalAmount();
+    }
+
     @Override
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin) {
@@ -148,6 +183,24 @@ public class PaymentServiceImpl implements PaymentService {
 
         assertAuthorized(payment, authenticatedUserId, isAdmin);
         return paymentMapper.toResponse(payment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                                  TaxPreviewRequest request,
+                                                  UUID authenticatedUserId,
+                                                  boolean isAdmin) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
+        assertAuthorized(payment, authenticatedUserId, isAdmin);
+        StripeTaxResult result = stripePaymentGateway.calculateInclusiveTax(
+                payment.getAmount(),
+                payment.getCurrency(),
+                paymentId.toString(),
+                new TaxAddress(request.line1(), request.line2(), request.city(), request.state(),
+                        request.postalCode(), request.country()));
+        return new TaxPreviewResponse(result.taxAmount(), result.effectiveRate(), result.currency());
     }
 
     @Override

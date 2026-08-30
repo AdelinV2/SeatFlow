@@ -8,6 +8,8 @@ import com.seatflow.common.observability.context.CorrelationContext;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.PricingTierClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.model.entity.Reservation;
@@ -20,6 +22,7 @@ import com.seatflow.reservation.repository.SeatHoldRepository;
 import com.seatflow.reservation.repository.projection.ActiveSeatHoldProjection;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.EventSeatStatusResponse;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
@@ -268,6 +271,38 @@ class ReservationServiceImplTest {
         ReservationResponse result = service.getReservationById(id, owner, null);
 
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void updateReservationPricingResolvesSelectedTierAndRecalculatesTotal() {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID tierId = UUID.randomUUID();
+        SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).seatId(seatId)
+                .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
+        Reservation res = stubReservation(id, eventId, null, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
+        PricingTierClientDto tier = new PricingTierClientDto(tierId, UUID.randomUUID(), "Student",
+                new BigDecimal("35.00"), "USD");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(eventClient.getEventSeatPricing(eventId, Set.of(seatId))).thenReturn(new EventPricingDetails(
+                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), List.of(seatId),
+                Map.of(seatId, new BigDecimal("50.00")),
+                Map.of(seatId, new SeatPricingDetails(UUID.randomUUID(), "Orchestra", "B", 7, List.of(tier)))));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, eventId));
+
+        service.updateReservationPricing(id,
+                new SeatPricingSelectionRequest(List.of(
+                        new SeatPricingSelectionRequest.SeatPricingSelection(seatId, tierId))),
+                null, null);
+
+        assertThat(hold.getPrice()).isEqualByComparingTo("35.00");
+        assertThat(hold.getTicketType()).isEqualTo("Student");
+        assertThat(hold.getRowLabel()).isEqualTo("B");
+        assertThat(hold.getSeatNumber()).isEqualTo(7);
+        assertThat(res.getTotalAmount()).isEqualByComparingTo("35.00");
+        verify(reservationRepository).saveAndFlush(res);
     }
 
     @Test
