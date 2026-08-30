@@ -42,7 +42,7 @@ public class TicketIssuedEventListener {
             log.info("Received ticket event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
-            if ("TicketIssued".equals(envelope.eventType())) {
+            if ("TicketIssued".equalsIgnoreCase(envelope.eventType()) || "TicketIssuedEvent".equalsIgnoreCase(envelope.eventType())) {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
                 notificationService.sendTicketIssuedNotification(event);
             } else {

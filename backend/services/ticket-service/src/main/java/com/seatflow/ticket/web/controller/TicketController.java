@@ -45,6 +45,12 @@ public class TicketController {
         UUID userId = UserContext.getCurrentUserIdAsUuid()
                 .orElseThrow(() -> new BusinessException("User authentication required", ErrorCode.UNAUTHORIZED, 401));
 
+        UserContext.getCurrentUserEmail().ifPresent(email -> {
+            if (!email.isBlank()) {
+                ticketService.claimGuestTickets(userId, email.trim());
+            }
+        });
+
         PagedResult<TicketResponse> result = ticketService.getMyTickets(userId, PageRequest.of(page, size));
         return ResponseEntity.ok(result);
     }

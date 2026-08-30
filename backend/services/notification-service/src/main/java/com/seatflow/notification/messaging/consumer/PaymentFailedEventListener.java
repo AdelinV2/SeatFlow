@@ -42,7 +42,7 @@ public class PaymentFailedEventListener {
             log.info("Received payment event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
-            if ("PaymentFailed".equals(envelope.eventType())) {
+            if ("PaymentFailed".equalsIgnoreCase(envelope.eventType()) || "PaymentFailedEvent".equalsIgnoreCase(envelope.eventType())) {
                 PaymentFailedEvent event = convertPayload(envelope.payload(), PaymentFailedEvent.class);
                 notificationService.sendPaymentFailedNotification(event);
             } else {

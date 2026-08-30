@@ -161,6 +161,17 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
         }
     }
 
+    @Override
+    public PaymentIntent retrievePaymentIntent(String paymentIntentId) {
+        validateStripeTestConfiguration();
+        try {
+            return stripeClient.paymentIntents().retrieve(paymentIntentId);
+        } catch (StripeException ex) {
+            log.warn("Stripe retrieve PaymentIntent failed for id={}: {}", paymentIntentId, ex.getMessage());
+            return null;
+        }
+    }
+
     private void validateStripeTestConfiguration() {
         if (stripeClient == null) {
             throw new BusinessException(

@@ -73,6 +73,20 @@ public class ReservationController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/{reservationId}/internal")
+    @Operation(
+        summary = "Internal inter-service retrieval of reservation details",
+        description = "Internal endpoint for downstream microservices (ticket-service, payment-service) to retrieve held seats without requiring user JWT context."
+    )
+    @ApiResponse(responseCode = "200", description = "Reservation found",
+        content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Reservation not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<ReservationResponse> getReservationInternal(@PathVariable UUID reservationId) {
+        ReservationResponse response = reservationService.getReservationByIdInternal(reservationId);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{reservationId}/pricing")
     @Operation(
         summary = "Set ticket types for held seats",

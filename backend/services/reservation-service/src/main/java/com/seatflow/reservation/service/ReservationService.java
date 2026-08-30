@@ -14,6 +14,8 @@ public interface ReservationService {
 
     ReservationResponse getReservationById(UUID reservationId, UUID authenticatedUserId, String customerEmailProof);
 
+    ReservationResponse getReservationByIdInternal(UUID reservationId);
+
     ReservationResponse updateReservationPricing(UUID reservationId,
                                                  SeatPricingSelectionRequest request,
                                                  UUID authenticatedUserId,

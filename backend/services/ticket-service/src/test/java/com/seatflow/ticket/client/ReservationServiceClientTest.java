@@ -54,6 +54,7 @@ class ReservationServiceClientTest {
         when(restClient.get()).thenReturn(requestSpec);
         when(requestSpec.uri(anyString())).thenReturn(headersSpec);
         when(requestSpec.uri(anyString(), (Object) any())).thenReturn(headersSpec);
+        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
         when(headersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), errorHandlerCaptor.capture())).thenReturn(responseSpec);
         when(responseSpec.body(ReservationClientResponse.class)).thenReturn(

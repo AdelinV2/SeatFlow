@@ -55,7 +55,7 @@ public class PaymentCompletedEventListener {
         }
 
         // 2. Fetch reservation details from reservation-service
-        ReservationClientResponse reservation = reservationServiceClient.getReservationById(payload.reservationId())
+        ReservationClientResponse reservation = reservationServiceClient.getReservationById(payload.reservationId(), payload.customerEmail())
                 .orElseThrow(() -> new IllegalStateException("Reservation not found for payment: " + payload.reservationId()));
 
         List<ReservationClientResponse.HeldSeatClientDto> seats = reservation.seats();

@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -99,6 +100,7 @@ class PaymentCompletedEventListenerIntegrationTest {
                 Instant.now()
         );
         when(reservationServiceClient.getReservationById(eq(reservationId))).thenReturn(Optional.of(reservation));
+        when(reservationServiceClient.getReservationById(eq(reservationId), any())).thenReturn(Optional.of(reservation));
 
         PaymentCompletedEvent event = new PaymentCompletedEvent(
                 paymentId,

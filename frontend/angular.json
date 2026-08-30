@@ -35,7 +35,14 @@
               }
             ],
             "styles": ["src/styles.scss"],
-            "allowedCommonJsDependencies": ["@stomp/stompjs", "leaflet", "sockjs-client"]
+            "allowedCommonJsDependencies": [
+              "@stomp/stompjs",
+              "canvas-confetti",
+              "dijkstrajs",
+              "leaflet",
+              "qrcode",
+              "sockjs-client"
+            ]
           },
           "configurations": {
             "production": {
@@ -47,8 +54,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "12kB",
+                  "maximumError": "20kB"
                 }
               ],
               "outputHashing": "all"

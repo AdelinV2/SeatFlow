@@ -42,7 +42,7 @@ public class ReservationHeldEventListener {
             log.info("Received reservation event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
-            if ("ReservationHeld".equals(envelope.eventType())) {
+            if ("ReservationHeld".equalsIgnoreCase(envelope.eventType()) || "ReservationHeldEvent".equalsIgnoreCase(envelope.eventType())) {
                 ReservationHeldEvent event = convertPayload(envelope.payload(), ReservationHeldEvent.class);
                 notificationService.sendReservationHeldNotification(event);
             } else {

@@ -44,18 +44,28 @@ public class ReservationServiceClientImpl implements ReservationServiceClient {
 
     @Override
     public Optional<ReservationClientResponse> getReservationById(UUID reservationId) {
+        return getReservationById(reservationId, null);
+    }
+
+    @Override
+    public Optional<ReservationClientResponse> getReservationById(UUID reservationId, String customerEmail) {
         try {
-            return circuitBreaker.executeSupplier(() -> fetchReservation(reservationId));
+            return circuitBreaker.executeSupplier(() -> fetchReservation(reservationId, customerEmail));
         } catch (CallNotPermittedException | RestClientException e) {
             log.warn("reservation-service call failed for reservationId={}: {}", reservationId, e.getMessage());
             return Optional.empty();
         }
     }
 
-    private Optional<ReservationClientResponse> fetchReservation(UUID reservationId) {
+    private Optional<ReservationClientResponse> fetchReservation(UUID reservationId, String customerEmail) {
         try {
-            ReservationClientResponse response = client().get()
-                    .uri("/api/reservations/{reservationId}", reservationId)
+            RestClient.RequestHeadersSpec<?> request = client().get()
+                    .uri("/api/reservations/{reservationId}/internal", reservationId);
+            if (customerEmail != null && !customerEmail.isBlank()) {
+                request = request.header("X-Customer-Email", customerEmail.trim());
+            }
+
+            ReservationClientResponse response = request
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {
                         throw new InterServiceClientException(
@@ -64,8 +74,24 @@ public class ReservationServiceClientImpl implements ReservationServiceClient {
                     .body(ReservationClientResponse.class);
             return Optional.ofNullable(response);
         } catch (InterServiceClientException e) {
-            log.warn("reservation-service error for reservationId={}: {}", reservationId, e.getMessage());
-            return Optional.empty();
+            log.warn("reservation-service internal endpoint error, trying fallback endpoint for reservationId={}: {}", reservationId, e.getMessage());
+            try {
+                RestClient.RequestHeadersSpec<?> fallbackRequest = client().get()
+                        .uri("/api/reservations/{reservationId}", reservationId);
+                if (customerEmail != null && !customerEmail.isBlank()) {
+                    fallbackRequest = fallbackRequest.header("X-Customer-Email", customerEmail.trim());
+                }
+                ReservationClientResponse fallbackResponse = fallbackRequest
+                        .retrieve()
+                        .onStatus(HttpStatusCode::isError, (req, res) -> {
+                            throw new InterServiceClientException("Fallback returned " + res.getStatusCode());
+                        })
+                        .body(ReservationClientResponse.class);
+                return Optional.ofNullable(fallbackResponse);
+            } catch (Exception ex) {
+                log.warn("reservation-service fallback call failed for reservationId={}: {}", reservationId, ex.getMessage());
+                return Optional.empty();
+            }
         }
     }
 

@@ -1,0 +1,200 @@
+<div class="min-h-screen py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8 animate-fade-in-up">
+  @if (isLoading()) {
+    <!-- Skeleton Loading State -->
+    <div class="space-y-6">
+      <div class="flex flex-col items-center justify-center text-center space-y-4 py-8">
+        <app-skeleton-loader shape="circle" width="5rem" height="5rem" />
+        <app-skeleton-loader shape="text" width="16rem" height="2rem" />
+        <app-skeleton-loader shape="text" width="22rem" height="1rem" />
+      </div>
+      <app-glass-card elevation="raised" padding="lg">
+        <div class="space-y-4">
+          <app-skeleton-loader shape="rectangle" width="100%" height="6rem" />
+          <app-skeleton-loader shape="rectangle" width="100%" height="8rem" />
+        </div>
+      </app-glass-card>
+    </div>
+  } @else if (errorMessage()) {
+    <!-- Error State -->
+    <app-glass-card elevation="elevated" padding="lg" class="text-center py-12 space-y-6">
+      <div class="size-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center mx-auto text-3xl shadow-md">
+        ⚠️
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-2xl font-extrabold text-[var(--color-text-primary)]">Order Lookup Notice</h2>
+        <p class="text-sm text-[var(--color-text-secondary)] max-w-lg mx-auto leading-relaxed">
+          {{ errorMessage() }}
+        </p>
+      </div>
+      <div class="pt-4 flex justify-center gap-3">
+        <a routerLink="/events">
+          <app-tactile-button variant="primary" size="md">
+            Browse Live Events
+          </app-tactile-button>
+        </a>
+      </div>
+    </app-glass-card>
+  } @else {
+    <!-- Celebratory Hero Header -->
+    <section class="text-center space-y-4 pt-2" aria-labelledby="confirmation-heading">
+      <div class="relative inline-flex items-center justify-center">
+        <div class="absolute -inset-2 rounded-full bg-emerald-500/20 blur-xl animate-pulse"></div>
+        <div class="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-xl shadow-emerald-600/30">
+          <svg class="size-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+          <span class="size-1.5 rounded-full bg-emerald-500"></span>
+          Payment Confirmed
+        </span>
+        <h1 id="confirmation-heading" class="text-3xl sm:text-4xl font-black tracking-tight text-[var(--color-text-primary)]">
+          You're Going Live!
+        </h1>
+        <p class="text-sm sm:text-base text-[var(--color-text-secondary)] max-w-lg mx-auto">
+          We've confirmed your order and sent your official digital tickets and receipt to
+          <strong class="text-[var(--color-text-primary)] font-semibold">{{ customerEmail() }}</strong>.
+        </p>
+      </div>
+
+      <!-- Quick Reference Badges -->
+      <div class="flex flex-wrap items-center justify-center gap-2 pt-2 text-xs text-[var(--color-text-muted)]">
+        <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/60 px-3 py-1.5 font-mono">
+          Order: <strong class="text-[var(--color-text-primary)] font-bold">{{ orderReference() }}</strong>
+        </span>
+        <span class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/60 px-3 py-1.5 font-mono">
+          Hold Ref: <strong class="text-[var(--color-text-primary)] font-bold">{{ reservationReference() }}</strong>
+        </span>
+      </div>
+    </section>
+
+    <!-- Guest Account Linking Banner (ADR-001) -->
+    @if (isGuest()) {
+      <div class="p-4 sm:p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+        <div class="flex items-start gap-3.5">
+          <span class="text-2xl sm:text-3xl shrink-0">🎟️</span>
+          <div class="space-y-0.5">
+            <h2 class="text-sm font-bold text-indigo-500 dark:text-indigo-400">Keep all your tickets in one place</h2>
+            <p class="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              Create an account with <strong class="text-[var(--color-text-primary)]">{{ customerEmail() }}</strong> to automatically save this and all past purchases to your digital wallet.
+            </p>
+          </div>
+        </div>
+        <a routerLink="/auth/login" class="shrink-0">
+          <app-tactile-button variant="primary" size="sm">
+            Create Account / Sign In
+          </app-tactile-button>
+        </a>
+      </div>
+    }
+
+    <!-- Order & Event Breakdown Card (Printable) -->
+    <div id="printable-order-receipt" class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md p-6 sm:p-8 shadow-xl space-y-6">
+      <!-- Event Header Preview -->
+      @if (event(); as ev) {
+        <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center pb-6 border-b border-[var(--color-border)]">
+          @if (ev.bannerUrl) {
+            <img
+              [src]="ev.bannerUrl"
+              [alt]="ev.title"
+              class="w-20 sm:w-24 h-20 sm:h-24 object-cover rounded-2xl border border-[var(--color-border)] shadow-md shrink-0"
+            />
+          }
+          <div class="space-y-1.5 flex-1 min-w-0">
+            <span class="text-[10px] font-extrabold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+              {{ ev.category }}
+            </span>
+            <h2 class="text-xl sm:text-2xl font-black tracking-tight text-[var(--color-text-primary)] truncate">
+              {{ ev.title }}
+            </h2>
+            <p class="text-xs sm:text-sm text-[var(--color-text-muted)] flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>📅 {{ ev.eventDate | sfDate:'full' }}</span>
+              @if (ev.venueName || ev.venueAddress || ev.venueCity) {
+                <span>•</span>
+                <span>📍 {{ ev.venueName || ev.venueAddress || ev.venueCity }}</span>
+              }
+            </p>
+          </div>
+        </div>
+      }
+
+      <!-- Itemized Seats List -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-black uppercase tracking-wider text-[var(--color-text-muted)]">
+            Reserved Seats ({{ seatCount() }})
+          </h3>
+          <span class="text-xs text-indigo-500 dark:text-indigo-400 font-semibold">Digital Passes Ready</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          @for (seat of seats(); track seat.seatId; let idx = $index) {
+            <div class="p-3.5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)]/60 flex items-center justify-between gap-3 shadow-xs">
+              <div class="flex items-center gap-3">
+                <div class="size-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                  #{{ idx + 1 }}
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-[var(--color-text-primary)]">
+                    Row {{ seat.rowNumber || '—' }}, Seat {{ seat.seatNumber || (idx + 1) }}
+                  </div>
+                  <div class="text-[11px] text-[var(--color-text-muted)]">
+                    {{ seat.ticketType || 'Standard Entry' }}
+                  </div>
+                </div>
+              </div>
+              <span class="text-xs font-extrabold text-[var(--color-text-primary)]">
+                {{ seat.price | sfCurrency:currency() }}
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Fiscal Calculation Breakdown -->
+      <div class="pt-4 border-t border-[var(--color-border)] space-y-2.5">
+        <div class="flex justify-between text-xs text-[var(--color-text-secondary)]">
+          <span>Ticket Subtotal (Net)</span>
+          <span class="font-semibold">{{ netAmount() | sfCurrency:currency() }}</span>
+        </div>
+
+        @if (taxAmount() > 0) {
+          <div class="flex justify-between text-xs text-[var(--color-text-secondary)]">
+            <span>Stripe Tax / VAT Included</span>
+            <span class="font-semibold">{{ taxAmount() | sfCurrency:currency() }}</span>
+          </div>
+        }
+
+        <div class="flex justify-between items-baseline pt-3 border-t border-[var(--color-border)]">
+          <div class="space-y-0.5">
+            <span class="text-sm sm:text-base font-bold text-[var(--color-text-primary)] block">Total Paid</span>
+            <span class="text-[11px] text-[var(--color-text-muted)]">Tax-inclusive fiscal breakdown</span>
+          </div>
+          <span class="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+            {{ totalAmount() | sfCurrency:currency() }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clean, Sleek Actions Bar -->
+    <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+      @if (!isGuest()) {
+        <a routerLink="/profile/tickets" class="w-full sm:w-auto">
+          <app-tactile-button variant="secondary" size="md" class="w-full">
+            🎟️ View in My Wallet
+          </app-tactile-button>
+        </a>
+      }
+
+      <a routerLink="/events" class="w-full sm:w-auto">
+        <app-tactile-button variant="primary" size="md" class="w-full">
+          Browse More Events
+        </app-tactile-button>
+      </a>
+    </div>
+  }
+</div>

@@ -23,6 +23,13 @@ import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
 import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.events.EventEnvelope;
+import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
+import com.seatflow.payment.model.entity.OutboxEvent;
+import com.seatflow.payment.repository.OutboxEventRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +52,8 @@ import java.util.UUID;
 public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
     private final ReservationServiceClient reservationServiceClient;
     private final StripePaymentGateway stripePaymentGateway;
     private final PaymentMapper paymentMapper;
@@ -255,7 +264,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PaymentResponse getPaymentById(UUID paymentId,
                                           UUID authenticatedUserId,
                                           boolean isAdmin,
@@ -264,6 +273,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
 
         assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        payment = syncPaymentStatusIfSucceeded(payment);
         return paymentMapper.toResponse(payment);
     }
 
@@ -294,13 +304,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin) {
         return getPaymentByReservationId(reservationId, authenticatedUserId, isAdmin, null);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PaymentResponse getPaymentByReservationId(UUID reservationId,
                                                      UUID authenticatedUserId,
                                                      boolean isAdmin,
@@ -309,7 +319,69 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment for reservation", reservationId));
 
         assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        payment = syncPaymentStatusIfSucceeded(payment);
         return paymentMapper.toResponse(payment);
+    }
+
+    private Payment syncPaymentStatusIfSucceeded(Payment payment) {
+        if (payment.getStatus() == PaymentStatus.INITIATED && payment.getStripePaymentIntentId() != null) {
+            try {
+                com.stripe.model.PaymentIntent intent = stripePaymentGateway.retrievePaymentIntent(payment.getStripePaymentIntentId());
+                if (intent != null && "succeeded".equalsIgnoreCase(intent.getStatus())) {
+                    log.info("Synchronizing succeeded payment from Stripe gateway. paymentId={}, stripePaymentIntentId={}",
+                            payment.getId(), payment.getStripePaymentIntentId());
+
+                    BigDecimal taxAmount = payment.getTaxAmount() != null ? payment.getTaxAmount() : BigDecimal.ZERO;
+                    BigDecimal netAmount = payment.getAmount().subtract(taxAmount);
+
+                    payment.setStatus(PaymentStatus.SUCCESS);
+                    payment.setTaxAmount(taxAmount);
+                    payment.setNetAmount(netAmount);
+                    payment.setUpdatedAt(Instant.now());
+                    payment = paymentRepository.saveAndFlush(payment);
+
+                    PaymentCompletedEvent completedEvent = new PaymentCompletedEvent(
+                            payment.getId(),
+                            payment.getReservationId(),
+                            payment.getUserId(),
+                            payment.getCustomerEmail(),
+                            payment.getEventId(),
+                            payment.getAmount(),
+                            taxAmount,
+                            netAmount,
+                            payment.getCurrency(),
+                            payment.getStripePaymentIntentId(),
+                            Instant.now()
+                    );
+
+                    saveOutboxRecord("PaymentCompleted", payment.getId(), completedEvent);
+                    meterRegistry.counter("seatflow.payments.completed.total", "status", "SUCCESS").increment();
+                }
+            } catch (Exception ex) {
+                log.warn("Unable to sync payment status with Stripe for paymentId={}: {}", payment.getId(), ex.getMessage());
+            }
+        }
+        return payment;
+    }
+
+    private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
+        try {
+            EventEnvelope<?> envelope = EventEnvelope.of(
+                    eventType,
+                    aggregateId.toString(),
+                    CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
+                    (com.seatflow.common.events.DomainEvent) payload
+            );
+            JsonNode payloadNode = objectMapper.valueToTree(envelope);
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateId(aggregateId)
+                    .eventType(eventType)
+                    .payload(payloadNode)
+                    .build();
+            outboxEventRepository.save(outboxEvent);
+        } catch (Exception ex) {
+            log.error("Failed to save outbox event for eventType={}, aggregateId={}", eventType, aggregateId, ex);
+        }
     }
 
     private void assertAuthorized(Payment payment,

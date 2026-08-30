@@ -29,4 +29,6 @@ public interface StripePaymentGateway {
                                           String currency,
                                           String reference,
                                           TaxAddress address);
+
+    com.stripe.model.PaymentIntent retrievePaymentIntent(String paymentIntentId);
 }

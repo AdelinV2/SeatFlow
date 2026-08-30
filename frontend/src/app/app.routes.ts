@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
+import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
 
 export const routes: Routes = [
@@ -31,6 +32,36 @@ export const routes: Routes = [
     path: 'checkout/:reservationId',
     loadComponent: () =>
       import('./features/booking/checkout/checkout.component').then((m) => m.CheckoutComponent),
+  },
+  {
+    path: 'order-confirmation/:paymentId',
+    loadComponent: () =>
+      import('./features/tickets/order-confirmation/order-confirmation.component').then(
+        (m) => m.OrderConfirmationComponent,
+      ),
+  },
+  {
+    path: 'tickets/guest/:ticketCode',
+    loadComponent: () =>
+      import('./features/tickets/guest-ticket/guest-ticket.component').then(
+        (m) => m.GuestTicketComponent,
+      ),
+  },
+  {
+    path: 'profile/tickets',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/profile/my-tickets/my-tickets.component').then(
+        (m) => m.MyTicketsComponent,
+      ),
+  },
+  {
+    path: 'profile/settings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/profile/user-settings/user-settings.component').then(
+        (m) => m.UserSettingsComponent,
+      ),
   },
   {
     path: 'auth/login',

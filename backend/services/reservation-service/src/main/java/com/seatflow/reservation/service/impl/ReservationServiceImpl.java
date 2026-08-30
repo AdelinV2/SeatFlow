@@ -226,6 +226,14 @@ public class ReservationServiceImpl implements ReservationService {
         return reservationMapper.toResponse(reservation);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ReservationResponse getReservationByIdInternal(UUID reservationId) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+        return reservationMapper.toResponse(reservation);
+    }
+
     private ReservationResponse executeCreateReservationTransaction(CreateReservationRequest request,
                                                                      UUID authenticatedUserId,
                                                                      String customerEmail,
@@ -550,11 +558,9 @@ public class ReservationServiceImpl implements ReservationService {
         if (UserContext.hasRole(SecurityRoles.ROLE_ADMIN)) {
             return true;
         }
-        if (reservation.getUserId() != null) {
-            // Registered reservation: only the owner may access it
-            return authenticatedUserId != null && authenticatedUserId.equals(reservation.getUserId());
+        if (authenticatedUserId != null && authenticatedUserId.equals(reservation.getUserId())) {
+            return true;
         }
-        // Guest reservation (userId == null): require explicit checkout proof or a matching verified JWT email.
         String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
         String proof = normalizeEmail(customerEmailProof);
         return (proof != null && proof.equalsIgnoreCase(reservation.getCustomerEmail()))

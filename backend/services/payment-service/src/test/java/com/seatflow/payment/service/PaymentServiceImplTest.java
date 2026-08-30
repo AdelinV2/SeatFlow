@@ -14,6 +14,8 @@ import com.seatflow.payment.gateway.dto.TaxAddress;
 import com.seatflow.payment.mapper.PaymentMapper;
 import com.seatflow.payment.model.entity.Payment;
 import com.seatflow.payment.model.enums.PaymentStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.payment.repository.OutboxEventRepository;
 import com.seatflow.payment.repository.PaymentRepository;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
 import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
@@ -53,6 +55,11 @@ class PaymentServiceImplTest {
     private PaymentRepository paymentRepository;
 
     @Mock
+    private OutboxEventRepository outboxEventRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Mock
     private ReservationServiceClient reservationServiceClient;
 
     @Mock
@@ -73,7 +80,7 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new PaymentServiceImpl(paymentRepository, reservationServiceClient, stripePaymentGateway, paymentMapper, meterRegistry);
+        service = new PaymentServiceImpl(paymentRepository, outboxEventRepository, objectMapper, reservationServiceClient, stripePaymentGateway, paymentMapper, meterRegistry);
         when(paymentRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(paymentRepository.findByReservationId(any())).thenReturn(Optional.empty());
         when(stripePaymentGateway.createPaymentIntent(any(), any(), any(), any(), any()))
