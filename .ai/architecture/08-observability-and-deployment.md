@@ -1,320 +1,403 @@
 # 08 — Observability, CI/CD & Deployment Specification
 
-This document details the local development setup, `.env` configuration architecture, observability stack (OpenTelemetry, Prometheus, Grafana), GitHub Actions CI/CD pipelines (Staging & Production), and Cloud deployment (Google Cloud Platform compute + Supabase Auth Identity Management - ADR-006).
+This document is the authoritative SeatFlow specification for runtime configuration, container orchestration, observability, CI/CD, and the Google Cloud portfolio deployment. It supersedes older Cloud Run / Cloud SQL / Memorystore / managed-Kafka deployment wording elsewhere in the repository for the MVP deployment topology.
+
+The MVP cloud target is intentionally optimized for a portfolio application that needs to remain publicly available for roughly the Google Cloud Free Trial window rather than for high-scale commercial traffic.
 
 ---
 
-## 1. Environment Variable Architecture (`.env`)
+## 1. Deployment Decision
 
-SeatFlow strictly isolates secrets and configuration across environments using standard `.env` patterns.
+### 1.1 Production Runtime
 
-### 1.1 Local Development (`.env` & `.env.example`)
-- Every microservice and frontend module maintains a version-controlled `.env.example` in its directory containing dummy/placeholder values and documentation for all required variables.
-- Developers copy `.env.example` to `.env` locally.
-- Real `.env` files are strictly added to `.gitignore` and **never committed to Git**.
-- Spring Boot microservices read environment variables natively using property placeholders (e.g. `${DB_PASSWORD}`, `${STRIPE_API_KEY}`, `${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI}`).
+SeatFlow production runs on **one Google Cloud Compute Engine VM** using a production Docker Compose stack.
 
-#### Directory Layout for Environment Files:
-```text
-SeatFlow/
-├── .env.example                          # Root/Docker Compose infrastructure defaults
-├── backend/
-│   ├── services/
-│   │   ├── user-service/.env.example
-│   │   ├── seat-map-service/.env.example
-│   │   ├── event-service/.env.example
-│   │   ├── reservation-service/.env.example
-│   │   ├── payment-service/.env.example
-│   │   ├── ticket-service/.env.example
-│   │   ├── realtime-service/.env.example
-│   │   └── notification-service/.env.example
-│   └── gateway/.env.example
-└── frontend/.env.example
-```
-
-#### Example Microservice `.env.example` (`payment-service/.env.example`):
-```properties
-# Server & Eureka
-SERVER_PORT=8085
-EUREKA_SERVER_URL=http://localhost:8761/eureka
-
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=seatflow_payment
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-
-# Kafka
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# Supabase Auth (OIDC / JWT)
-SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json
-SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1
-
-# Stripe Sandbox
-STRIPE_API_KEY=sk_test_placeholder_key
-STRIPE_WEBHOOK_SECRET=whsec_placeholder_secret
-```
-
-### 1.2 Cloud Environments (Staging & Production)
-- **Zero `.env` files in Cloud containers:** Containers receive environment variables injected at runtime from **GCP Secret Manager** and **GCP Cloud Run / GKE environment specs**.
-- **GitHub Actions Secrets:** Injected via GitHub Repository Environments (`staging` vs `production`).
-
-### 1.3 Spring Boot Profiles Architecture (`application-{profile}.yaml`)
-
-SeatFlow uses a **4-profile configuration architecture** to separate local host execution, Docker Compose, production cloud, and automated tests cleanly:
+Default target:
 
 ```text
-src/main/resources/
-├── application.yaml          # Base defaults (OpenAPI, Jackson ISO-8601, Actuator health endpoints)
-├── application-local.yaml     # Profile: "local" (IDE runs on host, connects to localhost:5432/9092/8761)
-├── application-docker.yaml    # Profile: "docker" (Docker Compose containers, connects to service hostnames)
-├── application-prod.yaml      # Profile: "prod" (GCP Cloud Run, Cloud SQL socket factory, JSON ECS logs)
-└── application-test.yaml      # Profile: "test" (Testcontainers dynamic JDBC/Kafka URLs, silent logging)
+Google Cloud Compute Engine
+Machine type: e2-highmem-2
+CPU:          2 vCPU
+Memory:       16 GiB
+OS:           Ubuntu LTS / Container-Optimized compatible Linux
+Disk:         persistent balanced disk sized for the portfolio workload
+Runtime:      Docker Engine + Docker Compose v2
 ```
 
-#### Profile Selection Matrix:
-| Profile | Trigger / Activation | Key Characteristics |
+The VM hosts the application, stateful infrastructure, and the self-hosted observability stack:
+
+```text
+Internet
+   |
+   | HTTPS / WSS
+   v
+Nginx edge container
+   |
+   +--> Angular SPA
+   +--> API Gateway
+             |
+             +--> Eureka Server
+             +--> User Service
+             +--> Seat Map Service
+             +--> Event Service
+             +--> Reservation Service
+             +--> Payment Service
+             +--> Ticket Service
+             +--> Realtime Service
+             +--> Notification Service
+
+Private Docker network
+   |
+   +--> PostgreSQL 16
+   +--> Apache Kafka (KRaft)
+   +--> Redis 7
+   +--> OpenTelemetry Collector
+   +--> Prometheus
+   +--> Grafana
+   +--> Tempo
+```
+
+Only the edge proxy exposes public application ports. PostgreSQL, Kafka, Redis, Eureka, backend service ports, Actuator endpoints, Prometheus, Tempo, and Grafana are private by default.
+
+### 1.2 Managed GCP Services Kept
+
+The deployment deliberately keeps a small number of GCP-managed capabilities that add real operational value without requiring separate managed runtimes for every SeatFlow component:
+
+- **Artifact Registry** — immutable Docker image storage.
+- **Secret Manager** — production secrets and runtime credentials.
+- **IAM + Workload Identity Federation (WIF)** — passwordless GitHub Actions authentication and least-privilege VM/deployment identities.
+- **Cloud Logging / Cloud Monitoring where useful** — VM/platform visibility in addition to the self-hosted Prometheus/Grafana/Tempo stack.
+- **Compute Engine persistent disk, static IP and firewall rules** — provisioned with Terraform.
+
+### 1.3 Explicit MVP Non-Targets
+
+Do **not** provision these services for the portfolio MVP unless a later ADR changes the decision:
+
+- Google Cloud Run for the microservices.
+- Google Cloud SQL.
+- Google Cloud Memorystore.
+- Google Managed Service for Apache Kafka / Confluent Cloud.
+- Google Kubernetes Engine / Kubernetes.
+- Cloud Armor, Cloud CDN, or a dedicated external HTTPS load balancer solely for architectural appearance.
+- Separate always-on staging infrastructure duplicating the production stack.
+
+These are valid future scale/migration options, but they add cost and operational surface without solving a current SeatFlow requirement.
+
+---
+
+## 2. Environment & Configuration Architecture
+
+SeatFlow retains four Spring profiles:
+
+| Profile | Purpose | Runtime addressing |
 |---|---|---|
-| **`local`** | `SPRING_PROFILES_ACTIVE=local` (Default in `.env`) | Connects to `localhost:5432` / `localhost:9092`. ANSI color console logging. Hot-reload friendly. |
-| **`docker`** | `SPRING_PROFILES_ACTIVE=docker` (Set in `docker-compose.yml`) | Connects to container DNS: `postgres:5432`, `kafka:9092`, `eureka-server:8761`. |
-| **`prod`** | `SPRING_PROFILES_ACTIVE=prod` (Injected in Cloud Run) | Structured JSON logging (ECS/Logstash). GCP Secret Manager resolution. Strict HikariCP pool sizing (`maximumPoolSize: 10`, `minimumIdle: 2`). Strict HTTPS/CORS. |
-| **`test`** | `@ActiveProfiles("test")` / `mvn test` | Dynamic container port binding via Testcontainers `@DynamicPropertySource`. Disabled Eureka registration. |
+| `local` | IDE/host development | `localhost` dependencies |
+| `docker` | Local Docker Compose | Docker DNS names |
+| `prod` | Compute Engine production Docker Compose | Docker DNS names + production security/resource settings |
+| `test` | Automated tests | Testcontainers/dynamic properties |
+
+`prod` is **not** a Cloud Run-specific profile. It represents production behavior independent of orchestrator and therefore uses environment-provided endpoints such as `postgres`, `kafka`, `redis`, and `eureka-server` inside the private Compose network.
+
+Example production contract:
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka}
+
+spring.data.redis:
+  host: ${REDIS_HOST:redis}
+  port: ${REDIS_PORT:6379}
+```
+
+Real secrets are never committed. The deployment identity reads approved Secret Manager versions during deployment and materializes only the minimum runtime environment required by Compose in a root-owned, `0600` temporary/runtime location. GitHub Actions must never store a long-lived service-account JSON key or print secret values.
 
 ---
 
-## 2. Local Development Environment (Docker Compose)
+## 3. Production Docker Compose Contract
 
-The entire platform can be spun up locally using Docker Compose:
+Local orchestration is split into:
 
 ```text
-docker/
-├── docker-compose.yml              # Core infrastructure: Postgres, Kafka, Redis, Eureka, Gateway
-├── docker-compose.services.yml     # Microservice backend containers (8 services)
-└── docker-compose.monitoring.yml   # Prometheus, Grafana, OpenTelemetry Collector, Tempo
+docker/docker-compose.yml
+  core infrastructure + Eureka + Gateway
+
+docker/docker-compose.services.yml
+  eight business services + frontend
+
+docker/docker-compose.monitoring.yml
+  OTel Collector + Prometheus + Grafana + Tempo
 ```
 
-### 2.1 Complete Service & Port Catalog
-
-| Category | Service Name | Internal Port | Host Port | Database / Storage |
-|---|---|---|---|---|
-| **Infrastructure** | PostgreSQL 16 (Multi-DB) | `5432` | `5432` | Volume `pg_data` |
-| **Infrastructure** | Apache Kafka (KRaft mode) | `9092` | `9092` | Volume `kafka_data` |
-| **Infrastructure** | Redis 7 | `6379` | `6379` | Non-persistent / Cache |
-| **Infrastructure** | Eureka Discovery Server | `8761` | `8761` | In-memory registry |
-| **Infrastructure** | API Gateway | `8080` | `8080` | Spring Cloud Gateway |
-| **Backend Service** | `user-service` | `8081` | `8081` | DB: `seatflow_user` |
-| **Backend Service** | `seat-map-service` | `8082` | `8082` | DB: `seatflow_seatmap` |
-| **Backend Service** | `event-service` | `8083` | `8083` | DB: `seatflow_event` |
-| **Backend Service** | `reservation-service` | `8084` | `8084` | DB: `seatflow_reservation` |
-| **Backend Service** | `payment-service` | `8085` | `8085` | DB: `seatflow_payment` |
-| **Backend Service** | `ticket-service` | `8086` | `8086` | DB: `seatflow_ticket` |
-| **Backend Service** | `realtime-service` | `8087` | `8087` | Redis Pub/Sub |
-| **Backend Service** | `notification-service` | `8088` | `8088` | DB: `seatflow_notification` |
-| **Frontend** | Angular 22 SPA | `4200` (Dev) / `80` (Nginx) | `4200` | N/A |
-| **Observability** | OpenTelemetry Collector | `4317` (gRPC) / `4318` (HTTP) | `4317` / `4318` | In-memory collector |
-| **Observability** | Prometheus | `9090` | `9090` | Time-series data |
-| **Observability** | Grafana | `3000` | `3000` | Pre-provisioned dashboards |
-| **Observability** | Grafana Tempo (Tracing) | `3200` | `3200` | Distributed traces |
-
----
-
-## 3. Observability, Logging & Monitoring Architecture
-
-SeatFlow implements full **Three-Pillar Observability** (Logs, Metrics, Traces) aligned with OpenTelemetry and Cloud-Native standards:
+Phase 10 adds:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ MICROSERVICES (Spring Boot 4.1.x + Micrometer + OpenTelemetry Agent)        │
-│                                                                             │
-│  1. Logs (JSON + MDC)        2. Metrics (Micrometer)   3. Traces (W3C OTLP) │
-└─────────────┬──────────────────────────┬──────────────────────────┬─────────┘
-              │                          │                          │
-              ▼                          ▼                          ▼
-┌──────────────────────────┐ ┌──────────────────────────┐ ┌───────────────────┐
-│ OpenTelemetry Collector  │ │ Prometheus Server (9090) │ │ Grafana Tempo     │
-│ (Port 4317 gRPC / 4318)  │ │ (Pulls /actuator/prom)   │ │ (Port 3200)       │
-└─────────────┬────────────┘ └───────────┬──────────────┘ └─────────┬─────────┘
-              │                          │                          │
-              ▼                          ▼                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ GRAFANA DASHBOARDS (Port 3000) & GCP CLOUD LOGGING / CLOUD TRACE            │
-│ • Executive Business KPI Dashboard    • SRE & RED Method Service Health     │
-│ • Kafka Outbox & Consumer Lag Board   • Trace-to-Log Drill-down Correlation │
-└─────────────────────────────────────────────────────────────────────────────┘
+docker/docker-compose.prod.yml
 ```
+
+as a production override rather than a second, unrelated deployment model.
+
+The production override must:
+
+- use Artifact Registry images pinned by immutable SHA/release tag, not local builds;
+- set `SPRING_PROFILES_ACTIVE=prod` for JVM services;
+- apply conservative CPU/memory limits so the full stack fits the 2-vCPU / 16-GiB VM;
+- set `restart: unless-stopped` or an equivalent restart policy;
+- keep PostgreSQL and Kafka on persistent named volumes;
+- keep Redis non-authoritative;
+- use internal Docker networks and expose only the Nginx edge publicly;
+- add health checks and health-aware startup ordering;
+- use bounded Docker log rotation;
+- never mount repository `.env` files or source-control secrets;
+- preserve one logical PostgreSQL database per business service even though one PostgreSQL server/container hosts them.
+
+Recommended JVM portfolio defaults are intentionally conservative and must be validated under the complete stack:
+
+```text
+Most JVM services:      256–384 MiB max heap
+Reservation/Event:      384–512 MiB max heap when measurements justify it
+Kafka:                  bounded heap appropriate for demo traffic
+PostgreSQL:             conservative shared buffers / connection counts
+Prometheus/Tempo:       short portfolio retention
+```
+
+Resource limits are operational safeguards, not business invariants; tune them from measured usage.
 
 ---
 
-### 3.1 Enterprise Production-Grade JSON Logging Standards
+## 4. Networking & Edge
 
-> **Rule:** Plain strings (e.g. `log.info("User created")` or `log.info("Seat booked")`) are strictly forbidden. All logs must be structured JSON entries containing rich domain metadata, correlation context, and operational attributes.
+Terraform provisions the VM, VPC/firewall resources, static external IP, service account, and related IAM. Public ingress is limited to the application edge:
 
-#### A. Production Log JSON Schema (Logstash / ECS Compliant)
-```json
-{
-  "@timestamp": "2026-08-23T17:45:12.304Z",
-  "log.level": "INFO",
-  "service.name": "reservation-service",
-  "service.environment": "staging",
-  "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736",
-  "span.id": "00f067aa0ba902b7",
-  "correlation.id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-  "user.id": "123e4567-e89b-12d3-a456-426614174000",
-  "http.method": "POST",
-  "http.uri": "/api/reservations",
-  "http.client_ip": "198.51.100.42",
-  "logger.name": "com.seatflow.reservation.service.impl.ReservationServiceImpl",
-  "thread.name": "http-nio-8084-exec-3",
-  "message": "Seat hold acquired successfully. eventId=223e4567-e89b-12d3-a456-426614174000, reservationId=334e5678-e89b-12d3-a456-426614174111, seatsCount=2, totalAmount=120.00, expiresAt=2026-08-23T18:00:12Z, durationMs=42",
-  "context": {
-    "eventId": "223e4567-e89b-12d3-a456-426614174000",
-    "reservationId": "334e5678-e89b-12d3-a456-426614174111",
-    "seatIds": ["s-101", "s-102"],
-    "totalAmount": 120.00,
-    "currency": "EUR",
-    "expiresAt": "2026-08-23T18:00:12Z",
-    "durationMs": 42
-  }
-}
+```text
+TCP 80  -> HTTPS redirect / certificate bootstrap
+TCP 443 -> Nginx HTTPS/WSS
 ```
 
-#### B. Standardized Event Logging Taxonomy
+Administrative SSH should prefer an authenticated Google Cloud path such as IAP/OS Login instead of exposing unrestricted TCP/22 to the Internet.
 
-| Domain Event / Lifecycle | Level | Mandatory Context Keys | Example Output Pattern |
-|---|---|---|---|
-| **Seat Hold Request (Success)** | `INFO` | `eventId`, `reservationId`, `userId`, `seatsCount`, `seatIds`, `totalAmount`, `expiresAt`, `durationMs` | `Seat hold acquired successfully. eventId=..., reservationId=..., seatsCount=2, totalAmount=120.00, expiresAt=..., durationMs=42` |
-| **Seat Hold Collision (Conflict)** | `WARN` | `eventId`, `requestedSeatIds`, `conflictingSeatIds`, `userId`, `clientIp` | `Seat hold collision detected. eventId=..., requestedSeatIds=[s-1, s-2], conflictingSeatIds=[s-1], userId=...` |
-| **Seat Hold Expired (Sweeper)** | `INFO` | `reservationId`, `eventId`, `seatIds`, `heldDurationMinutes`, `releasedSeatsCount` | `Expired seat hold released by sweeper. reservationId=..., eventId=..., seatIds=[...], heldDurationMinutes=15.02` |
-| **Payment Finalized (Stripe)** | `INFO` | `paymentId`, `reservationId`, `userId`, `amount`, `currency`, `stripePaymentIntentId`, `durationMs` | `Payment processed successfully. paymentId=..., reservationId=..., amount=120.00 EUR, stripePaymentIntentId=pi_3N...` |
-| **Duplicate Webhook Skipped** | `WARN` | `stripeEventId`, `paymentIntentId`, `reason` | `Stripe webhook duplicate event ignored. stripeEventId=evt_123, status=ALREADY_PROCESSED` |
-| **Ticket QR Issued** | `INFO` | `ticketId`, `reservationId`, `eventId`, `seatId`, `ticketNumber`, `durationMs` | `Digital ticket and QR code issued. ticketId=..., reservationId=..., seatId=..., ticketNumber=SF-2026-98124` |
-| **Kafka Outbox Commit** | `DEBUG` | `aggregateId`, `eventType`, `outboxId` | `Transactional outbox event committed. aggregateId=..., eventType=ReservationHeld, outboxId=...` |
-| **Kafka Outbox Publish Failed** | `ERROR` | `outboxId`, `eventType`, `retryCount`, `error` | `Failed to publish outbox event to Kafka. outboxId=..., eventType=..., retryCount=3, error=TimeoutException` |
+Nginx responsibilities:
 
-#### C. Sensitive Data Masking (PCI-DSS & GDPR Rule)
-The logging encoder automatically replaces sensitive patterns:
-- Credit Card numbers (`\b(?:\d[ -]*?){13,16}\b`) -> `****-****-****-XXXX`
-- Stripe secret keys (`sk_live_...`, `whsec_...`) -> `[MASKED_STRIPE_SECRET]`
-- JWT Authorization headers -> `Bearer eyJ...[MASKED]`
-- Passwords and verification tokens -> `[MASKED]`
+- serve the Angular production build;
+- proxy `/api/` to `api-gateway:8080`;
+- proxy WebSocket/STOMP traffic with upgrade headers;
+- terminate HTTPS using the approved certificate approach;
+- apply security headers and sensible request/body/timeouts;
+- never expose internal service ports directly.
+
+Eureka remains useful in this deployment because the Spring services are independent containers and use the existing Eureka + Spring Cloud LoadBalancer contract. Kubernetes-native service discovery is not introduced.
 
 ---
 
-### 3.2 Prometheus & Micrometer Metrics Taxonomy
+## 5. Data & Messaging Runtime
 
-Metrics are collected using the **RED Method (Rate, Errors, Duration)** plus high-value **Business KPIs**:
+### PostgreSQL
 
-#### A. SRE / Infrastructure Metrics (RED Method)
-- `http.server.requests.seconds` (Timer): Dimensions `method`, `uri`, `status`, `exception`. Measures request rate, error rate (4xx/5xx), and p50/p95/p99 response latency.
-- `jvm.memory.used` / `jvm.memory.max` (Gauge): Heap and non-heap memory utilization.
-- `hikaricp.connections.active` / `hikaricp.connections.pending` (Gauge): Database connection pool saturation and wait queues.
-- `resilience4j.circuitbreaker.state` (Gauge): Current state (`0=CLOSED`, `1=OPEN`, `2=HALF_OPEN`).
+One PostgreSQL 16 container/instance hosts separate SeatFlow logical databases. Service data ownership remains unchanged: no service may query another service's database directly.
 
-#### B. Business KPI Metrics
-- `seatflow.reservations.created.total` (Counter): Tags `eventId`, `seatsCount`, `status`.
-- `seatflow.reservations.conflicts.total` (Counter): Tags `eventId`, `reason` (e.g. `ALREADY_HELD`, `LIMIT_EXCEEDED`).
-- `seatflow.reservations.hold.duration.seconds` (Timer): Latency of seat hold acquisition.
-- `seatflow.reservations.expired.total` (Counter): Tags `eventId`. Sweeper releases.
-- `seatflow.payments.processed.total` (Counter): Tags `status` (`SUCCESS`, `FAILED`), `currency`, `paymentMethod`.
-- `seatflow.tickets.issued.total` (Counter): Tags `eventId`. Total tickets minted.
-- `seatflow.websocket.active.connections` (Gauge): Tags `eventId`. Number of active WebSocket browsers per event.
-- `seatflow.outbox.publish.latency.seconds` (Timer): Time between outbox DB commit and successful Kafka delivery.
-- `seatflow.outbox.retry.count.total` (Counter): Tags `eventType`. Failed outbox publish retries.
+Production requires:
 
----
+- persistent Docker volume;
+- startup health check;
+- bounded connections/Hikari pools appropriate for VM capacity;
+- Flyway migrations before rollout;
+- documented `pg_dump` backup and restore procedure;
+- no `flyway clean` in deployment automation.
 
-### 3.3 Pre-Provisioned Grafana Dashboards
+### Kafka
 
-The `docker/grafana/dashboards/` directory contains 4 production dashboards:
+Apache Kafka runs in KRaft mode on the VM. Kafka remains the durable asynchronous backbone and Transactional Outbox remains mandatory. The production deployment does not collapse event types merely to satisfy a third-party free-tier topic limit.
 
-1. **Dashboard 1 — SeatFlow Executive & Business Operations:**
-   - Real-time Active Seat Holds gauge.
-   - Total Gross Ticket Sales (EUR) counter & daily revenue chart.
-   - Checkout Conversion Funnel (`Hold Initiated` -> `Payment Completed` -> `Ticket Downloaded`).
-   - Seat Hold Expiration Rate (% of holds abandoned vs completed).
+Kafka requires a persistent volume, bounded retention appropriate for a portfolio workload, explicit health verification, and no public broker port.
 
-2. **Dashboard 2 — Microservices SRE & RED Health:**
-   - Overall Platform Requests per Second (RPS) by Service.
-   - HTTP 5xx Error Rate Heatmap (alerts when 5xx > 1% for 2 consecutive minutes).
-   - End-to-End P95 & P99 API Latency Panels (Gateway, Reservation, Payment, Ticket).
-   - HikariCP Connection Pool Saturation & JVM Garbage Collection Pauses.
+### Redis
 
-3. **Dashboard 3 — Event-Driven Kafka & Outbox Pipeline:**
-   - Pending Outbox Queue Depth across all databases (alerts when pending rows > 100 for 1 minute).
-   - Outbox Delivery Latency (p99 time to Kafka).
-   - Kafka Consumer Lag per Consumer Group (`ticket-service`, `notification-service`, `realtime-service`).
-   - Dead Letter Queue (DLQ) Event Rate.
-
-4. **Dashboard 4 — Security, Auth & Cloud Armor Audit:**
-   - Failed Authentication Attempts (`401 Unauthorized` / invalid JWTs).
-   - Stripe Webhook Signature Verification Failures.
-   - Rate Limiting / Cloud Armor Blocked Requests by Client IP.
-   - Trace-to-Log Drill-down: Click any trace ID to open matching SLF4J structured logs.
-
-## 4. Multi-Cloud CI/CD Architecture (GitHub Actions)
-
-### 4.1 Branching Model & Environments
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                            FEATURE BRANCHES                              │
-│         feat/<task-id>-<desc>   fix/<issue-name>   docs/<topic>          │
-└────────────────────────────────────┬─────────────────────────────────────┘
-                                     │ (PR + Automated CI Matrix Validation)
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        BRANCH `develop` (Staging)                        │
-│  • Auto-deploy pe GCP Staging (Cloud Run / GKE Staging Cluster)          │
-│  • Conectat la:                                                          │
-│    - Azure Entra ID (Staging/Sandbox Tenant)                             │
-│    - Cloud SQL PostgreSQL (Staging Instance)                             │
-│    - Stripe Sandbox / Test Keys                                          │
-└────────────────────────────────────┬─────────────────────────────────────┘
-                                     │ (Release PR / Tagged Release v1.x.x)
-                                     ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│                         BRANCH `main` (Production)                       │
-│  • Protected Branch: Zero direct pushes, necesită PR + Green Checks      │
-│  • Auto-deploy pe GCP Production cu Zero-Downtime Traffic Migration      │
-│  • Conectat la:                                                          │
-│    - Azure Entra ID (Production CIAM Tenant)                             │
-│    - Cloud SQL PostgreSQL (High Availability Multi-Zone)                 │
-│    - Stripe Live/Production Keys                                         │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### 4.2 GitHub Actions Workflows
-
-| Workflow File | Trigger | Actions & Verification |
-|---|---|---|
-| **`.github/workflows/ci-pr-check.yml`** | PR against `develop` or `main` | 1. Matrix build: Java 21 (Temurin) & Node 22.<br>2. Backend: `mvn clean verify` (Unit tests, `@DataJpaTest`, Testcontainers integration & concurrency tests).<br>3. Frontend: `npm run lint` & `npm run test -- --watch=false --browsers=ChromeHeadless`.<br>4. Docker build dry-run (Jib / Docker Buildx). |
-| **`.github/workflows/cd-staging.yml`** | Push / Merge to `develop` | 1. Passwordless authentication to GCP via **Workload Identity Federation (WIF)**.<br>2. Build & Push Docker images to Google Artifact Registry tagged `:staging-${GITHUB_SHA}`.<br>3. Run Flyway database migrations on GCP Cloud SQL Staging.<br>4. Deploy services to GCP Cloud Run (Staging Environment) with Staging Azure Entra ID and Stripe Sandbox secrets. |
-| **`.github/workflows/cd-production.yml`** | Push / Merge to `main` or Tag `v*.*.*` | 1. Environment Gate: Requires Manual Approval from designated reviewers.<br>2. Authenticate to GCP Production via WIF.<br>3. Build & Tag production images `:latest` and `:vX.Y.Z`.<br>4. Run Flyway migrations on GCP Cloud SQL Production.<br>5. Deploy to GCP Cloud Run Production with gradual canary traffic split (10% -> 50% -> 100%). |
-
-### 4.3 Workload Identity Federation (WIF) Security Standard
-To prevent storing long-lived cloud credentials in GitHub, CI/CD uses **OIDC token exchange**:
-- GitHub Actions requests an OIDC token from `token.actions.githubusercontent.com`.
-- Google Cloud Workload Identity Pool validates the token against the repository (`AdelinV2/SeatFlow`).
-- GCP grants short-lived IAM credentials to impersonate the deployment Service Account.
+Redis 7 runs on the VM for rate limiting, realtime fan-out, cache/coordination use cases already approved by the architecture. Redis is disposable supporting infrastructure and is never the authoritative source for reservation ownership, payment state, or ticket validity.
 
 ---
 
-## 5. Multi-Cloud Production Architecture
+## 6. Three-Pillar Observability
 
-### 5.1 Google Cloud Platform (Compute, Data, Storage & Networking)
-- **Compute:** Google Cloud Run (Serverless microservices with horizontal autoscaling).
-- **Database:** Google Cloud SQL for PostgreSQL 16 (High Availability multi-zone failover, automated point-in-time recovery).
-- **Caching:** Google Cloud Memorystore for Redis.
-- **Messaging:** Managed Apache Kafka on GCP / Confluent Cloud.
-- **File Storage:** Google Cloud Storage (PDF ticket attachments, venue layout SVGs).
-- **Secrets Management:** Google Cloud Secret Manager (mounted into Cloud Run containers as environment variables at startup).
-- **Networking & Edge:** Cloud Load Balancing + Cloud Armor (DDoS protection, rate limiting) + Cloud CDN.
+SeatFlow keeps the engineering value of self-hosted observability while avoiding separate paid managed observability products:
 
-### 5.2 Microsoft Azure (Identity & Access Management)
-- **Identity Provider:** Microsoft Entra External ID (CIAM).
-- **Federation:** Google OAuth & Email/Password customer accounts.
-- **Token Verification:** Microservices validate JWT signatures against Microsoft's public JWKS endpoint (`https://seatflow.ciamlogin.com/.../discovery/v2.0/keys`).
-- **Role Enforcement:** Custom security attributes mapped into `roles` claim and converted via `JwtRoleConverter` into Spring Security authorities.
+```text
+Spring Boot services
+   |
+   +--> structured JSON logs
+   +--> Micrometer /actuator/prometheus
+   +--> OTLP traces
 
+OTel Collector ----> Tempo
+Prometheus --------> service metrics
+Grafana -----------> Prometheus + Tempo dashboards
+```
+
+Production logs must be structured JSON with correlation/trace context and sensitive-data masking. Container stdout/stderr uses bounded log rotation. Where configured, the GCP Ops Agent / Cloud Logging may ingest selected host/container logs, but Cloud Logging does not replace the local structured-log contract.
+
+Required operational views include:
+
+- RED metrics: request rate, errors, latency;
+- JVM memory/GC and Hikari pool pressure;
+- Kafka outbox publish latency/retries and consumer health;
+- reservation conflicts/expiration;
+- payment outcomes;
+- ticket issuance;
+- realtime active connections and Redis publish/consume failures;
+- trace-to-log correlation.
+
+Do not use high-cardinality identifiers such as `eventId`, `reservationId`, `ticketId`, or user IDs as Prometheus metric labels.
+
+---
+
+## 7. CI/CD Architecture
+
+### 7.1 Pull Requests
+
+PRs into `develop` or `main` run CI only:
+
+```text
+checkout
+ -> backend Maven verify
+ -> frontend lint/test/build
+ -> Docker image build validation
+ -> Docker Compose config validation
+ -> Terraform fmt/validate
+ -> security/static checks
+```
+
+### 7.2 `develop`
+
+`develop` is the integration branch. To avoid paying for a second always-on stack, merging to `develop` does **not** create a permanent staging environment.
+
+The staging workflow:
+
+1. authenticates to GCP through WIF;
+2. builds immutable images;
+3. pushes `staging-${GITHUB_SHA}` images to Artifact Registry;
+4. validates the production Compose rendering and Terraform configuration;
+5. optionally supports an explicitly invoked temporary/smoke deployment on the single VM, but never runs a duplicate long-lived stack by default.
+
+### 7.3 `main` / Release
+
+A merge to `main` or approved semantic release deploys to the single production VM:
+
+```text
+GitHub Actions
+   |
+   | OIDC
+   v
+GCP Workload Identity Federation
+   |
+   +--> build/push immutable images -> Artifact Registry
+   +--> read deployment metadata / approved secrets
+   +--> remote deploy command through approved VM access path
+                                      |
+                                      v
+                             Compute Engine VM
+                                      |
+                            docker compose pull
+                            Flyway migration step
+                            docker compose up -d
+                            health + smoke checks
+```
+
+Deployment must preserve the previously running image tag/configuration so a failed release can be rolled back by restoring the previous Compose image set. Database migrations are forward-only/backwards compatible; automated rollback never performs destructive schema reversal.
+
+There is no Cloud Run revision traffic split in the MVP deployment. Availability during a portfolio deployment is best-effort; correctness and reproducibility take precedence over implementing fake zero-downtime complexity.
+
+---
+
+## 8. Artifact Registry Contract
+
+Every deployable image is independently built and pushed. Tags are immutable deployment selectors:
+
+```text
+<region>-docker.pkg.dev/<project>/seatflow/api-gateway:<git-sha>
+<region>-docker.pkg.dev/<project>/seatflow/user-service:<git-sha>
+...
+<region>-docker.pkg.dev/<project>/seatflow/frontend:<git-sha>
+```
+
+Release-friendly aliases may exist, but production Compose must resolve to an immutable SHA/digest recorded in deployment metadata.
+
+---
+
+## 9. Terraform Scope
+
+Terraform under `infra/terraform/` provisions **infrastructure**, not application source code.
+
+Required MVP resources:
+
+```text
+GCP project service enablement
+Artifact Registry repository
+Compute Engine VM (default e2-highmem-2)
+Persistent disk configuration
+Static external IP
+Firewall rules
+VM runtime service account + IAM
+GitHub Workload Identity Pool/Provider + deploy service account bindings
+Secret Manager secret containers + IAM
+Optional logging/monitoring agent configuration
+Remote Terraform state bucket/bootstrap documentation
+```
+
+Terraform must **not** provision Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, or an external HTTPS load balancer for the MVP.
+
+Production state is stored in a versioned GCS backend outside source control. Real secret values are not Terraform variables/state. Use deletion protection / `prevent_destroy` where appropriate for persistent resources.
+
+---
+
+## 10. Security Requirements
+
+- WIF/OIDC is the only GitHub-to-GCP credential mechanism; no long-lived service-account JSON key.
+- Least-privilege deployment and VM service accounts.
+- Secret values originate from Secret Manager or explicitly approved third-party secret stores.
+- Only the public edge ports are Internet-accessible.
+- PostgreSQL, Kafka, Redis, Eureka, Actuator, Prometheus, Tempo, and Grafana remain private unless temporarily exposed through a controlled admin path.
+- Containers run as non-root where supported.
+- Images are immutable, versioned, and built from pinned base/runtime versions.
+- Production Compose and deployment scripts do not echo secrets.
+- Stripe remains Test Mode for the portfolio MVP.
+
+---
+
+## 11. Cost & Scale Rationale
+
+The Compute Engine topology is a deliberate architectural decision, not a limitation hidden from reviewers.
+
+SeatFlow demonstrates microservices, Kafka, Redis, PostgreSQL, WebSockets, observability, Docker, CI/CD, IAM/WIF, Terraform, and GCP without paying for ten independent serverless runtimes plus managed SQL/Redis/Kafka. All application boundaries remain independently containerized, so future migration to GKE, Cloud Run, managed PostgreSQL, or managed Kafka does not require collapsing the domain architecture.
+
+A future migration is justified only when a real requirement appears, such as:
+
+- independent horizontal scaling;
+- stronger availability/SLA requirements;
+- managed backups/replication;
+- operational burden exceeding the benefit of self-hosting;
+- sustained traffic that no longer fits one VM.
+
+---
+
+## 12. Phase 10 Deployment Definition of Done
+
+Phase 10 cloud/deployment work is complete when:
+
+- [ ] all JVM services and Angular build into independent non-root images;
+- [ ] local and production Compose configurations validate;
+- [ ] the full stack runs on the GCP Compute Engine VM;
+- [ ] only the HTTPS/WSS edge is publicly reachable;
+- [ ] PostgreSQL/Kafka data survive container recreation;
+- [ ] WIF authenticates GitHub Actions without JSON keys;
+- [ ] images are stored in Artifact Registry with immutable tags;
+- [ ] Terraform reproduces the VM/network/IAM/registry/secret infrastructure;
+- [ ] production secrets are not committed or emitted in logs;
+- [ ] Prometheus/Grafana/Tempo show metrics and traces from the deployed stack;
+- [ ] deployment includes health/smoke verification and a documented image rollback procedure;
+- [ ] no Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, or dedicated load balancer resource is required for MVP completion.
