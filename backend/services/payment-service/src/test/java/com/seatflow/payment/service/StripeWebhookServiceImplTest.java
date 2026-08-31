@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.gson.JsonObject;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.config.StripeConfig;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.model.entity.Payment;
@@ -61,7 +62,8 @@ class StripeWebhookServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new StripeWebhookServiceImpl(stripeConfig, paymentRepository, outboxEventRepository, objectMapper, meterRegistry);
+        service = new StripeWebhookServiceImpl(stripeConfig, paymentRepository, outboxEventRepository, objectMapper,
+                meterRegistry, mock(W3cTraceContextPropagator.class));
         when(stripeConfig.getWebhookSecret()).thenReturn("whsec_test");
     }
 

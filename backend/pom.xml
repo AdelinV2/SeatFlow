@@ -36,6 +36,8 @@
         <micrometer-registry-prometheus.version>1.17.0</micrometer-registry-prometheus.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
 
+        <opentelemetry-agent.version>2.12.0</opentelemetry-agent.version>
+
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>
 
@@ -105,6 +107,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 

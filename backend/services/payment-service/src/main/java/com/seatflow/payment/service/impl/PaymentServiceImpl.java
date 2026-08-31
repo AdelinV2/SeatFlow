@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
@@ -58,6 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final StripePaymentGateway stripePaymentGateway;
     private final PaymentMapper paymentMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     public PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, UUID authenticatedUserId) {
@@ -374,12 +376,20 @@ public class PaymentServiceImpl implements PaymentService {
 
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
         try {
-            EventEnvelope<?> envelope = EventEnvelope.of(
+            EventEnvelope<?> base = EventEnvelope.of(
                     eventType,
                     aggregateId.toString(),
                     CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
                     (com.seatflow.common.events.DomainEvent) payload
             );
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<?> envelope = base.withHeaders(headers);
             JsonNode payloadNode = objectMapper.valueToTree(envelope);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .aggregateId(aggregateId)

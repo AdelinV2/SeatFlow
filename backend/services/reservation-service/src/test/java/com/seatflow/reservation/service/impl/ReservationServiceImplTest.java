@@ -5,6 +5,7 @@ import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
@@ -72,6 +73,8 @@ class ReservationServiceImplTest {
     private EventClient eventClient;
     @Mock
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    @Mock
+    private W3cTraceContextPropagator w3cTraceContextPropagator;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ReservationService service;
@@ -79,7 +82,7 @@ class ReservationServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new ReservationServiceImpl(reservationRepository, seatHoldRepository, outboxEventRepository,
-                reservationMapper, eventClient, objectMapper, meterRegistry);
+                reservationMapper, eventClient, objectMapper, meterRegistry, w3cTraceContextPropagator);
         CorrelationContext.setCorrelationId("test-correlation");
     }
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.ticket.messaging.event.TicketIssuedEvent;
 import com.seatflow.ticket.model.entity.OutboxEvent;
 import com.seatflow.ticket.repository.OutboxEventRepository;
@@ -19,7 +20,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +39,7 @@ public class TicketOutboxPublisher {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Value("${outbox.publisher.topic:" + EventTopics.TICKET_EVENTS + "}")
     private String topic = EventTopics.TICKET_EVENTS;
@@ -57,27 +61,81 @@ public class TicketOutboxPublisher {
 
         for (OutboxEvent event : pendingEvents) {
             try {
-                Object payload = deserializePayload(event);
-                String correlationId = CorrelationContext.getCorrelationId().orElse(null);
-                if (correlationId == null || correlationId.isBlank()) {
-                    correlationId = "outbox-" + UUID.randomUUID();
+                EventEnvelope<Object> envelopeToSend = null;
+                // Try to interpret stored payload as already-enveloped JSON (new format with headers)
+                try {
+                    String raw = event.getPayload();
+                    if (raw != null && raw.trim().startsWith("{") && raw.contains("\"eventId\"")) {
+                        com.fasterxml.jackson.core.type.TypeReference<EventEnvelope<com.fasterxml.jackson.databind.JsonNode>> tr =
+                                new com.fasterxml.jackson.core.type.TypeReference<EventEnvelope<com.fasterxml.jackson.databind.JsonNode>>() {};
+                        EventEnvelope<com.fasterxml.jackson.databind.JsonNode> stored = objectMapper.readValue(raw, tr);
+                        if (stored.eventId() != null && stored.payload() != null) {
+                            Map<String, String> headers = new HashMap<>(stored.headers());
+                            if (!headers.containsKey(com.seatflow.common.events.EventHeaders.TRACEPARENT)) {
+                                Map<String, String> injected = new HashMap<>();
+                                try {
+                                    if (w3cTraceContextPropagator != null) {
+                                        w3cTraceContextPropagator.inject(injected);
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                                headers.putAll(injected);
+                            }
+                            Object payloadObj = stored.payload();
+                            // If payload is JsonNode of TicketIssuedEvent, convert to typed event if possible
+                            if ("TicketIssued".equals(stored.eventType()) && payloadObj instanceof com.fasterxml.jackson.databind.JsonNode) {
+                                try {
+                                    payloadObj = objectMapper.treeToValue((com.fasterxml.jackson.databind.JsonNode) payloadObj, TicketIssuedEvent.class);
+                                } catch (Exception ignored) {
+                                }
+                            }
+                            envelopeToSend = new EventEnvelope<>(
+                                    stored.eventId(),
+                                    stored.eventType(),
+                                    stored.occurredAt(),
+                                    stored.correlationId(),
+                                    stored.causationId(),
+                                    stored.aggregateId(),
+                                    stored.version(),
+                                    payloadObj,
+                                    headers
+                            );
+                        }
+                    }
+                } catch (Exception ignored) {
+                    envelopeToSend = null;
                 }
 
-                EventEnvelope<Object> envelope = new EventEnvelope<>(
-                        UUID.randomUUID().toString(),
-                        event.getEventType(),
-                        event.getCreatedAt(),
-                        correlationId,
-                        null,
-                        event.getAggregateId().toString(),
-                        1,
-                        payload
-                );
+                if (envelopeToSend == null) {
+                    Object payload = deserializePayload(event);
+                    String correlationId = CorrelationContext.getCorrelationId().orElse(null);
+                    if (correlationId == null || correlationId.isBlank()) {
+                        correlationId = "outbox-" + UUID.randomUUID();
+                    }
+                    Map<String, String> headers = new HashMap<>();
+                    try {
+                        if (w3cTraceContextPropagator != null) {
+                            w3cTraceContextPropagator.inject(headers);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    envelopeToSend = new EventEnvelope<>(
+                            UUID.randomUUID().toString(),
+                            event.getEventType(),
+                            event.getCreatedAt(),
+                            correlationId,
+                            null,
+                            event.getAggregateId().toString(),
+                            1,
+                            payload,
+                            headers
+                    );
+                }
 
                 CompletableFuture<SendResult<String, Object>> sendFuture = kafkaTemplate.send(
                         topic,
                         event.getAggregateId().toString(),
-                        envelope
+                        envelopeToSend
                 );
                 sendFuture.get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 

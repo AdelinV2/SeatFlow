@@ -7,7 +7,6 @@ import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.UUID;
 
@@ -28,10 +27,7 @@ class MessagingLogContextTest {
         MDC.put("outer.key", "outer-value");
         CorrelationContext.setCorrelationId("outer-correlation");
 
-        @SuppressWarnings("unchecked")
-        ObjectProvider<Tracer> noTracerProvider = mock(ObjectProvider.class);
-
-        try (MessagingLogContext ignored = MessagingLogContext.open("not-a-uuid", noTracerProvider)) {
+        try (MessagingLogContext ignored = MessagingLogContext.open("not-a-uuid", null)) {
             String generated = MDC.get(StructuredLogFields.CORRELATION_ID);
             assertThat(UUID.fromString(generated)).isNotNull();
             assertThat(MDC.get(StructuredLogFields.TRACE_ID)).isNull();
@@ -47,15 +43,12 @@ class MessagingLogContextTest {
         Tracer tracer = mock(Tracer.class);
         Span span = mock(Span.class);
         TraceContext traceContext = mock(TraceContext.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<Tracer> tracerProvider = mock(ObjectProvider.class);
-        when(tracerProvider.getIfAvailable()).thenReturn(tracer);
         when(tracer.currentSpan()).thenReturn(span);
         when(span.context()).thenReturn(traceContext);
         when(traceContext.traceId()).thenReturn("4bf92f3577b34da6a3ce929d0e0e4736");
         when(traceContext.spanId()).thenReturn("00f067aa0ba902b7");
 
-        try (MessagingLogContext ignored = MessagingLogContext.open(UUID.randomUUID().toString(), tracerProvider)) {
+        try (MessagingLogContext ignored = MessagingLogContext.open(UUID.randomUUID().toString(), tracer)) {
             assertThat(MDC.get(StructuredLogFields.TRACE_ID)).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
             assertThat(MDC.get(StructuredLogFields.SPAN_ID)).isEqualTo("00f067aa0ba902b7");
         }

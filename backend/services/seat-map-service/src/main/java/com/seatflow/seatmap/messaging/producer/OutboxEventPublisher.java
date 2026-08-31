@@ -1,6 +1,11 @@
 package com.seatflow.seatmap.messaging.producer;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.seatflow.common.events.EventHeaders;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.seatmap.model.entity.OutboxEvent;
 import com.seatflow.seatmap.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +18,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -27,6 +34,8 @@ public class OutboxEventPublisher {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Value("${outbox.publisher.topic:" + EventTopics.SEATMAP_EVENTS + "}")
     private String topic = EventTopics.SEATMAP_EVENTS;
@@ -47,10 +56,11 @@ public class OutboxEventPublisher {
 
         for (OutboxEvent event : events) {
             try {
+                String payloadToSend = enrichPayloadWithTraceHeaders(event.getPayload());
                 CompletableFuture<SendResult<String, String>> sendFuture = kafkaTemplate.send(
                         topic,
                         event.getAggregateId().toString(),
-                        event.getPayload()
+                        payloadToSend
                 );
                 sendFuture.get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
@@ -73,6 +83,46 @@ public class OutboxEventPublisher {
                             event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
                 }
             }
+        }
+    }
+
+    private String enrichPayloadWithTraceHeaders(String originalPayload) {
+        if (originalPayload == null || originalPayload.isBlank()) {
+            return originalPayload;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(originalPayload);
+            if (!root.isObject()) {
+                return originalPayload;
+            }
+            ObjectNode objectNode = (ObjectNode) root;
+            JsonNode headersNode = objectNode.get("headers");
+            boolean hasTraceParent = headersNode != null && headersNode.has(EventHeaders.TRACEPARENT);
+            if (hasTraceParent) {
+                return originalPayload;
+            }
+            Map<String, String> tempHeaders = new HashMap<>();
+            if (w3cTraceContextPropagator != null) {
+                try {
+                    w3cTraceContextPropagator.inject(tempHeaders);
+                } catch (Exception ignored) {
+                }
+            }
+            if (tempHeaders.isEmpty()) {
+                return originalPayload;
+            }
+            ObjectNode headersObject;
+            if (headersNode != null && headersNode.isObject()) {
+                headersObject = (ObjectNode) headersNode;
+            } else {
+                headersObject = objectMapper.createObjectNode();
+                objectNode.set("headers", headersObject);
+            }
+            tempHeaders.forEach(headersObject::put);
+            return objectMapper.writeValueAsString(objectNode);
+        } catch (Exception ex) {
+            log.debug("Failed to enrich seat-map payload with trace headers; sending original. reason={}", ex.getClass().getSimpleName());
+            return originalPayload;
         }
     }
 }

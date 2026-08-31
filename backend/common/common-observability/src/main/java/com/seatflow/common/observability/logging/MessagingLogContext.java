@@ -5,7 +5,6 @@ import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import org.slf4j.MDC;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
@@ -25,16 +24,15 @@ public final class MessagingLogContext implements AutoCloseable {
         this.previousCorrelationId = previousCorrelationId;
     }
 
-    public static MessagingLogContext open(String candidateCorrelationId, ObjectProvider<Tracer> tracerProvider) {
+    public static MessagingLogContext open(String candidateCorrelationId, Tracer tracer) {
         Map<String, String> previousMdc = MDC.getCopyOfContextMap();
         String previousCorrelationId = CorrelationContext.getCorrelationId().orElse(null);
         String correlationId = resolveCorrelationId(candidateCorrelationId);
 
+        MDC.clear();
         CorrelationContext.setCorrelationId(correlationId);
         MDC.put(StructuredLogFields.CORRELATION_ID, correlationId);
-        MDC.remove(StructuredLogFields.TRACE_ID);
-        MDC.remove(StructuredLogFields.SPAN_ID);
-        injectTraceContext(tracerProvider);
+        injectTraceContext(tracer);
 
         return new MessagingLogContext(previousMdc, previousCorrelationId);
     }
@@ -68,13 +66,12 @@ public final class MessagingLogContext implements AutoCloseable {
         return UUID.randomUUID().toString();
     }
 
-    private static void injectTraceContext(ObjectProvider<Tracer> tracerProvider) {
-        if (tracerProvider == null) {
+    private static void injectTraceContext(Tracer tracer) {
+        if (tracer == null) {
             return;
         }
 
-        Tracer tracer = tracerProvider.getIfAvailable();
-        Span span = tracer == null ? null : tracer.currentSpan();
+        Span span = tracer.currentSpan();
         TraceContext traceContext = span == null ? null : span.context();
         if (traceContext == null) {
             return;
