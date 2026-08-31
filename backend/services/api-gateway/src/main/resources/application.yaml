@@ -6,14 +6,27 @@ spring:
     name: api-gateway
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+          audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:authenticated}
   cloud:
     gateway:
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Headers Access-Control-Allow-Methods, RETAIN_FIRST
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Headers Access-Control-Allow-Methods, RETAIN_FIRST
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          filter:
+            request-rate-limiter:
+              deny-empty-key: true
+              empty-key-status-code: FORBIDDEN
 
 eureka:
   client:
@@ -27,6 +40,11 @@ eureka:
 seatflow:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200}
+  rate-limit:
+    replenish-rate: ${RATE_LIMIT_REPLENISH_RATE:20}
+    burst-capacity: ${RATE_LIMIT_BURST_CAPACITY:40}
+    requested-tokens: ${RATE_LIMIT_REQUESTED_TOKENS:1}
+    trusted-proxy-cidrs: ${RATE_LIMIT_TRUSTED_PROXY_CIDRS:[]}
 
 management:
   endpoints:

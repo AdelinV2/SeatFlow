@@ -6,6 +6,19 @@ spring:
   jackson:
     default-property-inclusion: non_null
     time-zone: UTC
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:0}
   security:
     oauth2:
       resourceserver:
@@ -21,6 +34,10 @@ server:
 seatflow:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  realtime:
+    instance-id: ${REALTIME_INSTANCE_ID:${spring.application.name}:${random.uuid}}
+    redis:
+      channel: ${REALTIME_REDIS_CHANNEL:seatflow:realtime:seat-status}
 
 eureka:
   instance:

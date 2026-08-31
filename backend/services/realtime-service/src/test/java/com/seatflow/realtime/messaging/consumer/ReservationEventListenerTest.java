@@ -9,7 +9,8 @@ import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
 import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class ReservationEventListenerTest {
     record DummyEvent(String message) implements DomainEvent {}
 
     @Mock
-    private SeatStatusBroadcaster seatStatusBroadcaster;
+    private RealtimeFanOutPublisher realtimeFanOutPublisher;
 
     private ObjectMapper objectMapper;
     private ReservationEventListener listener;
@@ -38,7 +39,7 @@ class ReservationEventListenerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        listener = new ReservationEventListener(seatStatusBroadcaster, objectMapper);
+        listener = new ReservationEventListener(realtimeFanOutPublisher, objectMapper);
     }
 
     @Test
@@ -69,7 +70,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.HELD, expiresAt);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -99,7 +100,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.SOLD, null);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -126,7 +127,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.AVAILABLE, null);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -154,7 +155,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.AVAILABLE, null);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -169,7 +170,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 
     @Test
@@ -178,6 +179,6 @@ class ReservationEventListenerTest {
         listener.handleReservationEvent(null);
         listener.handleReservationEvent(EventEnvelope.of(null, "id", "corr", null));
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 }

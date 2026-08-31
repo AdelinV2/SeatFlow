@@ -7,7 +7,7 @@ Containerized developer infrastructure for SeatFlow, provisioned with Docker Com
 | Service     | Image                      | Port (host) | Purpose                                                       |
 |-------------|----------------------------|-------------|---------------------------------------------------------------|
 | postgres    | `postgres:16-alpine`       | 5432        | Per-service PostgreSQL databases (7 logical databases).       |
-| redis       | `redis:7-alpine`           | 6379        | Cache and rate-limiting store.                                |
+| redis       | `redis:7-alpine`           | 6379        | Gateway rate-limit state and Realtime Pub/Sub fan-out.        |
 | kafka       | `apache/kafka:3.7.0`       | 9092        | Event backbone in KRaft mode (no ZooKeeper).                 |
 | prometheus  | `prom/prometheus:v2.51.0`  | 9090        | Scrapes Spring Boot Actuator `/actuator/prometheus`.          |
 | grafana     | `grafana/grafana:10.4.0`   | 3000        | Dashboards (admin / admin by default).                        |
@@ -64,6 +64,23 @@ Each microservice connects to its own database using the same `POSTGRES_USER`/`P
   4. `04-security-and-auth-audit.json`
 
 Access Grafana at <http://localhost:3000> (default credentials `admin` / `admin`).
+
+## Redis Responsibilities
+
+- `api-gateway` uses Redis-backed token buckets to enforce distributed limits on
+  reservation and payment creation endpoints. Limits are configured with
+  `RATE_LIMIT_REPLENISH_RATE`, `RATE_LIMIT_BURST_CAPACITY`, and
+  `RATE_LIMIT_REQUESTED_TOKENS`. When the gateway is behind a reverse proxy,
+  set `RATE_LIMIT_TRUSTED_PROXY_CIDRS` to the proxy/ingress CIDRs; forwarded
+  client addresses are ignored unless the immediate peer is in that allowlist.
+- `realtime-service` publishes normalized seat-status updates to
+  `REALTIME_REDIS_CHANNEL` (default `seatflow:realtime:seat-status`). Every healthy
+  Realtime instance subscribes and performs only its local STOMP broadcast.
+- Redis Pub/Sub is best-effort and non-durable. An offline WebSocket client must reload
+  authoritative state through the REST APIs after reconnecting.
+- Redis is never the source of truth for reservations, payments, tickets, or seat
+  ownership. PostgreSQL remains authoritative, and Kafka plus the Transactional Outbox
+  remains the durable event path.
 
 ## Notes
 

@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.http.HttpMethod;
 
 import java.net.URI;
 import java.util.List;
@@ -88,6 +89,25 @@ class RouteConfigurationTest {
     }
 
     @Test
+    @DisplayName("Verify rate-limited write predicates win for reservation and payment writes")
+    void rateLimitedWriteRoutePredicatesMatchBeforeBroadRoutes() {
+        assertRouteMatches("reservation-create-rate-limited", "/api/reservations", HttpMethod.POST);
+        assertRouteMatches("reservation-cancel-rate-limited", "/api/reservations/123/cancel", HttpMethod.POST);
+        assertRouteMatches("payment-intent-rate-limited", "/api/payments/intent", HttpMethod.POST);
+        assertRouteMatches("payment-tax-preview-rate-limited", "/api/payments/123/tax-preview", HttpMethod.POST);
+
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+        Map<String, Integer> order = new java.util.HashMap<>();
+        for (int index = 0; index < routes.size(); index++) {
+            order.put(routes.get(index).getId(), index);
+        }
+        assertThat(order.get("reservation-create-rate-limited"))
+                .isLessThan(order.get("reservation-service"));
+        assertThat(order.get("payment-intent-rate-limited"))
+                .isLessThan(order.get("payment-service"));
+    }
+
+    @Test
     @DisplayName("Verify ticket-service route predicate matches ticket, scanner, and admin endpoints")
     void ticketServiceRoutePredicateMatches() {
         assertRouteMatches("ticket-service", "/api/tickets/my-tickets");
@@ -111,6 +131,10 @@ class RouteConfigurationTest {
     }
 
     private void assertRouteMatches(String expectedRouteId, String path) {
+        assertRouteMatches(expectedRouteId, path, HttpMethod.GET);
+    }
+
+    private void assertRouteMatches(String expectedRouteId, String path, HttpMethod method) {
         List<Route> routes = routeLocator.getRoutes().collectList().block();
         assertThat(routes).isNotNull();
 
@@ -119,7 +143,7 @@ class RouteConfigurationTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Route not found: " + expectedRouteId));
 
-        MockServerHttpRequest request = MockServerHttpRequest.get(path).build();
+        MockServerHttpRequest request = MockServerHttpRequest.method(method, path).build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
         boolean predicateMatches = Boolean.TRUE.equals(

@@ -8,7 +8,8 @@ import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
 import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import com.seatflow.common.observability.context.CorrelationContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ReservationEventListener {
 
-    private final SeatStatusBroadcaster seatStatusBroadcaster;
+    private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -49,39 +50,19 @@ public class ReservationEventListener {
             switch (envelope.eventType()) {
                 case "ReservationHeld", "ReservationHeldEvent" -> {
                     ReservationHeldEvent event = convertPayload(envelope.payload(), ReservationHeldEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.HELD,
-                            event.expiresAt()
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.HELD, event.expiresAt());
                 }
                 case "ReservationExpired", "ReservationExpiredEvent" -> {
                     ReservationExpiredEvent event = convertPayload(envelope.payload(), ReservationExpiredEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.AVAILABLE,
-                            null
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.AVAILABLE, null);
                 }
                 case "ReservationCancelled", "ReservationCancelledEvent" -> {
                     ReservationCancelledEvent event = convertPayload(envelope.payload(), ReservationCancelledEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.AVAILABLE,
-                            null
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.AVAILABLE, null);
                 }
                 case "ReservationConfirmed", "ReservationConfirmedEvent" -> {
                     ReservationConfirmedEvent event = convertPayload(envelope.payload(), ReservationConfirmedEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.SOLD,
-                            null
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.SOLD, null);
                 }
                 default -> log.debug("Ignoring reservation event type: {}", envelope.eventType());
             }
@@ -101,5 +82,10 @@ public class ReservationEventListener {
             return targetClass.cast(payload);
         }
         return objectMapper.convertValue(payload, targetClass);
+    }
+
+    private void publish(String sourceEventId, java.util.UUID eventId, java.util.List<java.util.UUID> seatIds,
+                         SeatStatus status, java.time.Instant holdExpiresAt) {
+        realtimeFanOutPublisher.publish(sourceEventId, SeatStatusUpdateMessage.of(eventId, seatIds, status, holdExpiresAt));
     }
 }

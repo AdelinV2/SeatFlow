@@ -149,6 +149,7 @@ REDIS_SSL_ENABLED=false
 RATE_LIMIT_REPLENISH_RATE=20
 RATE_LIMIT_BURST_CAPACITY=40
 RATE_LIMIT_REQUESTED_TOKENS=1
+RATE_LIMIT_TRUSTED_PROXY_CIDRS=
 
 REALTIME_REDIS_CHANNEL=seatflow:realtime:seat-status
 ```
@@ -179,6 +180,7 @@ seatflow:
     replenish-rate: ${RATE_LIMIT_REPLENISH_RATE:20}
     burst-capacity: ${RATE_LIMIT_BURST_CAPACITY:40}
     requested-tokens: ${RATE_LIMIT_REQUESTED_TOKENS:1}
+    trusted-proxy-cidrs: ${RATE_LIMIT_TRUSTED_PROXY_CIDRS:[]}
 ```
 
 Behavioral contract:
@@ -318,18 +320,18 @@ mvn -f backend/pom.xml clean verify -B --no-transfer-progress
 docker compose -f docker/docker-compose.yml config
 ```
 
-- [ ] Gateway connects to Redis in local/docker/prod/test configurations.
-- [ ] `RedisRateLimiter` protects intended routes and returns `429` on quota overflow.
-- [ ] Caller rate-limit state is distributed through Redis.
-- [ ] Realtime connects to Redis in all profiles.
-- [ ] Reservation/Ticket Kafka updates are published to Redis Pub/Sub.
-- [ ] Every running Realtime instance receives Redis updates and broadcasts to its local STOMP clients.
-- [ ] Origin instance does not double-broadcast.
-- [ ] Redis failure cannot corrupt PostgreSQL/Kafka business state.
-- [ ] Reservation PostgreSQL locking/sweeper remains unchanged.
-- [ ] Redis health/metrics/logs are observable.
-- [ ] Gateway rate limiting is covered by a real Redis Testcontainers test.
-- [ ] Realtime multi-instance fan-out is covered by a real Redis Testcontainers test.
-- [ ] No production Redis credentials are committed.
-- [ ] Full backend verification and Docker Compose validation succeed.
-- [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/001-complete-redis-integration.md`.
+- [x] Gateway connects to Redis in local/docker/prod/test configurations.
+- [x] `RedisRateLimiter` protects intended routes and returns `429` on quota overflow.
+- [x] Caller rate-limit state is distributed through Redis.
+- [x] Realtime connects to Redis in all profiles.
+- [x] Reservation/Ticket Kafka updates are published to Redis Pub/Sub.
+- [x] Every running Realtime instance receives Redis updates and broadcasts to its local STOMP clients.
+- [x] Origin instance does not double-broadcast.
+- [x] Redis failure cannot corrupt PostgreSQL/Kafka business state.
+- [x] Reservation PostgreSQL locking/sweeper remains unchanged.
+- [x] Redis health/metrics/logs are observable.
+- [x] Gateway rate limiting is covered by a real Redis Testcontainers test.
+- [x] Realtime multi-instance fan-out is covered by a real Redis Testcontainers test.
+- [x] No production Redis credentials are committed.
+- [x] Full backend verification and Docker Compose validation succeed.
+- [x] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/001-complete-redis-integration.md`.

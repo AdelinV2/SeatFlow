@@ -505,11 +505,14 @@ CREATE INDEX idx_notif_pending_retry ON notification_logs(created_at ASC)
 
 ## 4. Redis Data Structures & Key Patterns
 
-Redis is strictly leveraged as a high-speed transient store and rate-limiting counter:
+Redis is strictly leveraged as a high-speed transient coordination layer. PostgreSQL
+remains the authoritative store for every reservation and ticket state transition.
 
 | Key Pattern | Data Type | TTL | Purpose |
 |---|---|---|---|
-| `rate:ip:{clientIp}` | Integer (Counter) | 1 min | API Gateway rate limiting for public checkout & guest APIs |
-| `cache:event:{eventId}` | String (JSON) | 5 min | Cached public event summary (invalidated on event update) |
-| `cache:seatmap:{venueId}` | String (JSON) | 30 min | Cached static venue seat layout |
-| `realtime:event:{eventId}:seats` | Hash (`seatId` -> status) | None (Active Event) | In-memory mirror for fast STOMP WebSocket broadcasts |
+| Gateway `RedisRateLimiter` token-bucket keys | Redis script-managed state | Framework-managed | Distributed API Gateway limits keyed by verified JWT subject or normalized client IP |
+| `seatflow:realtime:seat-status` | Pub/Sub channel | Not persisted | Best-effort fan-out from Kafka-consuming Realtime instances to every local STOMP broadcaster |
+
+Redis Pub/Sub messages are intentionally not replayable. A disconnected WebSocket client
+must reload the current seat state from the REST API when it reconnects. Redis is not used
+for reservation locks, hold expiration, durable events, or authoritative seat status.
