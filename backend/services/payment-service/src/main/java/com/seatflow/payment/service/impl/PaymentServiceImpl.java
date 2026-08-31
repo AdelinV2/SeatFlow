@@ -27,11 +27,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
 import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -156,7 +161,7 @@ public class PaymentServiceImpl implements PaymentService {
 
             Payment savedPayment = persistPayment(payment);
 
-            meterRegistry.counter("seatflow.payments.intent.created.total", "status", "INITIATED").increment();
+            safeIncrementPaymentIntentCreated();
             log.info("Payment entity persisted in INITIATED status. paymentId={}, stripePaymentIntentId={}, amount={}",
                     savedPayment.getId(), savedPayment.getStripePaymentIntentId(), savedPayment.getAmount());
 
@@ -164,10 +169,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         } catch (DataIntegrityViolationException dive) {
             log.warn("Database integrity violation during payment intent creation. reservationId={}", request.reservationId(), dive);
-            meterRegistry.counter("seatflow.payments.conflicts.total", "reason", "DB_UNIQUE_VIOLATION").increment();
+            safeIncrementPaymentConflict("DB_UNIQUE_VIOLATION");
             throw new ConflictException("Payment pipeline already initiated for this reservation", ErrorCode.CONFLICT);
         } finally {
-            timer.stop(meterRegistry.timer("seatflow.payments.intent.duration"));
+            safeRecordIntentDuration(timer);
         }
     }
 
@@ -365,7 +370,11 @@ public class PaymentServiceImpl implements PaymentService {
                     );
 
                     saveOutboxRecord("PaymentCompleted", payment.getId(), completedEvent);
-                    meterRegistry.counter("seatflow.payments.completed.total", "status", "SUCCESS").increment();
+                    String committedCurrency = payment.getCurrency();
+                    AfterCommitMetrics.afterCommit(() -> {
+                        safeRecordPaymentProcessed("SUCCESS", committedCurrency, "CARD");
+                        safeIncrementLegacyCompleted();
+                    });
                 }
             } catch (Exception ex) {
                 log.warn("Unable to sync payment status with Stripe for paymentId={}: {}", payment.getId(), ex.getMessage());
@@ -439,5 +448,43 @@ public class PaymentServiceImpl implements PaymentService {
         int updatedCount = paymentRepository.updateUserIdForCustomerEmail(userId, customerEmail, Instant.now());
         log.info("Claimed historical guest payments. userId={}, email={}, count={}", userId, customerEmail, updatedCount);
         return updatedCount;
+    }
+
+    // --- Bounded metrics helpers — never throw ---
+
+    private void safeRecordPaymentProcessed(String status, String currency, String paymentMethod) {
+        try {
+            Tags tags = MetricTagPolicy.paymentProcessed(status, currency, paymentMethod);
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_PROCESSED).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementLegacyCompleted() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_COMPLETED).tag("status", "SUCCESS").register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementPaymentIntentCreated() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_INTENT_CREATED).tag("status", "INITIATED").register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementPaymentConflict(String reason) {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_CONFLICTS).tag("reason", reason).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeRecordIntentDuration(Timer.Sample sample) {
+        try {
+            sample.stop(Timer.builder(SeatFlowMetricNames.PAYMENTS_INTENT_DURATION).register(meterRegistry));
+        } catch (Exception ignored) {
+        }
     }
 }

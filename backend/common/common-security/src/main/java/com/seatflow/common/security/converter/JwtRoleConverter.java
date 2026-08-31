@@ -5,9 +5,9 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class JwtRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
 
@@ -16,21 +16,28 @@ public class JwtRoleConverter implements Converter<Jwt, Collection<GrantedAuthor
     private static final String GROUPS_CLAIM = "groups";
     private static final String APP_METADATA_CLAIM = "app_metadata";
     private static final String USER_METADATA_CLAIM = "user_metadata";
+    private final JwtGrantedAuthoritiesConverter scopeAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
 
     @Override
     public Collection<GrantedAuthority> convert(Jwt jwt) {
         List<String> roles = extractRoles(jwt);
-        if (roles.isEmpty()) {
-            return List.of(new SimpleGrantedAuthority(SecurityRoles.ROLE_CUSTOMER));
-        }
-
-        return roles.stream()
+        Set<GrantedAuthority> authorities = roles.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(r -> !r.isEmpty())
                 .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role.toUpperCase(Locale.ROOT))
                 .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+        Collection<GrantedAuthority> scopeAuthorities = scopeAuthoritiesConverter.convert(jwt);
+        if (scopeAuthorities != null) {
+            authorities.addAll(scopeAuthorities);
+        }
+
+        if (roles.isEmpty() && !authorities.contains(new SimpleGrantedAuthority(SecurityRoles.SCOPE_METRICS_READ))) {
+            authorities.add(new SimpleGrantedAuthority(SecurityRoles.ROLE_CUSTOMER));
+        }
+        return List.copyOf(authorities);
     }
 
     private List<String> extractRoles(Jwt jwt) {

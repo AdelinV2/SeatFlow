@@ -66,6 +66,7 @@ out/
 !.env.example
 *.pem
 *.key
+docker/prometheus/prometheus-scrape-token
 
 # OS Generated
 Thumbs.db

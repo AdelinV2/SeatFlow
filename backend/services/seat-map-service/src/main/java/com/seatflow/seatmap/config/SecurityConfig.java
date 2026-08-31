@@ -34,13 +34,15 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Swagger / OpenAPI / Actuator — publicly accessible
+                // Swagger / OpenAPI — publicly accessible
                 .requestMatchers(
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/actuator/**"
+                    "/swagger-ui.html"
                 ).permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").hasAuthority("SCOPE_metrics.read")
+                .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 // Public venue browsing — NO authentication required
                 .requestMatchers(HttpMethod.GET, "/api/venues", "/api/venues/**").permitAll()
                 // Admin endpoints — ROLE_ADMIN required

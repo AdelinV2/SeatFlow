@@ -1,18 +1,49 @@
 global:
-  scrape_interval: 5s
-  evaluation_interval: 5s
+  scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'seatflow-gateway'
+    metrics_path: '/actuator/prometheus'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/prometheus-scrape-token
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+
+  - job_name: 'seatflow-eureka'
+    metrics_path: '/actuator/prometheus'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/prometheus-scrape-token
+    static_configs:
+      - targets: ['host.docker.internal:8761']
+
   - job_name: 'seatflow-services'
     metrics_path: '/actuator/prometheus'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
       - targets:
-          - 'host.docker.internal:8080' # API Gateway
-          - 'host.docker.internal:8081' # User Service
-          - 'host.docker.internal:8082' # Seat Map Service
-          - 'host.docker.internal:8083' # Event Service
-          - 'host.docker.internal:8084' # Reservation Service
-          - 'host.docker.internal:8085' # Payment Service
-          - 'host.docker.internal:8086' # Ticket Service
-          - 'host.docker.internal:8087' # Realtime Service
-          - 'host.docker.internal:8088' # Notification Service
+          - 'host.docker.internal:8081'
+          - 'host.docker.internal:8082'
+          - 'host.docker.internal:8083'
+          - 'host.docker.internal:8084'
+          - 'host.docker.internal:8085'
+          - 'host.docker.internal:8086'
+          - 'host.docker.internal:8087'
+          - 'host.docker.internal:8088'
+    # OpenMetrics reserves counter-family names ending in `_created`. Keep the
+    # application source valid and restore SeatFlow's stable dashboard name at
+    # ingestion time.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'seatflow_reservations_created_events_total'
+        target_label: __name__
+        replacement: 'seatflow_reservations_created_total'
+        action: replace
