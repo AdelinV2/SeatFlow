@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { staffGuard } from './core/guards/staff.guard';
 
 export const routes: Routes = [
   {
@@ -95,6 +96,15 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/auth/callback/auth-callback.component').then(
         (m) => m.AuthCallbackComponent,
+      ),
+  },
+  // Staff Scanner Route (Protected by staffGuard per ADR-005)
+  {
+    path: 'scanner',
+    canActivate: [staffGuard],
+    loadComponent: () =>
+      import('./features/scanner/staff-scanner/staff-scanner.component').then(
+        (m) => m.StaffScannerComponent,
       ),
   },
   // Admin Routes (Protected by adminGuard)

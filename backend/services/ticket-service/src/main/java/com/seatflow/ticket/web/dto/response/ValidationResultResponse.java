@@ -18,6 +18,7 @@ public record ValidationResultResponse(
     @Schema(description = "Venue section name") String section,
     @Schema(description = "Seat row label") String rowNumber,
     @Schema(description = "Seat number") Integer seatNumber,
+    @Schema(description = "Ticket tier / seat type") String ticketType,
     @Schema(description = "Scan timestamp") Instant scannedAt,
     @Schema(description = "Descriptive outcome message") String message
 ) {}

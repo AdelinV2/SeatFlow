@@ -49,6 +49,9 @@ class NotificationServiceImplTest {
     private TicketServiceClient ticketServiceClient;
 
     @Mock
+    private QrCodeGeneratorService qrCodeGeneratorService;
+
+    @Mock
     private MeterRegistry meterRegistry;
 
     @Mock
@@ -92,6 +95,8 @@ class NotificationServiceImplTest {
 
         byte[] samplePdf = new byte[]{1, 2, 3, 4};
         when(ticketServiceClient.fetchTicketPdf(ticketId)).thenReturn(samplePdf);
+        when(qrCodeGeneratorService.generateQrCodeBase64(eq("SF:QR:112233"), eq(200), eq(200)))
+                .thenReturn("data:image/png;base64,sampleQrBase64");
         when(emailTemplateRenderer.renderTemplate(eq(NotificationTemplateType.TICKET_ISSUED), anyMap()))
                 .thenReturn("<html>Ticket HTML</html>");
         when(emailService.sendEmail(eq("alice@example.com"), anyString(), anyString(), anyList()))
@@ -101,6 +106,7 @@ class NotificationServiceImplTest {
 
         verify(notificationLogRepository).existsByIdempotencyKey(expectedIdempotencyKey);
         verify(ticketServiceClient).fetchTicketPdf(ticketId);
+        verify(qrCodeGeneratorService).generateQrCodeBase64("SF:QR:112233", 200, 200);
         verify(emailTemplateRenderer).renderTemplate(eq(NotificationTemplateType.TICKET_ISSUED), anyMap());
         verify(emailService).sendEmail(eq("alice@example.com"), contains("SF-TKT-112233"), eq("<html>Ticket HTML</html>"), anyList());
 

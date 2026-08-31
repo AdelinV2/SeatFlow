@@ -104,6 +104,7 @@ class TicketServiceImplTest {
                 .userId(ownerId)
                 .customerEmail("buyer@example.com")
                 .attendeeName("Jane Doe")
+                .ticketType("VIP")
                 .eventId(eventId)
                 .seatId(seatId)
                 .price(new BigDecimal("100.00"))
@@ -273,6 +274,7 @@ class TicketServiceImplTest {
         assertThat(result.valid()).isTrue();
         assertThat(result.result()).isEqualTo(ValidationResult.SUCCESS);
         assertThat(result.ticketId()).isEqualTo(ticketId);
+        assertThat(result.ticketType()).isEqualTo("VIP");
         verify(ticketRepository).save(any(Ticket.class));
         ArgumentCaptor<TicketValidation> captor = ArgumentCaptor.forClass(TicketValidation.class);
         verify(validationRepository).save(captor.capture());

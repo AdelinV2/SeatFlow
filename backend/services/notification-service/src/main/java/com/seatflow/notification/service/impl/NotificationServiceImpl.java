@@ -14,6 +14,7 @@ import com.seatflow.notification.repository.NotificationLogRepository;
 import com.seatflow.notification.service.EmailService;
 import com.seatflow.notification.service.EmailTemplateRenderer;
 import com.seatflow.notification.service.NotificationService;
+import com.seatflow.notification.service.QrCodeGeneratorService;
 import com.seatflow.notification.web.dto.common.EmailAttachmentDto;
 import com.seatflow.notification.web.dto.response.NotificationLogResponse;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -42,6 +43,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final EmailService emailService;
     private final EmailTemplateRenderer emailTemplateRenderer;
     private final TicketServiceClient ticketServiceClient;
+    private final QrCodeGeneratorService qrCodeGeneratorService;
     private final MeterRegistry meterRegistry;
 
     @Override
@@ -73,10 +75,23 @@ public class NotificationServiceImpl implements NotificationService {
                     event.ticketId(), ex.getMessage());
         }
 
+        // Generate admission QR code Base64 Data URL for email embed
+        String qrPayload = event.qrCodeData() != null && !event.qrCodeData().isBlank()
+                ? event.qrCodeData()
+                : event.ticketCode();
+        String qrCodeBase64 = null;
+        try {
+            qrCodeBase64 = qrCodeGeneratorService.generateQrCodeBase64(qrPayload, 200, 200);
+        } catch (Exception ex) {
+            log.warn("Could not generate QR code image for ticketCode={}: {}", event.ticketCode(), ex.getMessage());
+        }
+
         Map<String, Object> variables = new HashMap<>();
         variables.put("attendeeName", event.attendeeName() != null ? event.attendeeName() : "Valued Customer");
         variables.put("ticketCode", event.ticketCode());
         variables.put("ticketId", event.ticketId() != null ? event.ticketId().toString() : "");
+        variables.put("qrCodeImage", qrCodeBase64);
+        variables.put("qrCodeData", qrPayload);
         variables.put("netAmount", event.netAmount());
         variables.put("taxAmount", event.taxAmount());
         variables.put("totalAmount", event.price());

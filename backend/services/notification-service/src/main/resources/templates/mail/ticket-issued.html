@@ -26,10 +26,23 @@
                                 Your digital ticket is confirmed! Please find your official ticket receipt and details below. Your printable ticket PDF is also attached to this email.
                             </p>
 
-                            <!-- Ticket Code Card -->
-                            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
-                                <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 1px;">Ticket Code</span>
-                                <div style="font-size: 22px; font-weight: 800; color: #4f46e5; font-family: monospace; margin-top: 4px;" th:text="${ticketCode}">SF-TKT-12345678</div>
+                            <!-- Admission QR Code Presentation Box -->
+                            <div style="background-color: #ffffff; border: 2px dashed #4f46e5; border-radius: 12px; padding: 24px 20px; text-align: center; margin-bottom: 24px; box-shadow: 0 4px 12px -2px rgba(79, 70, 229, 0.12);">
+                                <div style="margin-bottom: 12px;">
+                                    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #4f46e5; letter-spacing: 1.5px; background-color: #eef2ff; padding: 4px 12px; border-radius: 20px; border: 1px solid #c7d2fe; display: inline-block;">
+                                        Gate Admission QR Code
+                                    </span>
+                                </div>
+                                <div style="display: inline-block; padding: 12px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                                    <img th:if="${qrCodeImage != null}" th:src="${qrCodeImage}" alt="Ticket Admission QR Code" width="180" height="180" style="display: block; margin: 0 auto; border-radius: 6px;" />
+                                    <div th:unless="${qrCodeImage != null}" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; background-color: #f8fafc; color: #64748b; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-family: monospace;">
+                                        [QR CODE READY]
+                                    </div>
+                                </div>
+                                <div style="font-size: 22px; font-weight: 800; color: #0f172a; font-family: monospace; letter-spacing: 1px; margin-top: 14px;" th:text="${ticketCode}">SF-TKT-12345678</div>
+                                <p style="font-size: 13px; color: #64748b; margin: 6px 0 0 0; font-weight: 500;">
+                                    Present this QR code on your mobile device at venue gate entry
+                                </p>
                             </div>
 
                             <!-- Event Details Table -->

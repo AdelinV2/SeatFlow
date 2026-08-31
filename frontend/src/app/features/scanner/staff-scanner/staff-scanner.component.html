@@ -1,0 +1,461 @@
+<div class="scanner-page min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 lg:p-8">
+  <div class="mx-auto max-w-7xl space-y-6">
+
+    <!-- Top Gate HUD Header -->
+    <header class="hud-header rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 p-4 sm:p-6 backdrop-blur-2xl shadow-xl dark:shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-emerald-500 shadow-lg shadow-indigo-500/25">
+          <svg class="size-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+            <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+            <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+            <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+            <rect width="8" height="8" x="8" y="8" rx="1" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">Staff Gate Scanner</h1>
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            Venue Check-in & Sensory Validation Terminal
+          </p>
+        </div>
+      </div>
+
+      <!-- HUD Device ID & Controls -->
+      <div class="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        <!-- Device ID Badge -->
+        <div class="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 px-3.5 py-2 font-mono text-xs shadow-inner">
+          <span class="text-slate-500 dark:text-slate-400 text-[11px]">DEVICE:</span>
+          <span class="font-bold text-slate-900 dark:text-white tracking-wider">{{ deviceId() }}</span>
+        </div>
+
+        <!-- Live Status Pill -->
+        <div
+          class="flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-bold"
+          [ngClass]="{
+            'border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300': isCooldownActive(),
+            'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400': isScanning() && !isValidating() && !isCooldownActive(),
+            'border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 animate-pulse': isValidating(),
+            'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400': cameraError() || (!isScanning() && !isCooldownActive())
+          }"
+        >
+          <span
+            class="size-2 rounded-full"
+            [ngClass]="{
+              'bg-amber-500 dark:bg-amber-400 animate-ping': isCooldownActive(),
+              'bg-emerald-500 animate-ping': isScanning() && !isValidating() && !isCooldownActive(),
+              'bg-indigo-500 dark:bg-indigo-400 animate-spin': isValidating(),
+              'bg-rose-500': cameraError() || (!isScanning() && !isCooldownActive())
+            }"
+          ></span>
+          <span>
+            @if (isValidating()) {
+              VALIDATING...
+            } @else if (isCooldownActive()) {
+              COOLDOWN ({{ cooldownRemainingSeconds() }}S)
+            } @else if (isScanning()) {
+              LIVE READY
+            } @else {
+              CAMERA PAUSED
+            }
+          </span>
+        </div>
+
+        <!-- Audio Mute Toggle Button -->
+        <button
+          type="button"
+          (click)="audioFeedback.toggleMute()"
+          class="btn-spring flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-white/5 px-3.5 py-2 text-xs font-semibold transition-colors hover:bg-slate-200/80 dark:hover:bg-white/15"
+          [ngClass]="audioFeedback.isMuted() ? 'text-slate-500 dark:text-slate-400' : 'text-emerald-600 dark:text-emerald-400'"
+          [attr.aria-label]="audioFeedback.isMuted() ? 'Unmute scanner audio' : 'Mute scanner audio'"
+        >
+          @if (audioFeedback.isMuted()) {
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+            <span>Muted</span>
+          } @else {
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+            <span>Audio ON</span>
+          }
+        </button>
+
+        <!-- Sound Testing Quick Actions (Staff Tooling) -->
+        <div class="hidden xl:flex items-center gap-1 bg-slate-100/80 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-1 text-[11px] font-mono">
+          <span class="text-slate-500 dark:text-slate-400 px-1.5">TEST:</span>
+          <button
+            type="button"
+            (click)="testAudioTone('SUCCESS')"
+            class="px-2 py-1 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-colors font-semibold"
+            title="Test Success Chime"
+          >
+            Chime
+          </button>
+          <button
+            type="button"
+            (click)="testAudioTone('ALREADY_USED')"
+            class="px-2 py-1 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 transition-colors font-semibold"
+            title="Test Warning Beep"
+          >
+            Beep
+          </button>
+          <button
+            type="button"
+            (click)="testAudioTone('INVALID')"
+            class="px-2 py-1 rounded-xl bg-rose-500/15 text-rose-700 dark:text-rose-300 hover:bg-rose-500/25 transition-colors font-semibold"
+            title="Test Error Buzz"
+          >
+            Buzz
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content 2-Column Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column: Optical Viewfinder & Manual Entry (7 cols) -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- Scanner Viewfinder Box -->
+        <div class="viewfinder-card relative overflow-hidden rounded-3xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-900/90 p-4 sm:p-6 backdrop-blur-2xl shadow-xl dark:shadow-2xl">
+          
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span
+                class="size-2 rounded-full"
+                [ngClass]="isCooldownActive() ? 'bg-amber-500 dark:bg-amber-400 animate-ping' : 'bg-emerald-500 dark:bg-emerald-400 animate-pulse'"
+              ></span>
+              <span class="text-xs font-mono font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                @if (isCooldownActive()) {
+                  Scan Rate Cooldown ({{ cooldownRemainingSeconds() }}s)
+                } @else {
+                  Camera Viewfinder
+                }
+              </span>
+            </div>
+
+            <!-- Viewfinder Actions -->
+            <div class="flex items-center gap-2">
+              @if (hasTorch()) {
+                <button
+                  type="button"
+                  (click)="toggleTorch()"
+                  class="btn-spring flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/15"
+                >
+                  <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                  <span>Torch</span>
+                </button>
+              }
+
+              <button
+                type="button"
+                (click)="toggleCamera()"
+                class="btn-spring flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/15"
+              >
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                  <path d="M16 16h5v5" />
+                </svg>
+                <span>{{ isScanning() ? 'Pause Camera' : 'Start Camera' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Video Viewport Frame -->
+          <div class="relative w-full aspect-square max-h-[460px] mx-auto rounded-2xl overflow-hidden bg-black/90 border border-slate-300 dark:border-white/10 flex items-center justify-center">
+            
+            <!-- html5-qrcode video container -->
+            <div id="qr-reader-container" class="w-full h-full"></div>
+
+            <!-- Glowing HUD Reticle Brackets (Overlaid on top of video) -->
+            <div class="hud-reticle-overlay pointer-events-none absolute inset-4 sm:inset-8 border border-white/10 rounded-2xl transition-all duration-300">
+              <!-- Top-Left Bracket -->
+              <div
+                class="reticle-corner top-0 left-0 border-t-4 border-l-4 rounded-tl-xl size-8 sm:size-12"
+                [ngClass]="isCooldownActive() ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : 'border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]'"
+              ></div>
+              <!-- Top-Right Bracket -->
+              <div
+                class="reticle-corner top-0 right-0 border-t-4 border-r-4 rounded-tr-xl size-8 sm:size-12"
+                [ngClass]="isCooldownActive() ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : 'border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]'"
+              ></div>
+              <!-- Bottom-Left Bracket -->
+              <div
+                class="reticle-corner bottom-0 left-0 border-b-4 border-l-4 rounded-bl-xl size-8 sm:size-12"
+                [ngClass]="isCooldownActive() ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : 'border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]'"
+              ></div>
+              <!-- Bottom-Right Bracket -->
+              <div
+                class="reticle-corner bottom-0 right-0 border-b-4 border-r-4 rounded-br-xl size-8 sm:size-12"
+                [ngClass]="isCooldownActive() ? 'border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)]' : 'border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]'"
+              ></div>
+
+              <!-- Animated Laser Sweep Line -->
+              @if (isScanning() && !isValidating() && !isCooldownActive()) {
+                <div class="laser-sweep pointer-events-none absolute inset-x-2 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_#10B981]"></div>
+              }
+
+              <!-- Center Alignment Target Crosshair -->
+              <div class="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+                <div class="size-16 rounded-full border border-dashed border-emerald-400/60 flex items-center justify-center">
+                  <div class="size-2 rounded-full bg-emerald-400"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cooldown Overlay -->
+            @if (isCooldownActive()) {
+              <div class="absolute inset-x-4 top-6 z-20 flex justify-center animate-fade-in-up">
+                <div class="flex items-center gap-2.5 rounded-full border border-amber-400/50 bg-amber-950/85 px-4 py-1.5 backdrop-blur-xl shadow-xl text-amber-200 text-xs font-mono font-bold">
+                  <span class="size-2 rounded-full bg-amber-400 animate-ping"></span>
+                  <span>NEXT SCAN READY IN {{ cooldownRemainingSeconds() }}S</span>
+                  <button
+                    type="button"
+                    (click)="resetCooldown()"
+                    class="btn-spring rounded-lg bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-100 hover:bg-amber-500/40"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </div>
+            }
+
+            <!-- Validating / Network Spinner Overlay -->
+            @if (isValidating()) {
+              <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center gap-3 z-20 animate-fade-in-up">
+                <div class="size-12 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin"></div>
+                <span class="font-mono text-sm font-bold tracking-widest text-emerald-300">
+                  VERIFYING TICKET...
+                </span>
+              </div>
+            }
+
+            <!-- Camera Error / Permission Fallback View -->
+            @if (cameraError()) {
+              <div class="absolute inset-0 bg-slate-950/90 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center gap-4 z-20">
+                <div class="size-14 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shadow-lg shadow-rose-500/25">
+                  <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </div>
+                <div class="space-y-1 max-w-sm">
+                  <h4 class="text-base font-bold text-white">Camera Offline or Inaccessible</h4>
+                  <p class="text-xs text-slate-400">
+                    {{ cameraError() }}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  (click)="startCameraScanner()"
+                  class="btn-spring px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-colors shadow-lg shadow-indigo-600/30"
+                >
+                  Retry Camera Connection
+                </button>
+              </div>
+            }
+          </div>
+
+          <div class="mt-4 text-center">
+            <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5">
+              <svg class="size-3.5 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+              <span>Hold QR code within the illuminated brackets for instant verification (3s rate limit).</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Manual Alphanumeric Fallback Card -->
+        <div class="manual-entry-card rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-lg dark:shadow-xl">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="size-8 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-600 dark:text-slate-300">
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M7 8h10" />
+                <path d="M7 12h10" />
+                <path d="M7 16h10" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Manual Ticket Code Entry</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Type damaged ticket codes or paste deep-link URLs</p>
+            </div>
+          </div>
+
+          <form (ngSubmit)="submitManualCode()" class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+              <input
+                type="text"
+                name="manualCode"
+                [ngModel]="manualCode()"
+                (ngModelChange)="manualCode.set($event)"
+                placeholder="e.g. SF-TKT-XXXX-XXXX or guest URL"
+                class="w-full h-12 rounded-2xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-black/40 px-4 font-mono text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 dark:focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase transition-all"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              @if (manualCode()) {
+                <button
+                  type="button"
+                  (click)="manualCode.set('')"
+                  class="absolute right-3 top-3.5 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                  aria-label="Clear manual input"
+                >
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="12" />
+                  </svg>
+                </button>
+              }
+            </div>
+
+            <app-tactile-button
+              type="submit"
+              variant="primary"
+              size="md"
+              [disabled]="!manualCode().trim() || isValidating()"
+              [loading]="isValidating()"
+            >
+              Validate Ticket
+            </app-tactile-button>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Sensory Result & Recent Scans Feed (5 cols) -->
+      <div class="lg:col-span-5 space-y-6">
+
+        <!-- Active Result Card (3-Color Sensory Feedback Matrix) -->
+        @if (currentResult()) {
+          <app-validation-result-card
+            [result]="currentResult()"
+            (dismissed)="dismissResult()"
+          />
+        } @else {
+          <!-- Idle / Ready State HUD Card -->
+          <div class="idle-card rounded-3xl border border-dashed border-slate-300 dark:border-white/15 bg-white/40 dark:bg-slate-900/40 p-8 text-center backdrop-blur-xl flex flex-col items-center justify-center min-h-[320px] space-y-4 shadow-sm dark:shadow-none">
+            <div class="size-16 rounded-3xl bg-indigo-500/10 border border-indigo-400/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-inner">
+              <svg class="size-8 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </div>
+            <div class="space-y-1 max-w-xs">
+              <h3 class="text-lg font-bold text-slate-900 dark:text-white">Scanner Standby</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Aim the viewfinder at an attendee ticket QR code or submit a code above to begin validation.
+              </p>
+            </div>
+            <div class="flex items-center gap-2 pt-2 text-[11px] font-mono text-slate-500 dark:text-slate-500">
+              <span class="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
+              <span>SENSORY MATRIX ACTIVE</span>
+            </div>
+          </div>
+        }
+
+        <!-- Real-Time Scans Audit Feed -->
+        <div class="history-card rounded-3xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-lg dark:shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Recent Gate Scans</span>
+                <span class="rounded-full bg-slate-100 dark:bg-white/10 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-700 dark:text-white/80">
+                  {{ totalScans() }}
+                </span>
+              </h3>
+              <div class="flex items-center gap-3 mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span class="text-emerald-600 dark:text-emerald-400">{{ grantedScans() }} Granted</span>
+                <span>•</span>
+                <span class="text-rose-600 dark:text-rose-400">{{ rejectedScans() }} Warnings/Denied</span>
+              </div>
+            </div>
+
+            @if (scanHistory().length > 0) {
+              <button
+                type="button"
+                (click)="clearHistory()"
+                class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                Clear Log
+              </button>
+            }
+          </div>
+
+          <!-- History Item List -->
+          @if (scanHistory().length > 0) {
+            <div class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+              @for (item of scanHistory(); track item.scannedAt + item.ticketCode) {
+                <div
+                  (click)="inspectHistoryItem(item)"
+                  class="btn-spring group flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 dark:border-white/5 bg-slate-50/80 dark:bg-white/5 p-3 hover:bg-slate-100 dark:hover:bg-white/10 hover:border-slate-300 dark:hover:border-white/20 cursor-pointer transition-all"
+                  role="button"
+                  tabindex="0"
+                >
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div
+                      class="size-2 rounded-full shrink-0"
+                      [ngClass]="{
+                        'bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_8px_#10B981]': item.result === 'SUCCESS',
+                        'bg-amber-500 dark:bg-amber-400 shadow-[0_0_8px_#F59E0B]': item.result === 'ALREADY_USED',
+                        'bg-rose-500 dark:bg-rose-400 shadow-[0_0_8px_#F43F5E]': item.result === 'INVALID' || item.result === 'CANCELLED'
+                      }"
+                    ></div>
+                    <div class="flex flex-col min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {{ item.attendeeName || item.ticketCode }}
+                        </span>
+                        @if (item.ticketType || item.tierName) {
+                          <span class="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.2 rounded-md">
+                            {{ item.ticketType || item.tierName }}
+                          </span>
+                        }
+                        @if (item.section) {
+                          <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                            {{ item.section }} · R{{ item.rowNumber || '-' }} · S{{ item.seatNumber || '-' }}
+                          </span>
+                        }
+                      </div>
+                      <span class="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                        {{ item.scannedAt | sfDate: 'time' }} • {{ item.ticketCode }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="shrink-0 flex items-center gap-1.5">
+                    <app-status-badge [status]="item.result" />
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="py-8 text-center text-xs text-slate-500 dark:text-slate-500">
+              No scans recorded during this session.
+            </div>
+          }
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+</div>
