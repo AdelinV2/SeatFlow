@@ -73,6 +73,13 @@ class RateLimitConfigTest {
                         .header("X-Forwarded-For", "198.51.100.9")
                         .build());
         assertThat(RateLimitConfig.normalizedRemoteAddress(untrusted, properties)).isEqualTo("203.0.113.7");
+
+        MockServerWebExchange trustedOnlyChain = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/reservations")
+                        .remoteAddress(new InetSocketAddress("10.0.0.4", 12345))
+                        .header("X-Forwarded-For", "10.0.0.2, 10.0.0.3")
+                        .build());
+        assertThat(RateLimitConfig.normalizedRemoteAddress(trustedOnlyChain, properties)).isEqualTo("10.0.0.4");
     }
 
     @Test
