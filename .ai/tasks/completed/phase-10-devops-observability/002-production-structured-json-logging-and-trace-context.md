@@ -28,11 +28,14 @@ Make every JVM process emit a consistent ECS/Logstash-compatible JSON event in `
 
 - `[MODIFY]` `backend/common/common-observability/pom.xml` — retain the Logstash encoder and add only the test dependency required by masking/MDC tests.
 - `[MODIFY]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/filter/MdcLoggingFilter.java` — populate/restore MDC safely and use dotted field names.
-- `[NEW]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/logging/SensitiveDataMaskingConverter.java` — one reusable Logback converter for message/stack-trace masking.
-- `[NEW]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/logging/StructuredLogFields.java` — constants for all MDC names and approved taxonomy keys.
+- `[VERIFY]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/logging/SensitiveDataMaskingConverter.java` — already implemented; verify its staged masking patterns remain correct for readable local/dev pattern output. It is not the production JSON masking mechanism.
+- `[VERIFY]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/logging/StructuredLogFields.java` — already implemented; verify its constants match §4.5 and no new fields are needed.
+- `[NEW]` `backend/common/common-observability/src/main/java/com/seatflow/common/observability/logging/LogstashSensitiveValueMasker.java` — `ValueMasker` used by `LogstashEncoder` to mask production JSON message and stack-trace values.
 - `[MODIFY]` `backend/common/common-observability/src/main/resources/logback-spring.xml` — production JSON encoder and local/test appenders.
 - `[NEW]` `backend/common/common-observability/src/test/java/com/seatflow/common/observability/logging/SensitiveDataMaskingConverterTest.java`.
 - `[MODIFY]` `backend/common/common-observability/src/test/java/com/seatflow/common/observability/filter/MdcLoggingFilterTest.java`.
+- `[MODIFY]` `backend/pom.xml` — upgrade `logstash-logback-encoder` from `8.0` to `8.1`.
+- `[VERIFY]` each business service `pom.xml` — confirm `micrometer-tracing-bridge-otel` is present directly or inherited, so an active Micrometer `Tracer` is available at runtime.
 - `[MODIFY]` `backend/services/api-gateway/src/main/resources/logback-spring.xml`.
 - `[MODIFY]` `backend/services/eureka-server/src/main/resources/logback-spring.xml`.
 - `[MODIFY]` `backend/services/user-service/src/main/resources/logback-spring.xml`.
@@ -51,24 +54,39 @@ Make every JVM process emit a consistent ECS/Logstash-compatible JSON event in `
 
 ### 4.1 Structured JSON and Masking Contract
 
-Use a production-only `LogstashEncoder` with the following providers. The converter is applied before output and must mask both message and throwable text.
+Use a production-only `LogstashEncoder` with the following providers. Bridge the Spring application name into Logback before the production profile and use that Logback property rather than an inline `${spring.application.name}` substitution. The JSON generator decorator is the production masking mechanism; `SensitiveDataMaskingConverter` remains the pattern converter used by readable local/dev output.
 
 ```xml
+<springProperty name="APP_NAME" source="spring.application.name" defaultValue="seatflow-service"/>
+<springProperty name="SEATFLOW_SERVICE_NAME" source="seatflow.observability.service-name" defaultValue="${APP_NAME}"/>
+
 <encoder class="net.logstash.logback.encoder.LogstashEncoder">
   <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME}","service.environment":"${SPRING_PROFILES_ACTIVE:-prod}"}</customFields>
   <includeMdcKeyName>trace.id</includeMdcKeyName><includeMdcKeyName>span.id</includeMdcKeyName>
   <includeMdcKeyName>correlation.id</includeMdcKeyName><includeMdcKeyName>user.id</includeMdcKeyName>
   <includeMdcKeyName>http.method</includeMdcKeyName><includeMdcKeyName>http.uri</includeMdcKeyName>
   <includeMdcKeyName>http.client_ip</includeMdcKeyName>
-  <maskingPattern>(?i)(Bearer\\s+eyJ[^\\s,]+|sk_(?:live|test)_[A-Za-z0-9_]+|whsec_[A-Za-z0-9_]+|password=[^\\s,&]+|token=[^\\s,&]+|\\b(?:\\d[ -]*?){13,16}\\b)</maskingPattern>
+  <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+    <valueMasker class="com.seatflow.common.observability.logging.LogstashSensitiveValueMasker"/>
+  </jsonGeneratorDecorator>
+  <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+    <maxDepthPerThrowable>20</maxDepthPerThrowable>
+    <maxLength>4096</maxLength>
+    <rootCauseFirst>true</rootCauseFirst>
+    <exclude>sun\\.reflect\\..*</exclude>
+  </throwableConverter>
 </encoder>
 ```
 
-Mask replacements are `Bearer [MASKED_JWT]`, `[MASKED_STRIPE_SECRET]`, `[MASKED]`, and `****-****-****-` plus the final four PAN digits. Preserve non-secret diagnostic context.
+`LogstashSensitiveValueMasker` must implement `net.logstash.logback.mask.ValueMasker` and delegate to `SensitiveDataMaskingConverter.mask(String)`. Its `mask()` implementation must apply the same staged regex substitutions to the incoming field value, preserving non-secret diagnostic context rather than replacing the entire value; return the original value unchanged when no pattern matches. This applies regardless of field name and therefore must mask both JSON `message` and `stack_trace` fields. Mask replacements are `Bearer [MASKED_JWT]`, `[MASKED_STRIPE_SECRET]`, `[MASKED]`, and `****-****-****-` plus the final four PAN digits. Add coverage for a throwable containing a PAN or Bearer token in emitted JSON output.
+
+Do not use `Markers.appendRaw(...)` for log payloads because it can bypass structured value masking. Use `Markers.append(key, value)` for structured domain context.
 
 ### 4.2 Request MDC Contract
 
-`MdcLoggingFilter` has order after Spring Security. It reads `X-Correlation-Id` only if it is a valid UUID; otherwise generate a UUID. It writes:
+`MdcLoggingFilter` is registered automatically by Spring Boot because it is declared as a `@Bean` in `CommonObservabilityAutoConfiguration`; services must **not** wrap it in a `FilterRegistrationBean`, which would register it twice. Its `@Order(Ordered.LOWEST_PRECEDENCE - 1)` is correct because it executes after Spring Security's `DelegatingFilterProxy` (order `-100`), allowing the filter to read the authenticated principal while still running before the final lowest-precedence filters.
+
+It reads `X-Correlation-Id` only if it is a valid UUID; otherwise generate a UUID, and it echoes the accepted/generated ID in the response `X-Correlation-Id` header. It writes:
 
 ```java
 MDC.put("correlation.id", correlationId);
@@ -76,11 +94,14 @@ MDC.put("http.method", request.getMethod());
 MDC.put("http.uri", request.getRequestURI());
 MDC.put("http.client_ip", resolvedClientIp);
 authentication.ifPresent(a -> MDC.put("user.id", a.getName()));
-tracer.currentSpan().context().traceId(); // -> trace.id when valid
-tracer.currentSpan().context().spanId();  // -> span.id when valid
+Span span = tracer.currentSpan();
+if (span != null && span.context() != null) {
+    String traceId = span.context().traceId(); // -> trace.id when valid
+    String spanId = span.context().spanId();   // -> span.id when valid
+}
 ```
 
-Resolve client IP from the servlet/container remote address unless the application has explicitly enabled trusted forwarded-header support; never trust an arbitrary client-supplied `X-Forwarded-For`. Preserve any pre-existing MDC map and restore it in `finally` so nested dispatches and async hand-off code do not erase outer context.
+Resolve client IP from the servlet/container remote address unless the application has explicitly enabled trusted forwarded-header support; never trust an arbitrary client-supplied `X-Forwarded-For`. Preserve any pre-existing MDC map and restore it in `finally` so nested dispatches and async hand-off code do not erase outer context; also call `CorrelationContext.clear()` in that `finally` block.
 
 ### 4.3 Log Taxonomy Contract
 
@@ -115,13 +136,13 @@ public final class StructuredLogFields {
 ---
 
 ## 5. Step-by-Step Implementation Sequence (For Builder / Implementer)
-1. Checkout `feat/p10-002-production-json-logging-trace-context`; run the existing common-observability tests.
+1. Checkout `feat/p10-002-production-json-logging-trace-context`; upgrade `logstash-logback-encoder` from `8.0` to `8.1` in `backend/pom.xml`, verify every business-service POM has `micrometer-tracing-bridge-otel` directly or through dependency management, then run the existing common-observability tests.
 2. Introduce shared field constants and update the filter to populate dotted fields, trace/span values when tracing is available, validated correlation IDs, and safe MDC restoration.
-3. Implement the masking converter with compiled patterns and unit tests for card, Stripe, JWT, password/token, benign text, and throwable content.
-4. Replace the shared production encoder with the specified JSON mapping; keep readable local/default output and silent/test-safe configuration.
+3. Verify the existing `SensitiveDataMaskingConverter` compiled patterns and implement `LogstashSensitiveValueMasker` as a `ValueMasker` that delegates staged partial substitutions to it; add unit tests for card, Stripe, JWT, password/token, benign text, and throwable content in production JSON output.
+4. Replace the shared production encoder with the specified JSON mapping; keep readable local/default output and silent/test-safe configuration. In every `logback-spring.xml`, change `<springProfile name="staging,prod,production">` to `<springProfile name="prod">` because `prod` is the only defined production profile.
 5. Align the ten application logback files with the shared format and add production service-name configuration.
 6. Update the named lifecycle logs in reservation, payment, ticket, gateway and outbox publishers to the taxonomy; do not change business decisions.
-7. Assert emitted JSON contains required keys, masking occurs before output, authentication contributes `user.id`, and MDC is absent after filter completion.
+7. Assert emitted JSON contains required keys, masking occurs before output in both `message` and `stack_trace`, authentication contributes `user.id`, and MDC is absent after filter completion. Add a test that constructs `MdcLoggingFilter` through its `@Autowired` constructor path using a mock `ObjectProvider<Tracer>` and verifies that active trace/span values populate `trace.id` and `span.id` in MDC.
 
 ---
 
@@ -136,8 +157,8 @@ mvn -f backend/pom.xml clean verify -B --no-transfer-progress
 ```
 
 - [ ] Each production process emits valid JSON with the seven required correlation/trace/request fields when available.
-- [ ] Card, Stripe, JWT, password, and token fixtures are masked in message and stack trace output.
+- [ ] Card, Stripe, JWT, password, and token fixtures are masked through `MaskingJsonGeneratorDecorator`/`LogstashSensitiveValueMasker` in both message and stack trace output.
 - [ ] Local output remains readable and tests do not require an external collector.
-- [ ] MDC is restored on success, exception, and async dispatch.
+- [ ] MDC is restored and `CorrelationContext` is cleared on success, exception, and async dispatch.
 - [ ] No root exception handler was added to a microservice.
 - [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/002-production-structured-json-logging-and-trace-context.md`.
