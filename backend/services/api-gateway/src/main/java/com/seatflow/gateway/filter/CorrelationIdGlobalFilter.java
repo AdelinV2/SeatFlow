@@ -19,11 +19,8 @@ public class CorrelationIdGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String correlationId = request.getHeaders().getFirst(CORRELATION_ID_HEADER);
-
-        if (!StringUtils.hasText(correlationId)) {
-            correlationId = UUID.randomUUID().toString();
-        }
+        String rawCorrelationId = request.getHeaders().getFirst(CORRELATION_ID_HEADER);
+        String correlationId = isValidUuid(rawCorrelationId) ? rawCorrelationId.trim() : UUID.randomUUID().toString();
 
         final String finalCorrelationId = correlationId;
 
@@ -34,6 +31,18 @@ public class CorrelationIdGlobalFilter implements GlobalFilter, Ordered {
         exchange.getResponse().getHeaders().set(CORRELATION_ID_HEADER, finalCorrelationId);
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
+    }
+
+    private boolean isValidUuid(String candidate) {
+        if (!StringUtils.hasText(candidate)) {
+            return false;
+        }
+        try {
+            UUID.fromString(candidate.trim());
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
     }
 
     @Override

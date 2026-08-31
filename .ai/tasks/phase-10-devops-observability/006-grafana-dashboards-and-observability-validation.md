@@ -26,14 +26,14 @@ Ship four versioned, auto-provisioned Grafana dashboards that use the metrics, t
 
 ## 3. Exact File Inventory
 
-- `[MODIFY]` `docker/grafana/provisioning/datasources/datasource.yml` — Prometheus, Tempo, and optional Loki-compatible JSON log datasource configuration with provisioned UIDs.
+- `[MODIFY]` `docker/grafana/provisioning/datasources/datasource.yml` — Prometheus, Tempo, and Loki (`seatflow-logs`) datasource configuration with provisioned UIDs.
 - `[MODIFY]` `docker/grafana/provisioning/dashboards/dashboard-provider.yml` — folder, path, update interval and UID-safe provider settings.
 - `[MODIFY]` `docker/grafana/dashboards/01-seatflow-executive-and-business.json`.
 - `[MODIFY]` `docker/grafana/dashboards/02-microservices-sre-and-red-health.json`.
 - `[MODIFY]` `docker/grafana/dashboards/03-kafka-and-outbox-pipeline.json`.
 - `[MODIFY]` `docker/grafana/dashboards/04-security-and-auth-audit.json`.
 - `[NEW]` `docker/grafana/dashboards/dashboard-schema-version.json` — dashboard schema/UID manifest used by tests to prevent accidental duplicate UIDs.
-- `[MODIFY]` `docker/docker-compose.monitoring.yml` — datasource endpoints, Grafana healthcheck and optional local log backend only when it is configured.
+- `[MODIFY]` `docker/docker-compose.monitoring.yml` — datasource endpoints, Grafana healthcheck, Tempo, Prometheus, and Loki/Promtail services.
 - `[NEW]` `docker/grafana/tests/validate-dashboards.ps1` — deterministic JSON/schema/query validation script.
 - `[MODIFY]` `docker/README.md` — dashboard URLs, purpose, required demo traffic, and troubleshooting.
 
@@ -68,18 +68,24 @@ datasources:
     access: proxy
     url: ${GRAFANA_LOKI_URL:http://loki:3100}
     editable: false
+    jsonData:
+      derivedFields:
+        - datasourceUid: seatflow-tempo
+          matcherRegex: '"trace\.id":"([a-f0-9]{32})"'
+          name: TraceID
+          url: '$${__value.raw}'
 ```
 
-If a local log backend is not added in P10-005, provision only Prometheus/Tempo and hide the trace-to-log link behind the documented production log datasource override. Do not create an invalid default Loki datasource merely to satisfy a visual link.
+Both local Docker Compose and production environments run Loki with Promtail, enabling full bidirectional navigation between Tempo distributed traces and structured JSON logs.
 
 ### 4.2 Required Dashboard Panels and Queries
 
 | Dashboard | Non-negotiable panels / exact query contract |
 |---|---|
 | Executive & Business (`uid=seatflow-executive`) | Active holds `sum(seatflow_reservations_active_holds)`; created holds `sum(increase(seatflow_reservations_created_total[$__range]))`; expiration percentage `100 * sum(rate(seatflow_reservations_expired_total[5m])) / clamp_min(sum(rate(seatflow_reservations_created_total[5m])), 1)`; successful payments `sum(increase(seatflow_payments_processed_total{status="SUCCESS"}[$__range]))` and conversion from dedicated bounded funnel counters. |
-| SRE & RED (`uid=seatflow-sre-red`) | RPS `sum(rate(http_server_requests_seconds_count[5m])) by (application)`; 5xx percentage `100 * sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (application) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])) by (application),1)`; p95/p99 histogram quantiles; Hikari active/max and JVM GC pause panels. |
-| Kafka & Outbox (`uid=seatflow-kafka-outbox`) | pending rows exported as `seatflow_outbox_pending`; p99 publish latency histogram; Kafka lag from a configured Kafka exporter metric; `sum(rate(seatflow_outbox_dead_letter_total[5m])) by (service,event_type)`. |
-| Security & Audit (`uid=seatflow-security-audit`) | 401 rate, Stripe webhook verification failures, Gateway 429 rate, Cloud Armor blocks if managed metric export is configured, and Tempo trace search plus trace-to-log link keyed by `trace.id`. |
+| SRE & RED (`uid=seatflow-sre-red`) | RPS `sum(rate(http_server_requests_seconds_count[5m])) by (application)`; 5xx percentage `100 * sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) by (application) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])) by (application),1)`; p95/p99 histogram quantiles; Hikari active/max and JVM GC pause panels; application error log stream (`{service_name=~"$application"} \| json \| level="ERROR"`). |
+| Kafka & Outbox (`uid=seatflow-kafka-outbox`) | pending rows exported as `seatflow_outbox_pending`; p99 publish latency histogram; Kafka lag from a configured Kafka exporter metric; `sum(rate(seatflow_outbox_dead_letter_total[5m])) by (service,event_type)`; dead-letter log stream via Loki. |
+| Security & Audit (`uid=seatflow-security-audit`) | 401 rate, Stripe webhook verification failures, Gateway 429 rate, Cloud Armor blocks if managed metric export is configured, Tempo trace search, and Loki security audit log stream keyed by `trace.id` / `user.id`. |
 
 Dashboard JSON must set `schemaVersion`, stable `uid`, `editable: false`, UTC timezone, tags `seatflow`/`phase-10`, datasource UID references rather than display names, and template variable values limited to `application`, `environment`, `event_type`, `status`, and `payment_method`.
 
@@ -98,8 +104,8 @@ Use dashboard annotations and documented alert-ready expressions (alert rule pro
 2. Stabilize datasource/provider UIDs and add the dashboard manifest/validation script.
 3. Update Dashboard 1 with active holds/revenue/funnel/expiration queries backed by metrics. If a metric is missing, add a bounded metric in P10-004 before proceeding rather than fabricating a query.
 4. Update Dashboards 2–4 with the exact RED, outbox/Kafka, and security/tracing query contracts.
-5. Configure Tempo-to-log correlation only for a real provisioned log datasource; document the production override otherwise.
-6. Start the complete Compose stack, generate deterministic reservation/payment/ticket/error fixtures, then validate Grafana health, datasources, dashboard import, and no-data behavior.
+5. Configure bidirectional Tempo-to-Loki (`tracesToLogsV2`) and Loki-to-Tempo (`derivedFields`) correlation keyed by `trace.id`.
+6. Start the complete Compose stack, generate deterministic reservation/payment/ticket/error fixtures, then validate Grafana health, datasources (Prometheus, Tempo, Loki), dashboard import, and no-data behavior.
 7. Store screenshots only in review artifacts/CI, not in dashboard JSON or source-controlled operational secrets.
 
 ---
@@ -113,10 +119,12 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.services.ym
 powershell -ExecutionPolicy Bypass -File docker/grafana/tests/validate-dashboards.ps1
 curl --fail http://localhost:3000/api/health
 curl --fail 'http://localhost:9090/api/v1/query?query=up'
+curl --fail http://localhost:3100/ready
 ```
 
 - [ ] Grafana provisions four uniquely identified dashboards without manual import.
 - [ ] Every panel datasource/query resolves against a running local stack or deliberately displays documented no-data state.
 - [ ] RED, business, Kafka/outbox, and security/audit panels cover the required taxonomy.
+- [ ] Prometheus, Tempo, and Loki datasources connect cleanly with bidirectional `trace.id` correlation.
 - [ ] Trace links use `trace.id`, and dashboard/query assets contain no PII/secrets/high-cardinality labels.
 - [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/006-grafana-dashboards-and-observability-validation.md`.

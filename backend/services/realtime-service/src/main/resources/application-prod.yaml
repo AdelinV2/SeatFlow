@@ -19,6 +19,10 @@ eureka:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL}
 
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+
 logging:
   config: classpath:logback-spring.xml
   level:

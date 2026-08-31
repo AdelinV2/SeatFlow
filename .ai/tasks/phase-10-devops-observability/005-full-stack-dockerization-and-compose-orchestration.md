@@ -41,11 +41,13 @@ The same independently containerized architecture must work locally and in produ
 ### Compose
 - `[MODIFY]` `docker/docker-compose.yml` — PostgreSQL/KRaft Kafka/Redis/Eureka/Gateway core.
 - `[NEW]` `docker/docker-compose.services.yml` — eight business services + frontend.
-- `[NEW]` `docker/docker-compose.monitoring.yml` — OTel Collector + Prometheus + Grafana + Tempo.
+- `[NEW]` `docker/docker-compose.monitoring.yml` — OTel Collector + Prometheus + Grafana + Tempo + Loki + Promtail.
 - `[NEW]` `docker/docker-compose.prod.yml` — production-only immutable images, `prod` profile, resource limits, private/public port policy, restart/logging/security overrides.
 
 ### Observability / Configuration
 - `[NEW]` `docker/otel/tempo.yaml` and `[MODIFY]` `docker/otel/otel-collector-config.yaml`.
+- `[NEW]` `docker/loki/loki-config.yaml` — Loki single-binary filesystem configuration.
+- `[NEW]` `docker/promtail/promtail-config.yaml` — Promtail Docker container log scraper and Loki exporter configuration.
 - `[MODIFY]` `docker/prometheus/prometheus.yml`, `docker/README.md`, and `.env.example`.
 - `[MODIFY]` each JVM `application-docker.yaml` and `application-prod.yaml` so both Compose profiles resolve infrastructure through environment variables/Docker DNS while retaining different security/logging/resource behavior.
 - `[MODIFY]` frontend environment/runtime configuration so `/api/` and `/ws/` are same-origin through Nginx in production.
@@ -100,7 +102,7 @@ Local developer execution may publish service/infrastructure ports for diagnosti
 
 `docker-compose.services.yml` defines `user-service` 8081 through `notification-service` 8088 plus the frontend.
 
-`docker-compose.monitoring.yml` defines OTel Collector, Prometheus, Grafana and Tempo on `seatflow-net`.
+`docker-compose.monitoring.yml` defines OTel Collector, Prometheus, Grafana, Tempo, Loki, and Promtail on `seatflow-net`.
 
 ---
 
@@ -154,6 +156,7 @@ Production publishes only the edge HTTP/HTTPS ports required by Nginx. No produc
 8080-8088 backend services
 9090 Prometheus
 3000 Grafana
+3100 Loki
 3200 Tempo
 4317/4318 OTel
 ```
@@ -170,6 +173,7 @@ kafka_data
 prometheus_data
 grafana_data
 tempo_data
+loki_data
 ```
 
 PostgreSQL and Kafka volumes are mandatory production state. Redis remains disposable unless a later measured requirement changes that.
@@ -184,7 +188,7 @@ Most business services:  ~256-384 MiB JVM heap each
 Reservation/Event:       up to ~512 MiB when measured
 Kafka:                   bounded demo heap
 PostgreSQL:              bounded connections/memory
-Prometheus/Tempo:        short retention and bounded storage
+Prometheus/Tempo/Loki:   short retention and bounded storage (~128-256 MiB RAM for Loki, ~64-128 MiB for Promtail)
 ```
 
 Implement Compose CPU/memory limits and `JAVA_TOOL_OPTIONS` from measured full-stack startup/runtime behavior. Leave host memory headroom; do not allocate all 16 GiB to container maxima.

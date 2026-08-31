@@ -26,7 +26,9 @@ The VM runs independently containerized SeatFlow components:
 - OpenTelemetry Collector;
 - Prometheus;
 - Grafana;
-- Tempo.
+- Tempo;
+- Loki;
+- Promtail.
 
 Keep these managed GCP capabilities because they provide meaningful cloud engineering value at low cost:
 

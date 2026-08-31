@@ -35,6 +35,10 @@ eureka:
   instance:
     prefer-ip-address: true
 
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+
 springdoc:
   api-docs:
     enabled: false
@@ -42,6 +46,7 @@ springdoc:
     enabled: false
 
 logging:
+  config: classpath:logback-spring.xml
   level:
     com.seatflow: INFO
     org.hibernate.SQL: WARN

@@ -2,10 +2,13 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <springProfile name="local,docker">
+    <conversionRule conversionWord="mask" class="com.seatflow.common.observability.logging.SensitiveDataMaskingConverter" />
+
+    <springProfile name="dev,local,default,docker">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{36}) - %msg %mdc%n</pattern>
+                <pattern>%mask(%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%blue(%X{correlation.id:-N/A})] [%cyan(%t)] %yellow(%logger{36}) : %msg%n%throwable)</pattern>
+                <charset>utf8</charset>
             </encoder>
         </appender>
         <root level="INFO">
@@ -13,14 +16,18 @@
         </root>
     </springProfile>
 
-    <springProfile name="prod">
+    <springProfile name="staging,prod,production">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <includeMdcKeyName>traceId</includeMdcKeyName>
-                <includeMdcKeyName>spanId</includeMdcKeyName>
-                <includeMdcKeyName>correlationId</includeMdcKeyName>
-                <includeMdcKeyName>userId</includeMdcKeyName>
-                <includeMdcKeyName>serviceName</includeMdcKeyName>
+                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME:-payment-service}","service.environment":"${SPRING_PROFILES_ACTIVE:-prod}"}</customFields>
+                <includeMdcKeyName>trace.id</includeMdcKeyName>
+                <includeMdcKeyName>span.id</includeMdcKeyName>
+                <includeMdcKeyName>correlation.id</includeMdcKeyName>
+                <includeMdcKeyName>user.id</includeMdcKeyName>
+                <includeMdcKeyName>http.method</includeMdcKeyName>
+                <includeMdcKeyName>http.uri</includeMdcKeyName>
+                <includeMdcKeyName>http.client_ip</includeMdcKeyName>
+                <maskingPattern>(?i)(Bearer\s+eyJ[^\s,]+|sk_(?:live|test)_[A-Za-z0-9_]+|whsec_[A-Za-z0-9_]+|password=[^\s,&amp;]+|token=[^\s,&amp;]+|\b(?:\d[ -]*?){13,16}\b)</maskingPattern>
             </encoder>
         </appender>
         <root level="INFO">

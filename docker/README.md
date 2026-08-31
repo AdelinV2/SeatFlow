@@ -10,6 +10,9 @@ Containerized developer infrastructure for SeatFlow, provisioned with Docker Com
 | redis       | `redis:7-alpine`           | 6379        | Gateway rate-limit state and Realtime Pub/Sub fan-out.        |
 | kafka       | `apache/kafka:3.7.0`       | 9092        | Event backbone in KRaft mode (no ZooKeeper).                 |
 | prometheus  | `prom/prometheus:v2.51.0`  | 9090        | Scrapes Spring Boot Actuator `/actuator/prometheus`.          |
+| tempo       | `grafana/tempo:2.4.1`      | 3200        | Distributed tracing backend (OTLP receiver on 4317/4318).     |
+| loki        | `grafana/loki:3.0.0`       | 3100        | Centralized log aggregation engine for structured JSON logs.  |
+| promtail    | `grafana/promtail:3.0.0`   | -           | Ships container stdout/stderr JSON logs to Loki.             |
 | grafana     | `grafana/grafana:10.4.0`   | 3000        | Dashboards (admin / admin by default).                        |
 
 ## Prerequisites
@@ -55,8 +58,10 @@ Each microservice connects to its own database using the same `POSTGRES_USER`/`P
   `/actuator/prometheus`. `host.docker.internal` is mapped to the host gateway via
   `extra_hosts`, so microservices running on the developer workstation are reachable
   from inside the Prometheus container.
-- **Grafana** auto-provisions the `Prometheus` datasource and four dashboards under the
-  `SeatFlow Production` folder:
+- **Tempo** receives distributed traces from the OpenTelemetry Collector / Java Agent.
+- **Loki** aggregates structured JSON logs shipped by **Promtail** from container stdout.
+- **Grafana** auto-provisions `Prometheus`, `Tempo`, and `Loki` datasources with seamless
+  Trace-to-Log (`tracesToLogsV2`) correlation and four dashboards under the `SeatFlow Production` folder:
 
   1. `01-seatflow-executive-and-business.json`
   2. `02-microservices-sre-and-red-health.json`

@@ -55,9 +55,11 @@ Private Docker network
    +--> Prometheus
    +--> Grafana
    +--> Tempo
+   +--> Loki
+   +--> Promtail
 ```
 
-Only the edge proxy exposes public application ports. PostgreSQL, Kafka, Redis, Eureka, backend service ports, Actuator endpoints, Prometheus, Tempo, and Grafana are private by default.
+Only the edge proxy exposes public application ports. PostgreSQL, Kafka, Redis, Eureka, backend service ports, Actuator endpoints, Prometheus, Tempo, Loki, and Grafana are private by default.
 
 ### 1.2 Managed GCP Services Kept
 
@@ -133,7 +135,7 @@ docker/docker-compose.services.yml
   eight business services + frontend
 
 docker/docker-compose.monitoring.yml
-  OTel Collector + Prometheus + Grafana + Tempo
+  OTel Collector + Prometheus + Grafana + Tempo + Loki + Promtail
 ```
 
 Phase 10 adds:
@@ -165,7 +167,7 @@ Most JVM services:      256–384 MiB max heap
 Reservation/Event:      384–512 MiB max heap when measurements justify it
 Kafka:                  bounded heap appropriate for demo traffic
 PostgreSQL:             conservative shared buffers / connection counts
-Prometheus/Tempo:       short portfolio retention
+Prometheus/Tempo/Loki:  short portfolio retention, local volume storage (~128-256 MiB RAM for Loki)
 ```
 
 Resource limits are operational safeguards, not business invariants; tune them from measured usage.
@@ -230,13 +232,13 @@ SeatFlow keeps the engineering value of self-hosted observability while avoiding
 ```text
 Spring Boot services
    |
-   +--> structured JSON logs
-   +--> Micrometer /actuator/prometheus
-   +--> OTLP traces
+   +--> structured JSON logs (stdout) ---> Promtail ---> Loki
+   +--> Micrometer /actuator/prometheus -----------------> Prometheus
+   +--> OTLP traces ----------------------> OTel Collector -> Tempo
 
-OTel Collector ----> Tempo
-Prometheus --------> service metrics
-Grafana -----------> Prometheus + Tempo dashboards
+Prometheus --------> service metrics ------------------\
+Tempo -------------> distributed traces --------------> Grafana (Dashboards + Trace-to-Log)
+Loki --------------> aggregated JSON logs -------------/
 ```
 
 Production logs must be structured JSON with correlation/trace context and sensitive-data masking. Container stdout/stderr uses bounded log rotation. Where configured, the GCP Ops Agent / Cloud Logging may ingest selected host/container logs, but Cloud Logging does not replace the local structured-log contract.
@@ -361,7 +363,7 @@ Production state is stored in a versioned GCS backend outside source control. Re
 - Least-privilege deployment and VM service accounts.
 - Secret values originate from Secret Manager or explicitly approved third-party secret stores.
 - Only the public edge ports are Internet-accessible.
-- PostgreSQL, Kafka, Redis, Eureka, Actuator, Prometheus, Tempo, and Grafana remain private unless temporarily exposed through a controlled admin path.
+- PostgreSQL, Kafka, Redis, Eureka, Actuator, Prometheus, Tempo, Loki, and Grafana remain private unless temporarily exposed through a controlled admin path.
 - Containers run as non-root where supported.
 - Images are immutable, versioned, and built from pinned base/runtime versions.
 - Production Compose and deployment scripts do not echo secrets.
@@ -398,6 +400,6 @@ Phase 10 cloud/deployment work is complete when:
 - [ ] images are stored in Artifact Registry with immutable tags;
 - [ ] Terraform reproduces the VM/network/IAM/registry/secret infrastructure;
 - [ ] production secrets are not committed or emitted in logs;
-- [ ] Prometheus/Grafana/Tempo show metrics and traces from the deployed stack;
+- [ ] Prometheus/Grafana/Tempo/Loki show metrics, traces, and structured log streams from the deployed stack;
 - [ ] deployment includes health/smoke verification and a documented image rollback procedure;
 - [ ] no Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, or dedicated load balancer resource is required for MVP completion.

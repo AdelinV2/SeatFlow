@@ -160,6 +160,7 @@ Do not publicly expose:
 8080-8088 backend services
 9090 Prometheus
 3000 Grafana
+3100 Loki
 3200 Tempo
 4317/4318 OTel
 ```
@@ -287,7 +288,7 @@ P10-007 uses these outputs/GitHub environment variables to address the existing 
 
 ## 12. Observability Integration
 
-Self-hosted Prometheus/Grafana/Tempo remain part of the Compose runtime.
+Self-hosted Prometheus/Grafana/Tempo/Loki remain part of the Compose runtime.
 
 Terraform may additionally enable/install GCP Ops Agent and required IAM/API support for host-level Cloud Logging/Monitoring where this materially improves operation. Avoid duplicating every Prometheus metric into a paid managed service without a need.
 
@@ -298,7 +299,8 @@ The runbook must explain how to inspect:
 - Nginx/application logs;
 - Grafana dashboards;
 - Prometheus targets;
-- Tempo traces.
+- Tempo traces;
+- Loki log streams.
 
 ---
 

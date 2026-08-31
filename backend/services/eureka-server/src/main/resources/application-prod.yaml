@@ -10,6 +10,13 @@ eureka:
     enable-self-preservation: true
     eviction-interval-timer-in-ms: 30000
 
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+
+logging:
+  config: classpath:logback-spring.xml
+
 management:
   endpoint:
     health:
