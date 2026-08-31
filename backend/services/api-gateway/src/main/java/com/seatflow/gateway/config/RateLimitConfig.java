@@ -85,7 +85,10 @@ public class RateLimitConfig {
                 return candidate;
             }
         }
-        return addresses.isEmpty() ? null : addresses.get(0);
+        // If every hop is in a trusted range, the chain contains no verifiable
+        // client address. Falling back to the transport peer avoids allowing a
+        // caller to rotate keys by injecting arbitrary trusted-range addresses.
+        return null;
     }
 
     private static String normalizeIp(String candidate) {
