@@ -56,10 +56,27 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${SEATFLOW_DEPLOYMENT_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        seatflow.reservations.hold.duration: true
+        seatflow.outbox.publish.latency: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+      minimum-expected-value:
+        http.server.requests: 1ms
+      maximum-expected-value:
+        http.server.requests: 10s
 
 springdoc:
   api-docs:

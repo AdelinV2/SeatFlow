@@ -26,9 +26,12 @@ class UserEventsConsumerTest {
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new ParameterNamesModule())
             .registerModule(new JavaTimeModule());
+    private final com.seatflow.common.observability.tracing.KafkaListenerTraceScope kafkaScope =
+            mock(com.seatflow.common.observability.tracing.KafkaListenerTraceScope.class);
 
     private UserEventsConsumer consumer() {
-        return new UserEventsConsumer(reservationService, objectMapper);
+        org.mockito.Mockito.when(kafkaScope.open(any(), any(), any(), any())).thenReturn(mock(com.seatflow.common.observability.tracing.KafkaListenerTraceScope.class));
+        return new UserEventsConsumer(reservationService, objectMapper, kafkaScope);
     }
 
     @Test

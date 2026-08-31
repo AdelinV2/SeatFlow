@@ -53,7 +53,6 @@ class JwtRoleConverterTest {
 
         assertThat(authorities).containsExactlyInAnyOrder(
                 new SimpleGrantedAuthority("ROLE_ADMIN"),
-                new SimpleGrantedAuthority("ROLE_CUSTOMER"),
                 new SimpleGrantedAuthority("ROLE_CUSTOMER")
         );
     }
@@ -122,5 +121,38 @@ class JwtRoleConverterTest {
                 new SimpleGrantedAuthority("ROLE_ADMIN"),
                 new SimpleGrantedAuthority("ROLE_STAFF")
         );
+    }
+
+    @Test
+    void shouldPreserveOauthScopesAlongsideRoles() {
+        Jwt jwt = Jwt.withTokenValue("scoped-token")
+                .header("alg", "RS256")
+                .subject("monitoring")
+                .claim("roles", List.of("ADMIN"))
+                .claim("scope", "openid metrics.read")
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities).containsExactlyInAnyOrder(
+                new SimpleGrantedAuthority("ROLE_ADMIN"),
+                new SimpleGrantedAuthority("SCOPE_openid"),
+                new SimpleGrantedAuthority("SCOPE_metrics.read")
+        );
+    }
+
+    @Test
+    void shouldNotGrantCustomerRoleToDedicatedMetricsIdentity() {
+        Jwt jwt = Jwt.withTokenValue("metrics-token")
+                .header("alg", "RS256")
+                .subject("prometheus")
+                .claim("scope", "metrics.read")
+                .build();
+
+        Collection<GrantedAuthority> authorities = converter.convert(jwt);
+
+        assertThat(authorities)
+                .containsExactly(new SimpleGrantedAuthority("SCOPE_metrics.read"))
+                .doesNotContain(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
     }
 }

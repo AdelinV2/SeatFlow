@@ -4,11 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
 import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.ticket.messaging.event.TicketIssuedEvent;
 import com.seatflow.ticket.model.entity.OutboxEvent;
 import com.seatflow.ticket.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +24,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -139,10 +145,15 @@ public class TicketOutboxPublisher {
                 );
                 sendFuture.get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-                int updated = outboxRepository.markPublished(event.getId(), Instant.now());
+                Instant publishedAt = Instant.now();
+                int updated = outboxRepository.markPublished(event.getId(), publishedAt);
                 if (updated > 0) {
                     log.info("Ticket outbox event published successfully. outboxId={}, aggregateId={}, eventType={}, topic={}",
                             event.getId(), event.getAggregateId(), event.getEventType(), topic);
+                    safeRecordOutboxLatency(event, publishedAt, "SUCCESS");
+                } else {
+                    log.warn("Ticket outbox acknowledgement was not persisted; success metric suppressed. outboxId={}",
+                            event.getId());
                 }
 
             } catch (Exception ex) {
@@ -151,10 +162,12 @@ public class TicketOutboxPublisher {
                     log.error("Ticket outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(),
                             MAX_RETRY_COUNT, ex);
-                    meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
+                    safeIncrementDeadLetter(event.getEventType());
+                    safeRecordOutboxLatency(event, Instant.now(), "FAILED");
                 } else {
                     log.error("Ticket outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
+                    safeIncrementRetry(event.getEventType());
                 }
             }
         }
@@ -170,5 +183,33 @@ public class TicketOutboxPublisher {
             return objectMapper.readValue(event.getPayload(), TicketIssuedEvent.class);
         }
         return objectMapper.readTree(event.getPayload());
+    }
+
+    private void safeRecordOutboxLatency(OutboxEvent event, Instant publishedAt, String outcome) {
+        try {
+            Instant createdAt = event.getCreatedAt();
+            if (createdAt == null) return;
+            Duration latency = Duration.between(createdAt, publishedAt);
+            if (latency.isNegative()) latency = Duration.ZERO;
+            Tags tags = MetricTagPolicy.outboxPublish("ticket-service", event.getEventType(), outcome);
+            Timer.builder(SeatFlowMetricNames.OUTBOX_PUBLISH_LATENCY).tags(tags).register(meterRegistry).record(latency);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementRetry(String eventType) {
+        try {
+            Tags tags = MetricTagPolicy.outboxRetry("ticket-service", eventType);
+            Counter.builder(SeatFlowMetricNames.OUTBOX_RETRY_COUNT).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementDeadLetter(String eventType) {
+        try {
+            Tags tags = MetricTagPolicy.outboxDeadLetter("ticket-service", eventType);
+            Counter.builder(SeatFlowMetricNames.OUTBOX_DEAD_LETTER).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
     }
 }

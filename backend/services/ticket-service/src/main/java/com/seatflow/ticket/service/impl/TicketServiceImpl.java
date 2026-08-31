@@ -7,6 +7,9 @@ import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
 import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.ticket.client.EventServiceClient;
@@ -32,6 +35,9 @@ import com.seatflow.ticket.web.dto.request.ValidateTicketRequest;
 import com.seatflow.ticket.web.dto.response.TicketDetailResponse;
 import com.seatflow.ticket.web.dto.response.TicketResponse;
 import com.seatflow.ticket.web.dto.response.ValidationResultResponse;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -67,6 +73,7 @@ public class TicketServiceImpl implements TicketService {
     private final SeatMapServiceClient seatMapServiceClient;
     private final ObjectMapper objectMapper;
     private final W3cTraceContextPropagator w3cTraceContextPropagator;
+    private final MeterRegistry meterRegistry;
 
     @Override
     @Transactional
@@ -131,6 +138,8 @@ public class TicketServiceImpl implements TicketService {
                     .payload(serialize(envelope))
                     .build();
             outboxRepository.save(outboxEvent);
+
+            AfterCommitMetrics.afterCommit(this::safeIncrementTicketIssued);
 
             log.info("Ticket issued successfully. ticketId={}, eventId={}, paymentId={}",
                     savedTicket.getId(), command.eventId(), command.paymentId());
@@ -387,6 +396,14 @@ public class TicketServiceImpl implements TicketService {
             return objectMapper.writeValueAsString(event);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize TicketIssuedEvent", e);
+        }
+    }
+
+    private void safeIncrementTicketIssued() {
+        try {
+            Tags tags = MetricTagPolicy.ticketIssued("PAYMENT_COMPLETED");
+            Counter.builder(SeatFlowMetricNames.TICKETS_ISSUED).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
         }
     }
 

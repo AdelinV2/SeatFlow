@@ -85,7 +85,7 @@ class TicketServiceImplTest {
         ticketService = new TicketServiceImpl(ticketRepository, validationRepository, outboxRepository,
                 ticketMapper, qrCodeGeneratorService, pdfTicketGeneratorService, eventServiceClient,
                 seatMapServiceClient, new ObjectMapper().registerModule(new JavaTimeModule()),
-                mock(W3cTraceContextPropagator.class));
+                mock(W3cTraceContextPropagator.class), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
 
         when(ticketRepository.save(any(Ticket.class))).thenAnswer(a -> a.getArgument(0));
         when(outboxRepository.save(any(OutboxEvent.class))).thenAnswer(a -> a.getArgument(0));

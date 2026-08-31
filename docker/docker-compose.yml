@@ -74,6 +74,7 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${PROMETHEUS_SCRAPE_TOKEN_FILE:-./prometheus/prometheus-scrape-token.example}:/run/secrets/prometheus-scrape-token:ro
       - prometheus_data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -7,6 +7,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
 import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
@@ -36,12 +37,16 @@ import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -87,7 +92,7 @@ public class ReservationServiceImpl implements ReservationService {
     @Override
     public ReservationResponse createReservation(CreateReservationRequest request, UUID authenticatedUserId) {
         Timer.Sample sample = Timer.start(meterRegistry);
-        Instant startTime = Instant.now();
+        String holdOutcome = "UNKNOWN";
         try {
             validateSeatLists(request);
             String customerEmail = resolveCustomerEmail(request);
@@ -99,20 +104,22 @@ public class ReservationServiceImpl implements ReservationService {
                     request.eventId(), new HashSet<>(request.seatIds()));
             validatePerSeatPricing(request, eventPricing.seatPrices());
 
-            return executeCreateReservationTransaction(request, authenticatedUserId, customerEmail, eventPricing);
+            ReservationResponse response = executeCreateReservationTransaction(request, authenticatedUserId, customerEmail, eventPricing);
+            holdOutcome = "SUCCESS";
+            return response;
         } catch (ConflictException ex) {
-            meterRegistry.counter("seatflow.reservations.conflicts.total",
-                    "eventId", request.eventId().toString(),
-                    "reason", ex.getErrorCode().name()).increment();
+            holdOutcome = mapConflictReason(ex.getErrorCode());
+            safeIncrementConflict(holdOutcome);
             throw ex;
         } catch (ValidationException ex) {
-            meterRegistry.counter("seatflow.reservations.validation.total",
-                    "eventId", request.eventId().toString(),
-                    "reason", ex.getErrorCode().name()).increment();
+            holdOutcome = mapValidationReason(ex.getErrorCode());
+            // LIMIT_EXCEEDED and other validation conflicts are recorded as conflicts for dashboard visibility
+            if ("LIMIT_EXCEEDED".equals(holdOutcome) || "INVALID_STATE".equals(holdOutcome)) {
+                safeIncrementConflict(holdOutcome);
+            }
             throw ex;
         } finally {
-            sample.stop(meterRegistry.timer("seatflow.reservations.hold.duration",
-                    "eventId", request.eventId().toString()));
+            safeRecordHoldDuration(sample, holdOutcome);
         }
     }
 
@@ -205,9 +212,7 @@ public class ReservationServiceImpl implements ReservationService {
                 saved.getTotalAmount(),
                 now));
 
-        meterRegistry.counter("seatflow.reservations.created.total",
-                "eventId", request.eventId().toString(),
-                "status", "SUCCESS").increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementCreated);
 
         log.info("Reservation hold acquired successfully. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
                 saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
@@ -407,8 +412,7 @@ public class ReservationServiceImpl implements ReservationService {
                 new ArrayList<>(seatIds),
                 now));
 
-        meterRegistry.counter("seatflow.reservations.cancelled.total",
-                "eventId", reservation.getEventId().toString()).increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementCancelled);
 
         log.info("Reservation cancelled reservationId={}, eventId={}", reservationId, reservation.getEventId());
     }
@@ -450,9 +454,7 @@ public class ReservationServiceImpl implements ReservationService {
                 paymentId,
                 Instant.now()));
 
-        meterRegistry.counter("seatflow.reservations.confirmed.total",
-                "eventId", reservation.getEventId().toString(),
-                "status", "SUCCESS").increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementConfirmed);
 
         log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatsCount={}, totalAmount={}",
                 reservationId, paymentId, reservation.getSeatHolds().size(), reservation.getTotalAmount());
@@ -467,7 +469,8 @@ public class ReservationServiceImpl implements ReservationService {
 
         int updatedCount = reservationRepository.updateUserIdForGuestEmail(userId, normalizedEmail, Instant.now());
 
-        meterRegistry.counter("seatflow.reservations.guest.claimed.total").increment(updatedCount);
+        int committedCount = updatedCount;
+        AfterCommitMetrics.afterCommit(() -> safeIncrementGuestClaimed(committedCount));
 
         log.info("Guest reservations linked to registered user. userId={}, customerEmail={}, linkedCount={}",
                 userId, normalizedEmail, updatedCount);
@@ -514,7 +517,8 @@ public class ReservationServiceImpl implements ReservationService {
             processed++;
         }
 
-        meterRegistry.counter("seatflow.reservations.expired.total").increment(processed);
+        int committedCount = processed;
+        AfterCommitMetrics.afterCommit(() -> safeIncrementExpired(committedCount));
         return processed;
     }
 
@@ -604,5 +608,84 @@ public class ReservationServiceImpl implements ReservationService {
                 .retryCount(0)
                 .build();
         outboxEventRepository.save(outboxEvent);
+    }
+
+    // --- Bounded metrics helpers — never throw, never roll back business transaction ---
+
+    private void safeIncrementCreated() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CREATED)
+                    .tags(MetricTagPolicy.reservationCreated("SUCCESS"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementConflict(String reason) {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CONFLICTS)
+                    .tags(MetricTagPolicy.reservationConflict(reason))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementExpired(int count) {
+        if (count <= 0) return;
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_EXPIRED)
+                    .tags(MetricTagPolicy.reservationExpired("EXPIRED"))
+                    .register(meterRegistry).increment(count);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementCancelled() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CANCELLED)
+                    .tags(Tags.of("outcome", "CANCELLED"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementConfirmed() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CONFIRMED)
+                    .tags(Tags.of("status", "SUCCESS"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementGuestClaimed(int count) {
+        if (count <= 0) return;
+        try {
+            meterRegistry.counter("seatflow.reservations.guest.claimed.total").increment(count);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeRecordHoldDuration(Timer.Sample sample, String outcome) {
+        try {
+            Tags tags = MetricTagPolicy.holdDuration(outcome);
+            sample.stop(Timer.builder(SeatFlowMetricNames.RESERVATIONS_HOLD_DURATION)
+                    .tags(tags)
+                    .register(meterRegistry));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String mapConflictReason(ErrorCode code) {
+        if (code == ErrorCode.SEAT_ALREADY_RESERVED) return "ALREADY_HELD";
+        if (code == ErrorCode.CONFLICT) return "INVALID_STATE";
+        return "INVALID_STATE";
+    }
+
+    private String mapValidationReason(ErrorCode code) {
+        if (code == ErrorCode.MAX_SEATS_EXCEEDED) return "LIMIT_EXCEEDED";
+        if (code == ErrorCode.INVALID_REQUEST) return "INVALID_STATE";
+        if (code == ErrorCode.RESERVATION_EXPIRED) return "INVALID_STATE";
+        return "INVALID_STATE";
     }
 }
