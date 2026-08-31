@@ -6,6 +6,7 @@ import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.ticket.client.EventServiceClient;
 import com.seatflow.ticket.client.SeatMapServiceClient;
 import com.seatflow.ticket.client.dto.EventSeatMapClientResponse;
@@ -83,7 +84,8 @@ class TicketServiceImplTest {
     void setUp() {
         ticketService = new TicketServiceImpl(ticketRepository, validationRepository, outboxRepository,
                 ticketMapper, qrCodeGeneratorService, pdfTicketGeneratorService, eventServiceClient,
-                seatMapServiceClient, new ObjectMapper().registerModule(new JavaTimeModule()));
+                seatMapServiceClient, new ObjectMapper().registerModule(new JavaTimeModule()),
+                mock(W3cTraceContextPropagator.class));
 
         when(ticketRepository.save(any(Ticket.class))).thenAnswer(a -> a.getArgument(0));
         when(outboxRepository.save(any(OutboxEvent.class))).thenAnswer(a -> a.getArgument(0));

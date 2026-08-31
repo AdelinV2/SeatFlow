@@ -7,6 +7,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.reservation.client.EventClient;
@@ -74,6 +75,7 @@ public class ReservationServiceImpl implements ReservationService {
     private final EventClient eventClient;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     private TransactionTemplate transactionTemplate;
 
@@ -578,8 +580,17 @@ public class ReservationServiceImpl implements ReservationService {
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
         String correlationId = CorrelationContext.getCorrelationId()
                 .orElse(UUID.randomUUID().toString());
-        EventEnvelope<?> envelope = EventEnvelope.of(
+        EventEnvelope<?> baseEnvelope = EventEnvelope.of(
                 eventType, aggregateId.toString(), correlationId, (DomainEvent) payload);
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+            // best-effort tracing: never break business transaction
+        }
+        EventEnvelope<?> envelope = baseEnvelope.withHeaders(headers);
         String json;
         try {
             json = objectMapper.writeValueAsString(envelope);

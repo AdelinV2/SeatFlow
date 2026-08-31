@@ -7,6 +7,7 @@ import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.user.mapper.UserMapper;
 import com.seatflow.user.messaging.event.UserRegisteredEvent;
 import com.seatflow.user.model.entity.OutboxEvent;
@@ -37,6 +38,7 @@ public class UserServiceImpl implements UserService {
     private final OutboxEventRepository outboxEventRepository;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -104,12 +106,20 @@ public class UserServiceImpl implements UserService {
         String correlationId = CorrelationContext.getCorrelationId()
                 .orElseGet(() -> UUID.randomUUID().toString());
 
-        EventEnvelope<UserRegisteredEvent> envelope = EventEnvelope.of(
+        EventEnvelope<UserRegisteredEvent> baseEnvelope = EventEnvelope.of(
                 USER_REGISTERED_EVENT,
                 user.getId().toString(),
                 correlationId,
                 eventPayload
         );
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+        }
+        EventEnvelope<UserRegisteredEvent> envelope = baseEnvelope.withHeaders(headers);
 
         String payloadJson;
         try {

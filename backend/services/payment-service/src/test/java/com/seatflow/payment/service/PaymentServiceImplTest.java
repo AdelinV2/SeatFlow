@@ -4,6 +4,7 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.client.ReservationServiceClient;
 import com.seatflow.payment.client.dto.ReservationClientResponse;
 import com.seatflow.payment.client.dto.SeatHoldClientDto;
@@ -80,7 +81,8 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new PaymentServiceImpl(paymentRepository, outboxEventRepository, objectMapper, reservationServiceClient, stripePaymentGateway, paymentMapper, meterRegistry);
+        service = new PaymentServiceImpl(paymentRepository, outboxEventRepository, objectMapper, reservationServiceClient,
+                stripePaymentGateway, paymentMapper, meterRegistry, org.mockito.Mockito.mock(W3cTraceContextPropagator.class));
         when(paymentRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(paymentRepository.findByReservationId(any())).thenReturn(Optional.empty());
         when(stripePaymentGateway.createPaymentIntent(any(), any(), any(), any(), any()))

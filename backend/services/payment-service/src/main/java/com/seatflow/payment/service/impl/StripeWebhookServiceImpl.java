@@ -8,6 +8,7 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.config.StripeConfig;
 import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
 import com.seatflow.payment.messaging.event.PaymentFailedEvent;
@@ -46,6 +47,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -228,12 +230,20 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
 
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
         try {
-            EventEnvelope<?> envelope = EventEnvelope.of(
+            EventEnvelope<?> base = EventEnvelope.of(
                     eventType,
                     aggregateId.toString(),
                     CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
                     (com.seatflow.common.events.DomainEvent) payload
             );
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<?> envelope = base.withHeaders(headers);
             // Store the envelope as a real JSON object in the jsonb column (not a JSON-string scalar).
             JsonNode payloadNode = objectMapper.valueToTree(envelope);
             OutboxEvent outboxEvent = OutboxEvent.builder()

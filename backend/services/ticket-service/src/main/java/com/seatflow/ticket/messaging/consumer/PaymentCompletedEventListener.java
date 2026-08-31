@@ -3,6 +3,7 @@ package com.seatflow.ticket.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.ticket.client.ReservationServiceClient;
 import com.seatflow.ticket.client.dto.ReservationClientResponse;
 import com.seatflow.ticket.messaging.event.PaymentCompletedEvent;
@@ -30,6 +31,7 @@ public class PaymentCompletedEventListener {
     private final TicketService ticketService;
     private final ReservationServiceClient reservationServiceClient;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
         topics = EventTopics.PAYMENT_EVENTS,
@@ -37,6 +39,12 @@ public class PaymentCompletedEventListener {
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void onPaymentCompleted(EventEnvelope<Object> envelope) {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.PAYMENT_EVENTS)) {
+            handlePaymentCompletedInternal(envelope);
+        }
+    }
+
+    private void handlePaymentCompletedInternal(EventEnvelope<Object> envelope) {
         if (!"PaymentCompleted".equals(envelope.eventType())) {
             log.debug("Ignoring irrelevant payment event type: {}", envelope.eventType());
             return;

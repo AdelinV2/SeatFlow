@@ -5,6 +5,9 @@ import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.events.EventEnvelope;
+import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.ticket.client.EventServiceClient;
 import com.seatflow.ticket.client.SeatMapServiceClient;
@@ -63,6 +66,7 @@ public class TicketServiceImpl implements TicketService {
     private final EventServiceClient eventServiceClient;
     private final SeatMapServiceClient seatMapServiceClient;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -109,10 +113,22 @@ public class TicketServiceImpl implements TicketService {
                     Instant.now()
             );
 
+            String correlationId = CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString());
+            UUID aggregateId = savedTicket.getId() != null ? savedTicket.getId() : UUID.randomUUID();
+            String aggregateIdStr = aggregateId.toString();
+            EventEnvelope<TicketIssuedEvent> baseEnvelope = EventEnvelope.of("TicketIssued", aggregateIdStr, correlationId, event);
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<TicketIssuedEvent> envelope = baseEnvelope.withHeaders(headers);
             OutboxEvent outboxEvent = OutboxEvent.builder()
-                    .aggregateId(savedTicket.getId())
+                    .aggregateId(aggregateId)
                     .eventType("TicketIssued")
-                    .payload(serialize(event))
+                    .payload(serialize(envelope))
                     .build();
             outboxRepository.save(outboxEvent);
 

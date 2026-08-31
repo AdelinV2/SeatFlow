@@ -8,6 +8,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.event.client.SeatMapClient;
 import com.seatflow.event.client.SeatMapVenueLayout;
 import com.seatflow.event.client.SeatMapVenueSection;
@@ -74,6 +75,7 @@ public class EventServiceImpl implements EventService {
     private final EventPricingTierMapper tierMapper;
     private final SeatMapClient seatMapClient;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -288,7 +290,16 @@ public class EventServiceImpl implements EventService {
 
     private void publishOutbox(String eventType, UUID aggregateId, DomainEvent domainEvent) {
         String correlationId = CorrelationContext.getCorrelationId().orElse(null);
-        EventEnvelope<? extends DomainEvent> envelope = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, domainEvent);
+        EventEnvelope<? extends DomainEvent> base = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, domainEvent);
+        Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+            // best-effort
+        }
+        EventEnvelope<? extends DomainEvent> envelope = base.withHeaders(headers);
         Map<String, Object> payload = objectMapper.convertValue(envelope, new TypeReference<Map<String, Object>>() {});
         outboxEventRepository.save(OutboxEvent.builder()
                 .aggregateId(aggregateId)

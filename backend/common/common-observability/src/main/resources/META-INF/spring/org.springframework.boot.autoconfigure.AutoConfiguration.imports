@@ -1,1 +1,2 @@
 com.seatflow.common.observability.config.CommonObservabilityAutoConfiguration
+com.seatflow.common.observability.config.TracingAutoConfiguration

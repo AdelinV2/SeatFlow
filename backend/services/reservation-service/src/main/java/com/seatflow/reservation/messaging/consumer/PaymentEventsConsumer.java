@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.reservation.messaging.event.PaymentCompletedEvent;
 import com.seatflow.reservation.service.ReservationService;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,8 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
+import java.util.Collections;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -24,12 +27,15 @@ public class PaymentEventsConsumer {
 
     private final ReservationService reservationService;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(topics = EventTopics.PAYMENT_EVENTS, groupId = "reservation-service")
     public void listen(String message,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset) {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(
+                extractHeaders(message), extractCorrelationId(message), "PaymentCompleted", topic)) {
         try {
             JsonNode root = objectMapper.readTree(message);
             String eventType = root.path("eventType").asText();
@@ -64,5 +70,27 @@ public class PaymentEventsConsumer {
             log.error("Failed to process payment event. topic={}, partition={}, offset={}", topic, partition, offset, ex);
             throw new RuntimeException("Failed to process payment event", ex);
         }
+        }
+    }
+
+    private String extractCorrelationId(String message) {
+        try {
+            return objectMapper.readTree(message).path("correlationId").asText(null);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Map<String, String> extractHeaders(String message) {
+        try {
+            JsonNode root = objectMapper.readTree(message);
+            JsonNode headersNode = root.path("headers");
+            if (headersNode.isObject()) {
+                Map<String, String> map = new java.util.HashMap<>();
+                headersNode.fields().forEachRemaining(e -> map.put(e.getKey(), e.getValue().asText()));
+                return map;
+            }
+        } catch (Exception ignored) {}
+        return Collections.emptyMap();
     }
 }

@@ -69,6 +69,18 @@ eureka:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}
 
 management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:local}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:

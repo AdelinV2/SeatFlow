@@ -3,13 +3,11 @@ package com.seatflow.notification.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
-import com.seatflow.common.observability.logging.MessagingLogContext;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.notification.messaging.event.ReservationHeldEvent;
-import io.micrometer.tracing.Tracer;
 import com.seatflow.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +18,7 @@ public class ReservationHeldEventListener {
 
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
-    private final ObjectProvider<Tracer> tracerProvider;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
             topics = EventTopics.RESERVATION_EVENTS,
@@ -28,15 +26,13 @@ public class ReservationHeldEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleReservationEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
-            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
-            return;
-        }
-
-        try (MessagingLogContext ignored = MessagingLogContext.open(envelope.correlationId(), tracerProvider)) {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.RESERVATION_EVENTS)) {
+            if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+                log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
+                return;
+            }
             log.info("Received reservation event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
-
             if ("ReservationHeld".equalsIgnoreCase(envelope.eventType()) || "ReservationHeldEvent".equalsIgnoreCase(envelope.eventType())) {
                 ReservationHeldEvent event = convertPayload(envelope.payload(), ReservationHeldEvent.class);
                 notificationService.sendReservationHeldNotification(event);
@@ -45,7 +41,7 @@ public class ReservationHeldEventListener {
             }
         } catch (Exception ex) {
             log.error("Failed to process reservation event: type={}, eventId={}: {}",
-                    envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
+                    envelope != null ? envelope.eventType() : "null", envelope != null ? envelope.eventId() : "null", ex.getMessage(), ex);
             throw ex;
         }
     }
