@@ -178,7 +178,7 @@ public class VenueServiceImpl implements VenueService {
                 .payload(payloadJson)
                 .build();
         outboxEvent = outboxEventRepository.save(outboxEvent);
-        log.info("Outbox event written. aggregateId={}, eventType={}, outboxEventId={}",
+        log.debug("Outbox event written. aggregateId={}, eventType={}, outboxId={}",
                 aggregateId, eventType, outboxEvent.getId());
     }
 }

@@ -33,7 +33,12 @@ springdoc:
   swagger-ui:
     enabled: false
 
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+
 logging:
+  config: classpath:logback-spring.xml
   level:
     com.seatflow: INFO
     org.hibernate.SQL: WARN

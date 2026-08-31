@@ -70,8 +70,8 @@ public class PaymentServiceImpl implements PaymentService {
                                                      String customerEmailProof) {
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
-            log.info("Processing PaymentIntent creation. reservationId={}, authenticatedUserId={}, idempotencyKey={}",
-                    request.reservationId(), authenticatedUserId, request.idempotencyKey());
+            log.info("Processing PaymentIntent creation. reservationId={}, authenticatedUserId={}",
+                    request.reservationId(), authenticatedUserId);
 
             // 1. Check idempotency on client idempotency key
             Optional<Payment> existingIdempotentPayment = paymentRepository.findByIdempotencyKey(request.idempotencyKey());
@@ -79,7 +79,8 @@ public class PaymentServiceImpl implements PaymentService {
                 Payment existing = existingIdempotentPayment.get();
                 if (existing.getReservationId().equals(request.reservationId())) {
                     refreshExistingPaymentIfReservationTotalChanged(existing, authenticatedUserId, customerEmailProof);
-                    log.info("Idempotent replay for paymentId={}, idempotencyKey={}", existing.getId(), request.idempotencyKey());
+                    log.info("Idempotent payment replay. paymentId={}, reservationId={}",
+                            existing.getId(), existing.getReservationId());
                     return paymentMapper.toIntentResponse(existing, existing.getClientSecret());
                 } else {
                     throw new ConflictException("Idempotency key reused with different parameters", ErrorCode.CONFLICT);

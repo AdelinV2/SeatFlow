@@ -15,8 +15,13 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:true}
 
 seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:https://seatflow.app}
+
+logging:
+  config: classpath:logback-spring.xml
 
 management:
   endpoint:

@@ -139,7 +139,8 @@ public class ReservationServiceImpl implements ReservationService {
                 request.eventId(), sortedSeatIds);
         if (!conflicting.isEmpty()) {
             List<UUID> conflictingSeatIds = conflicting.stream().map(SeatHold::getSeatId).toList();
-            log.warn("Seat hold conflict eventId={}, conflictingSeats={}", request.eventId(), conflictingSeatIds);
+            log.warn("Seat hold collision detected. eventId={}, seatsCount={}",
+                    request.eventId(), conflictingSeatIds.size());
             throw new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -187,7 +188,8 @@ public class ReservationServiceImpl implements ReservationService {
                 }
                 throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
             }
-            log.warn("Concurrent seat hold detected eventId={}, seats={}", request.eventId(), request.seatIds(), ex);
+            log.warn("Concurrent seat hold detected. eventId={}, seatsCount={}",
+                    request.eventId(), request.seatIds().size(), ex);
             throw new ConflictException("One or more seats were taken concurrently", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -206,8 +208,8 @@ public class ReservationServiceImpl implements ReservationService {
                 "eventId", request.eventId().toString(),
                 "status", "SUCCESS").increment();
 
-        log.info("Reservation hold created reservationId={}, eventId={}, userId={}, seatsCount={}, seatIds={}, totalAmount={}, expiresAt={}",
-                saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(), request.seatIds(),
+        log.info("Reservation hold acquired successfully. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
+                saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
                 saved.getTotalAmount(), saved.getExpiresAt());
 
         return reservationMapper.toResponse(saved);

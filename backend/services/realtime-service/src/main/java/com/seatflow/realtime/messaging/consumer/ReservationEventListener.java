@@ -11,6 +11,7 @@ import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
 import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
 import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.logging.StructuredLogFields;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -38,9 +39,9 @@ public class ReservationEventListener {
 
         String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
         CorrelationContext.setCorrelationId(correlationId);
-        MDC.put("correlationId", correlationId);
+        MDC.put(StructuredLogFields.CORRELATION_ID, correlationId);
         if (envelope.eventId() != null) {
-            MDC.put("traceId", envelope.eventId());
+            MDC.put(StructuredLogFields.TRACE_ID, envelope.eventId());
         }
 
         try {
@@ -71,8 +72,8 @@ public class ReservationEventListener {
                     envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
             throw ex;
         } finally {
-            MDC.remove("correlationId");
-            MDC.remove("traceId");
+            MDC.remove(StructuredLogFields.CORRELATION_ID);
+            MDC.remove(StructuredLogFields.TRACE_ID);
             CorrelationContext.clear();
         }
     }

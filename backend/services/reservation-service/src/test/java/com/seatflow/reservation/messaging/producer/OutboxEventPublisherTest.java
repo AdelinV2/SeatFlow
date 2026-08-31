@@ -108,7 +108,7 @@ class OutboxEventPublisherTest {
     }
 
     @Test
-    void publishPendingEvents_whenBrokerFails_incrementsRetryAndLogsWarn() {
+    void publishPendingEvents_whenBrokerFails_incrementsRetryAndLogsError() {
         UUID id = UUID.randomUUID();
         OutboxEvent event = event(id, "ReservationHeldEvent", 0);
         when(outboxEventRepository.findUnpublishedForUpdate(anyInt(), anyInt())).thenReturn(List.of(event));
@@ -121,7 +121,7 @@ class OutboxEventPublisherTest {
         verify(outboxEventRepository, never()).markPublished(any(), any());
         verify(outboxEventRepository).incrementRetryCount(eq(id), anyInt());
         assertThat(listAppender.list).anyMatch(e ->
-                e.getLevel() == Level.WARN && e.getFormattedMessage().contains("retry incremented"));
+                e.getLevel() == Level.ERROR && e.getFormattedMessage().contains("retry incremented"));
     }
 
     @Test
