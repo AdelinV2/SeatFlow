@@ -69,14 +69,20 @@
     </div>
   }
 
+  <div class="sr-only" aria-live="polite" aria-atomic="true">
+    {{ liveAnnouncement() }}
+  </div>
+
   <div class="viewport-frame">
     <svg
       #svgViewport
       class="seat-viewport"
       [class.is-dragging]="isDragging()"
       [attr.viewBox]="viewBox()"
-      role="group"
-      aria-label="Interactive seat map. Drag to pan and use the zoom controls or mouse wheel to zoom."
+      role="grid"
+      [attr.aria-rowcount]="bounds().rowCount"
+      [attr.aria-colcount]="bounds().colCount"
+      aria-label="Interactive venue seat map. Use arrow keys to navigate seats, Enter or Space to toggle seat selection."
       (pointerdown)="onPointerDown($event)"
       (pointermove)="onPointerMove($event)"
       (pointerup)="onPointerEnd($event)"
@@ -168,42 +174,56 @@
           }
         </g>
 
-        <!-- Seats Layer: Only Bookable Active Seats -->
+        <!-- Seats Layer: Structured into Rows for ARIA Grid Compliance -->
         <g class="seats-layer">
-          @for (seat of bookableSeats(); track seat.id) {
-            <g
-              class="seat-node"
-              [attr.data-status]="seat.status"
-              [class.selected]="selectedSeatIds().has(seat.id)"
-              [class.conflicted]="conflictingSeatIds().has(seat.id)"
-              [attr.role]="'button'"
-              [attr.tabindex]="isUnavailable(seat) ? -1 : 0"
-              [attr.aria-label]="seatLabel(seat)"
-              [attr.aria-pressed]="selectedSeatIds().has(seat.id)"
-              [attr.aria-disabled]="isUnavailable(seat)"
-              [matTooltip]="seatTooltip(seat)"
-              [matTooltipTouchGestures]="'off'"
-              (click)="handleSeatClick(seat)"
-              (keydown)="handleSeatKeydown($event, seat)"
-            >
-              <circle
-                class="seat-shape"
-                [class.seat-spring-bounce]="animatingSeatIds().has(seat.id)"
-                [class.seat-conflict-flash]="conflictingSeatIds().has(seat.id)"
-                [attr.cx]="seatX(seat)"
-                [attr.cy]="seatY(seat)"
-                r="14"
-                (animationend)="clearSeatAnimation(seat.id)"
-              />
-              <text
-                class="seat-number"
-                [attr.x]="seatX(seat)"
-                [attr.y]="seatY(seat) + 4"
-                text-anchor="middle"
-                aria-hidden="true"
-              >
-                {{ seat.seatNumber }}
-              </text>
+          @for (row of seatsByRow(); track row.rowIndex) {
+            <g role="row" [attr.aria-rowindex]="row.rowIndex">
+              @for (seat of row.seats; track seat.id) {
+                <g
+                  class="seat-node"
+                  [attr.data-seat-id]="seat.id"
+                  [attr.data-status]="seat.status"
+                  [class.selected]="selectedSeatIds().has(seat.id)"
+                  [class.conflicted]="conflictingSeatIds().has(seat.id)"
+                  role="gridcell"
+                  [attr.aria-rowindex]="seat.gridY - bounds().minRow + 1"
+                  [attr.aria-colindex]="seat.gridX - bounds().minCol + 1"
+                  [attr.tabindex]="isSeatFocused(seat) ? 0 : -1"
+                  [attr.aria-label]="seatLabel(seat)"
+                  [attr.aria-selected]="selectedSeatIds().has(seat.id)"
+                  [attr.aria-disabled]="isUnavailable(seat)"
+                  [matTooltip]="seatTooltip(seat)"
+                  [matTooltipTouchGestures]="'off'"
+                  appKeyboardSeatNav
+                  [currentRow]="seat.gridY - bounds().minRow"
+                  [currentCol]="seat.gridX - bounds().minCol"
+                  [maxRows]="bounds().rowCount"
+                  [maxCols]="bounds().colCount"
+                  (navigate)="handleSeatNavigate($event)"
+                  (activate)="handleSeatClick(seat)"
+                  (click)="handleSeatClick(seat)"
+                  (focus)="onSeatFocus(seat)"
+                >
+                  <circle
+                    class="seat-shape"
+                    [class.seat-spring-bounce]="animatingSeatIds().has(seat.id)"
+                    [class.seat-conflict-flash]="conflictingSeatIds().has(seat.id)"
+                    [attr.cx]="seatX(seat)"
+                    [attr.cy]="seatY(seat)"
+                    r="14"
+                    (animationend)="clearSeatAnimation(seat.id)"
+                  />
+                  <text
+                    class="seat-number"
+                    [attr.x]="seatX(seat)"
+                    [attr.y]="seatY(seat) + 4"
+                    text-anchor="middle"
+                    aria-hidden="true"
+                  >
+                    {{ seat.seatNumber }}
+                  </text>
+                </g>
+              }
             </g>
           }
         </g>

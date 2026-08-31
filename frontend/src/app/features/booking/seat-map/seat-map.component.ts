@@ -15,7 +15,7 @@ import {
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { EventSeatMapResponse, Seat, SeatMapSectionResponse } from '../../../models/seat.model';
-
+import { KeyboardSeatNavDirective } from '../../../core/a11y/keyboard-seat-nav.directive';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 
 interface PointerPosition {
@@ -41,6 +41,12 @@ export interface PricingTierDetail {
   currency: string;
 }
 
+export interface SeatRowGroup {
+  rowIndex: number;
+  label: string;
+  seats: Seat[];
+}
+
 export interface SectionDetail {
   id: string;
   name: string;
@@ -55,7 +61,7 @@ export interface SectionDetail {
 @Component({
   selector: 'app-seat-map',
   standalone: true,
-  imports: [CommonModule, MatTooltipModule, CurrencyFormatPipe],
+  imports: [CommonModule, MatTooltipModule, CurrencyFormatPipe, KeyboardSeatNavDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seat-map.component.html',
   styleUrl: './seat-map.component.scss',
@@ -86,6 +92,8 @@ export class SeatMapComponent implements AfterViewInit, OnDestroy {
   readonly isDragging = signal(false);
   readonly isolatedSectionId = signal<string | null>(null);
   readonly animatingSeatIds = signal<Set<string>>(new Set());
+  readonly liveAnnouncement = signal<string>('');
+  readonly activeSeatId = signal<string | null>(null);
 
   readonly sectionDetails = computed<SectionDetail[]>(() => {
     const rawSections = this.sectionsData();
@@ -209,6 +217,42 @@ export class SeatMapComponent implements AfterViewInit, OnDestroy {
     return this.visibleSeats().filter((seat) => seat.isActive && seat.status !== 'DISABLED');
   });
 
+  readonly seatsByRow = computed<SeatRowGroup[]>(() => {
+    const seats = this.bookableSeats();
+    const b = this.bounds();
+    const rowsMap = new Map<number, { rowIndex: number; label: string; seats: Seat[] }>();
+
+    for (const seat of seats) {
+      const rowIndex = seat.gridY - b.minRow + 1;
+      let row = rowsMap.get(seat.gridY);
+      if (!row) {
+        row = { rowIndex, label: seat.rowLabel, seats: [] };
+        rowsMap.set(seat.gridY, row);
+      }
+      row.seats.push(seat);
+    }
+
+    return [...rowsMap.values()].sort((a, b) => a.rowIndex - b.rowIndex);
+  });
+
+  readonly effectiveActiveSeatId = computed<string | null>(() => {
+    const current = this.activeSeatId();
+    const available = this.bookableSeats();
+    if (current && available.some((s) => s.id === current)) {
+      return current;
+    }
+    const firstAvailable = available.find((s) => s.status === 'AVAILABLE') ?? available[0];
+    return firstAvailable?.id ?? null;
+  });
+
+  isSeatFocused(seat: Seat): boolean {
+    return this.effectiveActiveSeatId() === seat.id;
+  }
+
+  onSeatFocus(seat: Seat): void {
+    this.activeSeatId.set(seat.id);
+  }
+
   readonly bounds = computed(() => {
     const seats = this.visibleSeats();
     if (seats.length === 0) {
@@ -295,11 +339,14 @@ export class SeatMapComponent implements AfterViewInit, OnDestroy {
   );
 
   handleSeatClick(seat: Seat): void {
+    this.activeSeatId.set(seat.id);
     const selected = this.selectedSeatIds().has(seat.id);
     if (!selected && (!seat.isActive || ['SOLD', 'RESERVED', 'DISABLED'].includes(seat.status))) {
+      this.liveAnnouncement.set(`Seat in row ${seat.rowLabel}, seat ${seat.seatNumber} is unavailable.`);
       return;
     }
     if (!selected && seat.status === 'HELD') {
+      this.liveAnnouncement.set(`Seat in row ${seat.rowLabel}, seat ${seat.seatNumber} is currently held.`);
       this.snackBar.open('This seat is currently held by another customer.', 'Close', {
         duration: 3000,
         panelClass: 'snack-warning',
@@ -307,23 +354,44 @@ export class SeatMapComponent implements AfterViewInit, OnDestroy {
       return;
     }
     if (!selected && this.selectedSeatIds().size >= this.maxSeats()) {
-      this.snackBar.open('Maximum 10 seats allowed per reservation.', 'Close', {
+      this.liveAnnouncement.set(`Maximum limit of ${this.maxSeats()} seats reached.`);
+      this.snackBar.open(`Maximum ${this.maxSeats()} seats allowed per reservation.`, 'Close', {
         duration: 3500,
         panelClass: 'snack-warning',
       });
       return;
     }
 
+    if (selected) {
+      this.liveAnnouncement.set(`Deselected seat in row ${seat.rowLabel}, seat ${seat.seatNumber}.`);
+    } else {
+      this.liveAnnouncement.set(
+        `Selected seat in row ${seat.rowLabel}, seat ${seat.seatNumber}, price ${this.formatPrice(seat.price, seat.currency)}.`,
+      );
+    }
+
     this.animatingSeatIds.update((current) => new Set(current).add(seat.id));
     this.seatToggled.emit(seat);
   }
 
-  handleSeatKeydown(event: KeyboardEvent, seat: Seat): void {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
+  handleSeatNavigate(coords: { row: number; col: number }): void {
+    const b = this.bounds();
+    const targetGridY = b.minRow + coords.row;
+    const targetGridX = b.minCol + coords.col;
+
+    const targetSeat = this.bookableSeats().find(
+      (s) => s.gridY === targetGridY && s.gridX === targetGridX,
+    );
+
+    if (targetSeat) {
+      this.activeSeatId.set(targetSeat.id);
+      const el = this.svgViewport()?.nativeElement.querySelector<SVGGElement>(
+        `[data-seat-id="${targetSeat.id}"]`,
+      );
+      if (el) {
+        el.focus();
+      }
     }
-    event.preventDefault();
-    this.handleSeatClick(seat);
   }
 
   clearSeatAnimation(seatId: string): void {

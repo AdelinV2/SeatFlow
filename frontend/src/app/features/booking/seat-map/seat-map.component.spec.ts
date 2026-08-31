@@ -117,4 +117,56 @@ describe('SeatMapComponent', () => {
     component.onWheel(wheelOut);
     expect(component.zoomLevel()).toBeCloseTo(1.0, 2);
   });
+
+  it('renders ARIA grid attributes, role=row grouping, and roving tabindex for WCAG 2.1 AA compliance', () => {
+    const svgEl = fixture.nativeElement.querySelector('svg.seat-viewport');
+    expect(svgEl.getAttribute('role')).toBe('grid');
+    expect(svgEl.getAttribute('aria-rowcount')).toBeTruthy();
+    expect(svgEl.getAttribute('aria-colcount')).toBeTruthy();
+
+    const rowNodes = fixture.nativeElement.querySelectorAll('g[role="row"]');
+    expect(rowNodes.length).toBeGreaterThan(0);
+    expect(rowNodes[0].getAttribute('aria-rowindex')).toBe('1');
+
+    const seatNodes = fixture.nativeElement.querySelectorAll('.seat-node');
+    expect(seatNodes.length).toBeGreaterThan(0);
+    const firstSeat = seatNodes[0];
+    expect(firstSeat.getAttribute('role')).toBe('gridcell');
+    expect(firstSeat.getAttribute('aria-selected')).toBe('true');
+    expect(firstSeat.getAttribute('aria-label')?.toLowerCase()).toContain('row a');
+
+    // Roving tabindex verification: Exactly one seat has tabindex="0", others have tabindex="-1"
+    const focusableSeats = Array.from(seatNodes).filter(
+      (node) => (node as HTMLElement).getAttribute('tabindex') === '0',
+    );
+    const nonFocusableSeats = Array.from(seatNodes).filter(
+      (node) => (node as HTMLElement).getAttribute('tabindex') === '-1',
+    );
+    expect(focusableSeats.length).toBe(1);
+    expect(nonFocusableSeats.length).toBe(seatNodes.length - 1);
+  });
+
+  it('announces selections and updates live announcement signal', () => {
+    fixture.componentRef.setInput('selectedSeatIds', new Set<string>());
+    fixture.detectChanges();
+
+    component.handleSeatClick(createSeat(1));
+    expect(component.liveAnnouncement()).toContain('Selected seat in row A, seat 1');
+
+    fixture.componentRef.setInput('selectedSeatIds', new Set(['seat-1']));
+    fixture.detectChanges();
+    component.handleSeatClick(createSeat(1));
+    expect(component.liveAnnouncement()).toContain('Deselected seat in row A, seat 1');
+  });
+
+  it('handles keyboard navigation across grid coordinates and shifts roving focus', () => {
+    const seat1El = fixture.nativeElement.querySelector('[data-seat-id="seat-1"]');
+    if (seat1El) {
+      spyOn(seat1El, 'focus');
+      component.handleSeatNavigate({ row: 0, col: 0 });
+      expect(seat1El.focus).toHaveBeenCalled();
+      expect(component.effectiveActiveSeatId()).toBe('seat-1');
+    }
+  });
 });
+

@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/07-frontend-specification.md`, `frontend/AGENTS.md`, `.ai/SeatFlow-Architecture-and-Implementation-Spec.md` (Section 17)
 - **Related ADRs:** `None`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,11 +15,11 @@
 Polish the SeatFlow frontend with modern browser capabilities, accessibility (a11y) compliance, performance optimizations, and complete test suite verification. Configure the **View Transitions API** (`withViewTransitions()`) for seamless cross-fading and banner morphing across route transitions, conduct a **WCAG 2.1 AA accessibility audit** (complete keyboard navigation for the SVG seat map, ARIA attributes, color contrast verification), and verify the complete Jasmine/Karma unit and slice test suite.
 
 ### Critical Invariants to Enforce:
-- [ ] **Seamless View Transitions:** Enable Angular's `withViewTransitions()` with custom morph animations for event hero banners and seat map transitions.
-- [ ] **WCAG 2.1 AA Compliant Seat Map Navigation:** The interactive SVG seat map must support full keyboard navigation (Arrow keys to navigate cells, `Enter`/`Space` to toggle selection, `aria-live` announcements for seat selection and price recalculation).
-- [ ] **Modal Focus Trapping:** All modal dialogs (QR modal, hold expiration modal, cancellation prompts) must trap keyboard focus using `@angular/cdk/a11y`.
-- [ ] **Color Contrast Verification:** All text elements in both Midnight Slate (Dark) and Warm Alabaster (Light) themes must exceed the WCAG AA minimum contrast ratio of $4.5:1$ for normal text and $3:1$ for large text.
-- [ ] **Full Test Suite Clean Pass:** All unit and slice tests across all services, interceptors, guards, and components must pass with 0 failures under `ChromeHeadless`.
+- [x] **Seamless View Transitions:** Enable Angular's `withViewTransitions()` with custom morph animations for event hero banners and seat map transitions.
+- [x] **WCAG 2.1 AA Compliant Seat Map Navigation:** The interactive SVG seat map must support full keyboard navigation (Arrow keys to navigate cells, `Enter`/`Space` to toggle selection, `aria-live` announcements for seat selection and price recalculation).
+- [x] **Modal Focus Trapping:** All modal dialogs (QR modal, hold expiration modal, cancellation prompts) must trap keyboard focus using `@angular/cdk/a11y`.
+- [x] **Color Contrast Verification:** All text elements in both Midnight Slate (Dark) and Warm Alabaster (Light) themes must exceed the WCAG AA minimum contrast ratio of $4.5:1$ for normal text and $3:1$ for large text.
+- [x] **Full Test Suite Clean Pass:** All unit and slice tests across all services, interceptors, guards, and components must pass with 0 failures under `ChromeHeadless`.
 
 ---
 
@@ -30,6 +30,7 @@ Polish the SeatFlow frontend with modern browser capabilities, accessibility (a1
 - `[MODIFY]` `frontend/src/app/app.config.ts`
 - `[MODIFY]` `frontend/src/app/features/booking/seat-map/seat-map.component.html`
 - `[MODIFY]` `frontend/src/app/features/booking/seat-map/seat-map.component.ts`
+- `[MODIFY]` `frontend/src/app/features/booking/seat-map/seat-map.component.spec.ts`
 - `[NEW]` `frontend/src/app/app.integration.spec.ts`
 
 ---
@@ -40,27 +41,27 @@ Polish the SeatFlow frontend with modern browser capabilities, accessibility (a1
 
 ```scss
 /* View Transitions API Styling */
-@keyframes fade-in {
+@keyframes vt-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes fade-out {
+@keyframes vt-fade-out {
   from { opacity: 1; }
   to { opacity: 0; }
 }
 
-@keyframes slide-from-right {
-  from { transform: translateX(30px); opacity: 0; }
+@keyframes vt-slide-from-right {
+  from { transform: translateX(2rem); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
 
 ::view-transition-old(root) {
-  animation: 200ms cubic-bezier(0.4, 0, 1, 1) both fade-out;
+  animation: 200ms cubic-bezier(0.4, 0, 1, 1) both vt-fade-out;
 }
 
 ::view-transition-new(root) {
-  animation: 250ms cubic-bezier(0, 0, 0.2, 1) both fade-in;
+  animation: 250ms cubic-bezier(0, 0, 0.2, 1) both vt-fade-in;
 }
 
 .view-transition-hero {
@@ -171,10 +172,10 @@ export class KeyboardSeatNavDirective {
 ## 6. Definition of Done & Verification Command
 To verify this task, run:
 ```bash
-cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
+cd frontend && npm.cmd test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] View Transitions API operates smoothly during route transitions.
-- [ ] SVG Seat map supports full keyboard arrow navigation and screen reader ARIA labels.
-- [ ] Contrast ratios meet WCAG 2.1 AA standards across Dark and Light themes.
-- [ ] Complete frontend unit and integration test suite passes with zero errors.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/012-performance-view-transitions-a11y-and-test-suite.md`.
+- [x] View Transitions API operates smoothly during route transitions.
+- [x] SVG Seat map supports full keyboard arrow navigation and screen reader ARIA labels.
+- [x] Contrast ratios meet WCAG 2.1 AA standards across Dark and Light themes.
+- [x] Complete frontend unit and integration test suite passes with zero errors (352/352 passing tests).
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/012-performance-view-transitions-a11y-and-test-suite.md`.

@@ -19,7 +19,7 @@ export const appConfig: ApplicationConfig = {
       routes,
       withComponentInputBinding(),
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
-      withViewTransitions(),
+      withViewTransitions({ skipInitialTransition: true }),
     ),
     provideHttpClient(
       withInterceptors([correlationInterceptor, authInterceptor, errorInterceptor]),
