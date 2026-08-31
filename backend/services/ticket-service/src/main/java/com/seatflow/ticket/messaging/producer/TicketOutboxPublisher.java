@@ -83,19 +83,20 @@ public class TicketOutboxPublisher {
 
                 int updated = outboxRepository.markPublished(event.getId(), Instant.now());
                 if (updated > 0) {
-                    log.info("Ticket outbox event published successfully. outboxEventId={}, aggregateId={}, eventType={}, topic={}",
+                    log.info("Ticket outbox event published successfully. outboxId={}, aggregateId={}, eventType={}, topic={}",
                             event.getId(), event.getAggregateId(), event.getEventType(), topic);
                 }
 
             } catch (Exception ex) {
                 int updated = outboxRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
                 if (updated == 0) {
-                    log.error("Ticket outbox event exceeded max retry limit ({}) or was already published. outboxEventId={}, eventType={}, aggregateId={}",
-                            MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    log.error("Ticket outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(),
+                            MAX_RETRY_COUNT, ex);
                     meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
-                    log.warn("Failed to publish ticket outbox event, retry incremented. outboxEventId={}, eventType={}, aggregateId={}",
-                            event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    log.error("Ticket outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
                 }
             }
         }

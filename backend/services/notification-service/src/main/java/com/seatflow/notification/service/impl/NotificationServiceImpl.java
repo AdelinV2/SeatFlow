@@ -51,8 +51,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "ticket-issued-" + event.ticketId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate TicketIssued notification: ticketId={}, idempotencyKey={}",
-                    event.ticketId(), idempotencyKey);
+            log.info("Skipping duplicate TicketIssued notification: ticketId={}", event.ticketId());
             return;
         }
 
@@ -113,8 +112,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "payment-failed-" + event.paymentId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate PaymentFailed notification: paymentId={}, idempotencyKey={}",
-                    event.paymentId(), idempotencyKey);
+            log.info("Skipping duplicate PaymentFailed notification: paymentId={}", event.paymentId());
             return;
         }
 
@@ -146,8 +144,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "reservation-held-" + event.reservationId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate ReservationHeld notification: reservationId={}, idempotencyKey={}",
-                    event.reservationId(), idempotencyKey);
+            log.info("Skipping duplicate ReservationHeld notification: reservationId={}", event.reservationId());
             return;
         }
 
@@ -187,8 +184,8 @@ public class NotificationServiceImpl implements NotificationService {
         try {
             htmlContent = emailTemplateRenderer.renderTemplate(templateType, variables);
         } catch (Exception ex) {
-            log.error("Failed to render email template for templateType={}, idempotencyKey={}: {}",
-                    templateType, idempotencyKey, ex.getMessage(), ex);
+            log.error("Failed to render email template for templateType={}: {}",
+                    templateType, ex.getMessage(), ex);
         }
 
         NotificationLog notificationLog = NotificationLog.builder()
@@ -217,8 +214,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "status", "SUCCESS"
             ).increment();
 
-            log.info("Notification successfully delivered: recipient={}, templateType={}, idempotencyKey={}",
-                    recipientEmail, templateType, idempotencyKey);
+            log.info("Notification successfully delivered: recipient={}, templateType={}", recipientEmail, templateType);
         } catch (Exception ex) {
             notificationLog.setStatus(NotificationStatus.FAILED);
             notificationLog.setErrorMessage(ex.getMessage());
@@ -229,8 +225,8 @@ public class NotificationServiceImpl implements NotificationService {
                     "reason", ex.getClass().getSimpleName()
             ).increment();
 
-            log.error("Failed to deliver notification: recipient={}, templateType={}, idempotencyKey={}: {}",
-                    recipientEmail, templateType, idempotencyKey, ex.getMessage(), ex);
+            log.error("Failed to deliver notification: recipient={}, templateType={}: {}",
+                    recipientEmail, templateType, ex.getMessage(), ex);
         }
 
         notificationLogRepository.save(notificationLog);

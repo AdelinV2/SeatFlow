@@ -7,7 +7,7 @@
 - **Phase:** `Phase 10 - DevOps & Observability`
 - **Related Specs:** `AGENTS.md`, `.ai/architecture/08-observability-and-deployment.md`, `.ai/tasks/phase-10-devops-observability/001-complete-redis-integration.md`
 - **Related ADRs:** `None` — this implements the logging architecture already selected in the specification.
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 

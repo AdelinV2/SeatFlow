@@ -64,19 +64,20 @@ public class OutboxEventPublisher {
 
                 int updated = outboxEventRepository.markPublished(event.getId(), Instant.now());
                 if (updated == 0) {
-                    log.debug("Outbox event already published (possibly by another instance). outboxEventId={}",
+                    log.debug("Outbox event already published (possibly by another instance). outboxId={}",
                             event.getId());
                 } else {
-                    log.info("Outbox event published. outboxEventId={}, eventType={}, aggregateId={}, topic={}",
+                    log.info("Outbox event published. outboxId={}, eventType={}, aggregateId={}, topic={}",
                             event.getId(), event.getEventType(), event.getAggregateId(), topic);
                 }
             } catch (Exception ex) {
                 int updated = outboxEventRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
                 if (updated == 0) {
-                    log.error("Outbox event at max retry count or already published; parking. outboxEventId={}, eventType={}, aggregateId={}",
-                            event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    log.error("Outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            MAX_RETRY_COUNT,
+                            event.getId(), event.getEventType(), event.getAggregateId(), MAX_RETRY_COUNT, ex);
                 } else {
-                    log.warn("Failed to publish outbox event. outboxEventId={}, eventType={}, aggregateId={}, retryCount={}",
+                    log.error("Outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
                 }
             }

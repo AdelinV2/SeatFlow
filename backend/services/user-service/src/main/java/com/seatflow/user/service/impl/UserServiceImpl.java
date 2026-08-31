@@ -131,7 +131,7 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         outboxEventRepository.save(outboxEvent);
-        log.info("UserRegisteredEvent written to outbox. userId={}, email={}, outboxEventId={}",
+        log.debug("UserRegisteredEvent written to outbox. userId={}, email={}, outboxId={}",
                 user.getId(), user.getEmail(), outboxEvent.getId());
     }
 }

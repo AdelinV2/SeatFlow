@@ -3,13 +3,13 @@ package com.seatflow.notification.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
-import com.seatflow.common.observability.context.CorrelationContext;
-import com.seatflow.common.observability.logging.StructuredLogFields;
+import com.seatflow.common.observability.logging.MessagingLogContext;
 import com.seatflow.notification.messaging.event.PaymentFailedEvent;
+import io.micrometer.tracing.Tracer;
 import com.seatflow.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +20,7 @@ public class PaymentFailedEventListener {
 
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<Tracer> tracerProvider;
 
     @KafkaListener(
             topics = EventTopics.PAYMENT_EVENTS,
@@ -32,14 +33,7 @@ public class PaymentFailedEventListener {
             return;
         }
 
-        String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
-        CorrelationContext.setCorrelationId(correlationId);
-        MDC.put(StructuredLogFields.CORRELATION_ID, correlationId);
-        if (envelope.eventId() != null) {
-            MDC.put(StructuredLogFields.TRACE_ID, envelope.eventId());
-        }
-
-        try {
+        try (MessagingLogContext ignored = MessagingLogContext.open(envelope.correlationId(), tracerProvider)) {
             log.info("Received payment event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
@@ -53,10 +47,6 @@ public class PaymentFailedEventListener {
             log.error("Failed to process payment event: type={}, eventId={}: {}",
                     envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
             throw ex;
-        } finally {
-            MDC.remove(StructuredLogFields.CORRELATION_ID);
-            MDC.remove(StructuredLogFields.TRACE_ID);
-            CorrelationContext.clear();
         }
     }
 

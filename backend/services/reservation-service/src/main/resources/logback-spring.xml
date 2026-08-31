@@ -2,13 +2,16 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <conversionRule conversionWord="mask" class="com.seatflow.common.observability.logging.SensitiveDataMaskingConverter" />
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="seatflow-service"/>
+    <springProperty scope="context" name="SEATFLOW_SERVICE_NAME" source="seatflow.observability.service-name" defaultValue="${APP_NAME}"/>
+
+    <conversionRule conversionWord="mask" class="com.seatflow.common.observability.logging.SensitiveDataMaskingConverter"/>
 
     <springProfile name="dev,local,default,docker">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
                 <pattern>%mask(%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%blue(%X{correlation.id:-N/A})] [%cyan(%t)] %yellow(%logger{36}) : %msg%n%throwable)</pattern>
-                <charset>utf8</charset>
+                <charset>UTF-8</charset>
             </encoder>
         </appender>
         <root level="INFO">
@@ -16,10 +19,10 @@
         </root>
     </springProfile>
 
-    <springProfile name="staging,prod,production">
+    <springProfile name="prod">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME:-reservation-service}","service.environment":"${SPRING_PROFILES_ACTIVE:-prod}"}</customFields>
+                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME}","service.environment":"${SPRING_PROFILES_ACTIVE:prod}"}</customFields>
                 <includeMdcKeyName>trace.id</includeMdcKeyName>
                 <includeMdcKeyName>span.id</includeMdcKeyName>
                 <includeMdcKeyName>correlation.id</includeMdcKeyName>
@@ -27,7 +30,15 @@
                 <includeMdcKeyName>http.method</includeMdcKeyName>
                 <includeMdcKeyName>http.uri</includeMdcKeyName>
                 <includeMdcKeyName>http.client_ip</includeMdcKeyName>
-                <maskingPattern>(?i)(Bearer\s+eyJ[^\s,]+|sk_(?:live|test)_[A-Za-z0-9_]+|whsec_[A-Za-z0-9_]+|password=[^\s,&amp;]+|token=[^\s,&amp;]+|\b(?:\d[ -]*?){13,16}\b)</maskingPattern>
+                <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                    <valueMasker class="com.seatflow.common.observability.logging.LogstashSensitiveValueMasker"/>
+                </jsonGeneratorDecorator>
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerThrowable>20</maxDepthPerThrowable>
+                    <maxLength>4096</maxLength>
+                    <rootCauseFirst>true</rootCauseFirst>
+                    <exclude>sun\.reflect\..*</exclude>
+                </throwableConverter>
             </encoder>
         </appender>
         <root level="INFO">
@@ -36,13 +47,9 @@
     </springProfile>
 
     <springProfile name="test">
-        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder>
-                <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
-            </encoder>
-        </appender>
-        <root level="WARN">
-            <appender-ref ref="CONSOLE"/>
+        <appender name="TEST_SILENT" class="ch.qos.logback.core.helpers.NOPAppender"/>
+        <root level="OFF">
+            <appender-ref ref="TEST_SILENT"/>
         </root>
     </springProfile>
 </configuration>

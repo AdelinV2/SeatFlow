@@ -3,8 +3,7 @@ package com.seatflow.realtime.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
-import com.seatflow.common.observability.context.CorrelationContext;
-import com.seatflow.common.observability.logging.StructuredLogFields;
+import com.seatflow.common.observability.logging.MessagingLogContext;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
 import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
@@ -12,9 +11,10 @@ import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
 import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
 import com.seatflow.realtime.service.RealtimeFanOutPublisher;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +25,7 @@ public class ReservationEventListener {
 
     private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<Tracer> tracerProvider;
 
     @KafkaListener(
             topics = EventTopics.RESERVATION_EVENTS,
@@ -37,14 +38,7 @@ public class ReservationEventListener {
             return;
         }
 
-        String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
-        CorrelationContext.setCorrelationId(correlationId);
-        MDC.put(StructuredLogFields.CORRELATION_ID, correlationId);
-        if (envelope.eventId() != null) {
-            MDC.put(StructuredLogFields.TRACE_ID, envelope.eventId());
-        }
-
-        try {
+        try (MessagingLogContext ignored = MessagingLogContext.open(envelope.correlationId(), tracerProvider)) {
             log.info("Received reservation event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
 
@@ -71,10 +65,6 @@ public class ReservationEventListener {
             log.error("Failed to process reservation event: type={}, eventId={}: {}",
                     envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
             throw ex;
-        } finally {
-            MDC.remove(StructuredLogFields.CORRELATION_ID);
-            MDC.remove(StructuredLogFields.TRACE_ID);
-            CorrelationContext.clear();
         }
     }
 

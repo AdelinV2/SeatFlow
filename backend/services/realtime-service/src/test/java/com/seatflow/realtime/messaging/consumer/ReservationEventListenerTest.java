@@ -39,7 +39,7 @@ class ReservationEventListenerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        listener = new ReservationEventListener(realtimeFanOutPublisher, objectMapper);
+        listener = new ReservationEventListener(realtimeFanOutPublisher, objectMapper, mock());
     }
 
     @Test

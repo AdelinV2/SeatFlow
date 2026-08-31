@@ -116,8 +116,8 @@ public class TicketServiceImpl implements TicketService {
                     .build();
             outboxRepository.save(outboxEvent);
 
-            log.info("Issued ticket ticketId={}, eventId={}, seatId={}, paymentId={}",
-                    savedTicket.getId(), command.eventId(), seat.seatId(), command.paymentId());
+            log.info("Ticket issued successfully. ticketId={}, eventId={}, paymentId={}",
+                    savedTicket.getId(), command.eventId(), command.paymentId());
         }
 
         return ticketMapper.toResponseList(savedTickets);

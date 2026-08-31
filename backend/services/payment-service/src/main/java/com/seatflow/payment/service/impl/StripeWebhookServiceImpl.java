@@ -103,7 +103,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
 
         // Webhook Idempotency Check
         if (payment.getStatus() == PaymentStatus.SUCCESS) {
-            log.warn("Duplicate succeeded webhook ignored for paymentId={}, stripePaymentIntentId={}",
+            log.warn("Stripe webhook duplicate ignored. paymentId={}, stripePaymentIntentId={}",
                     payment.getId(), paymentIntentId);
             return;
         }
@@ -157,7 +157,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         Payment payment = paymentOpt.get();
 
         if (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED) {
-            log.warn("Duplicate or late failed webhook ignored for paymentId={}, status={}",
+            log.warn("Stripe webhook duplicate or late failure ignored. paymentId={}, status={}",
                     payment.getId(), payment.getStatus());
             return;
         }

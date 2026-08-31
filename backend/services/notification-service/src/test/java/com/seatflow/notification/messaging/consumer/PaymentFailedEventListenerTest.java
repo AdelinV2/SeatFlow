@@ -33,7 +33,7 @@ class PaymentFailedEventListenerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        listener = new PaymentFailedEventListener(notificationService, objectMapper);
+        listener = new PaymentFailedEventListener(notificationService, objectMapper, mock());
     }
 
     @Test

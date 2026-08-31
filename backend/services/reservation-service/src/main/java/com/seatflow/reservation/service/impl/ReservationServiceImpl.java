@@ -126,8 +126,7 @@ public class ReservationServiceImpl implements ReservationService {
                     .map(SeatHold::getSeatId)
                     .collect(Collectors.toSet());
             if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                log.info("Idempotent replay for idempotencyKey={}, reservationId={}",
-                        request.idempotencyKey(), prior.getId());
+                log.info("Idempotent reservation replay. reservationId={}", prior.getId());
                 return reservationMapper.toResponse(prior);
             }
             throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
@@ -139,7 +138,8 @@ public class ReservationServiceImpl implements ReservationService {
                 request.eventId(), sortedSeatIds);
         if (!conflicting.isEmpty()) {
             List<UUID> conflictingSeatIds = conflicting.stream().map(SeatHold::getSeatId).toList();
-            log.warn("Seat hold conflict detected. eventId={}, seatsCount={}", request.eventId(), conflictingSeatIds.size());
+            log.warn("Seat hold collision detected. eventId={}, seatsCount={}",
+                    request.eventId(), conflictingSeatIds.size());
             throw new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -181,13 +181,14 @@ public class ReservationServiceImpl implements ReservationService {
                         .map(SeatHold::getSeatId)
                         .collect(Collectors.toSet());
                 if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                    log.info("Idempotent replay after constraint violation. idempotencyKey={}, reservationId={}",
-                            request.idempotencyKey(), prior.get().getId());
+                    log.info("Idempotent reservation replay after constraint violation. reservationId={}",
+                            prior.get().getId());
                     return reservationMapper.toResponse(prior.get());
                 }
                 throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
             }
-            log.warn("Concurrent seat hold detected. eventId={}, seatsCount={}", request.eventId(), request.seatIds().size(), ex);
+            log.warn("Concurrent seat hold detected. eventId={}, seatsCount={}",
+                    request.eventId(), request.seatIds().size(), ex);
             throw new ConflictException("One or more seats were taken concurrently", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -206,7 +207,7 @@ public class ReservationServiceImpl implements ReservationService {
                 "eventId", request.eventId().toString(),
                 "status", "SUCCESS").increment();
 
-        log.info("Reservation hold created. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
+        log.info("Reservation hold acquired successfully. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
                 saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
                 saved.getTotalAmount(), saved.getExpiresAt());
 
