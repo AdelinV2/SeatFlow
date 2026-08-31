@@ -2,19 +2,22 @@
 
 ## Purpose
 
-Use this file to choose the best AI model and reasoning effort for a software-development task.
+Use this file to choose the best AI model and reasoning effort for a SeatFlow software-development task.
 
-Optimize for **successful task completion per unit of cost, latency, and context**, not for maximum model strength.
+Optimize for **successful task completion per unit of cost, latency, context, retry effort, and failure risk** — not for maximum model strength.
 
 Available choices:
-- GPT-5.6 Luna
-- GPT-5.6 Terra
-- GPT-5.6 Sol
-- Gemini 3.7 Flash
-- GPT reasoning: Low / Medium / High / xhigh / Max
-- Gemini reasoning: Low / Medium / High
+
+- GPT-5.6 Luna — Low / Medium / High / xHigh / Max
+- GPT-5.6 Terra — Low / Medium / High / xHigh / Max
+- GPT-5.6 Sol — Low / Medium / High / xHigh / Max
+- Gemini 3.7 Flash — Low / Medium / High
+- Hy3 — High
+- Muse Spark 1.2 — xHigh
 
 If a model/effort is unavailable in the current tool, choose the closest available configuration.
+
+---
 
 ## 1. Classify the Task
 
@@ -25,151 +28,243 @@ Before recommending a model, estimate:
 - **Context:** Small (<20K), Medium (20-100K), Large (100-300K), Very Large (300K+)
 - **Agentic demand:** Low / Medium / High
 - **Verification:** Strong (compiler/tests/lint/browser) or Weak
-- **Dominant requirement:** speed, implementation, reasoning, frontend, long-context, or reliability
+- **Dominant requirement:** speed, deterministic implementation, reasoning, frontend, long-context, or reliability
 
 Do not increase reasoning effort merely because a task is long. Increase it when the task is genuinely difficult, ambiguous, or costly to get wrong.
 
-## 2. Model Roles
+---
 
-### Luna — Cheap Worker
-Use for deterministic, bounded, easily verified work:
-- boilerplate
-- DTOs/mappers
-- CRUD
-- test generation
-- documentation
+## 2. SeatFlow Model Roles
+
+### Hy3 High — Free Deterministic Implementation Worker
+
+Prefer for bounded, well-specified, strongly verifiable work:
+
+- implementing an already-complete task file
+- CRUD / DTO / mapper / repository / controller work
+- unit and integration tests
 - mechanical refactors
-- simple fixes
-- CI/log triage
+- reproducible bug fixes
+- Docker / GitHub Actions / routine observability
+- straightforward backend and frontend tasks
 
-Default: **Luna Medium**  
-Trivial work: **Luna Low**  
-Bounded but harder debugging/review: **Luna High**
+Use **Hy3 High first** when the task has clear acceptance criteria and compiler/tests can act as an objective oracle.
 
-Do not use Luna Max as a substitute for a stronger base model when architecture, hard debugging, or very-large-context reasoning is the bottleneck.
+Do not make Hy3 the final authority for hidden high-cost correctness such as reservation concurrency, payment/idempotency, security, distributed consistency, or architecture.
 
-### Gemini 3.7 Flash — Agentic / Frontend / Large-Context Value
-Use especially for:
-- autonomous edit/test/fix loops
+### Muse Spark 1.2 xHigh — Free Large / Agentic Implementation Worker
+
+Prefer for:
+
+- larger cross-file implementation
 - repository exploration
-- frontend and UI implementation
-- Angular/Tailwind/web work
-- screenshot/mock-driven implementation
-- tool-heavy tasks
-- broad multi-file changes
-- large-context analysis where cost matters
+- long-horizon agentic edit/test/fix loops
+- repo-wide refactors
+- tasks requiring substantially more context than Hy3's ~256K window
+- implementation where a ~1M context window is useful
 
-Default serious mode: **Gemini 3.7 Flash High**  
-Use Medium for ordinary bounded implementation and Low for simple work.
+Muse xHigh can be verbose and agent-harness dependent. Use it when the work is large and verifiable, not as final authority for critical invariants.
 
-Gemini High can consume many reasoning tokens. This is acceptable when its low token price plus strong agentic performance produces a lower cost per successful task.
+### Luna — Cheap Premium Worker
+
+Use for deterministic, bounded, easily verified work when a paid but consistent fallback is useful:
+
+- documentation
+- tests
+- boilerplate
+- simple fixes
+- mechanical refactors
+- cheap premium implementation
+
+Default: **Luna Medium**
+
+Bounded debugging/implementation: **Luna High**
+
+Avoid **Luna Max** as an interactive default. Measured evaluations show it can consume dramatically more reasoning/output tokens and have much higher time-to-first-token than Terra High. More reasoning does not erase base-model limitations.
+
+### Gemini 3.7 Flash High — Frontend / Agentic / Large-Context Premium Worker
+
+Prefer especially for:
+
+- Angular / Tailwind / UI implementation
+- screenshot/mock-driven work
+- visual iteration
+- autonomous tool-heavy workflows
+- large-context repository exploration
+- frontend debugging where browser/tool loops dominate
+
+Default serious mode: **Gemini 3.7 Flash High**.
+
+Gemini High can consume many reasoning tokens, but its price/performance and agentic/frontend benchmark profile make that acceptable for appropriate tasks.
 
 ### Terra — Default Senior Engineer
-Use for serious software engineering:
+
+Use for serious reasoning:
+
 - feature planning
-- backend implementation
-- debugging
+- backend architecture
+- difficult debugging
 - code review
-- refactoring
-- Spring Boot/JPA/transactions
+- complex refactors
+- JPA / transactions
+- Kafka/outbox reasoning
 - migrations
 - API design
-- repository reasoning
-- architecture
+- cross-service reasoning
 
-Default implementation: **Terra Medium**  
-Default planning/debugging/review: **Terra High**  
-Use xhigh only for unusually difficult reasoning or high-risk work.
+Default implementation: **Terra Medium**
+
+Default planning/debugging/review: **Terra High**
+
+Use xHigh for unusually difficult multi-service reasoning.
 
 ### Sol — Critical Escalation / Principal Engineer
-Use when failure is expensive or the problem is intrinsically difficult:
-- production incidents
+
+Use when failure is expensive or difficult to detect:
+
+- reservation locking / zero-double-booking
+- payment / Stripe / idempotency
+- authentication / authorization / security
+- distributed consistency
 - race conditions
-- distributed systems
-- Kafka consistency/ordering
-- security
-- auth/authz
-- payments
-- data integrity
+- production incidents
 - dangerous migrations
+- data integrity
 - critical architecture
-- unresolved hard debugging
 
-Default difficult mode: **Sol High**  
-Critical/high-risk mode: **Sol xhigh**  
-Use **Sol Max only as final escalation**, not as a normal development preset.
+Default difficult mode: **Sol High**
 
-## 3. Routing Table
+Critical/high-risk mode: **Sol xHigh**
 
-| Task | Recommended |
+Use **Sol Max only as final escalation**.
+
+---
+
+## 3. SeatFlow Routing Table
+
+| SeatFlow task | Recommended |
 |---|---|
-| Tiny syntax/mechanical edit | Luna Low |
-| Boilerplate / DTO / mapper | Luna Low |
-| Unit tests | Luna Medium |
-| CRUD / simple bounded feature | Luna Medium |
-| Small backend feature | Terra Medium |
-| Normal backend feature | Terra Medium |
-| Complex Spring feature | Terra High |
-| Autonomous feature implementation | Gemini High |
+| Documentation / extraction / status | Luna Low |
+| DTO / mapper / boilerplate | Hy3 High |
+| Unit/integration test generation | Hy3 High |
+| CRUD / bounded backend task from complete spec | Hy3 High |
+| Larger cross-file implementation from complete spec | Muse xHigh |
+| Normal backend feature with design decisions | Terra Medium |
+| Complex Spring/JPA transaction feature | Terra High |
+| Autonomous repo-wide implementation | Muse xHigh |
 | Frontend / Angular / Tailwind | Gemini High |
-| UI from screenshot/mock | Gemini High |
-| Repository exploration | Gemini High |
-| Very large context exploration | Gemini High |
+| Screenshot / visual UI implementation | Gemini High |
+| Large-context repo exploration | Muse xHigh or Gemini High |
 | Feature planning | Terra High |
 | Architecture planning | Terra High |
-| Critical architecture | Sol High |
-| Clear localized bug | Luna High |
+| Critical architecture / new invariant | Sol High |
+| Clear localized reproducible bug | Hy3 High |
+| Cheap premium bug fallback | Luna High |
 | Normal difficult debugging | Terra High |
-| Tool-heavy exploratory debugging | Gemini High |
-| Intermittent/concurrency/distributed bug | Sol High/xhigh |
-| Normal PR review | Terra High |
-| Bulk first-pass review | Luna Medium |
-| Mechanical refactor | Luna Medium |
-| Complex refactor | Terra High |
-| Large autonomous refactor | Gemini High |
-| Security/auth/payment review | Sol xhigh |
-| DB migration | Terra High/xhigh |
-| Dangerous production migration | Sol xhigh |
-| CI failure triage | Luna Medium |
-| Production incident | Sol High/xhigh |
+| Tool-heavy frontend/debug exploration | Gemini High |
+| Cross-service root-cause debugging | Terra High/xHigh |
+| Intermittent/concurrency/distributed bug | Sol High/xHigh |
+| Routine PR review | Terra Medium |
+| Complex PR review | Terra High |
+| Security/payment/concurrency final review | Sol High/xHigh |
+| Mechanical refactor | Hy3 High |
+| Large repo-wide refactor | Muse xHigh |
+| DB migration | Terra High/xHigh |
+| Dangerous production migration | Sol High/xHigh |
+| CI / Docker / routine observability | Hy3 High |
+| Production incident | Sol High/xHigh |
 
-## 4. Key Comparison Rules
+---
 
-Prefer **Gemini High over Terra High** when the task is strongly agentic, frontend-heavy, tool-heavy, large-context, automatically verifiable, and cost-sensitive.
+## 4. SeatFlow Risk Overrides
 
-Prefer **Terra High over Gemini High** when precise backend reasoning, invariants, transactions, architecture, root-cause analysis, or weakly-verifiable correctness dominate.
+SeatFlow has architectural invariants where hidden mistakes are more expensive than inference cost. For these, **do not use free-first as the final decision layer**:
 
-Prefer **Terra High over Luna Max** for difficult debugging, architecture, broad abstraction-level reasoning, or very-large-context reasoning. More reasoning does not guarantee that a smaller base model catches a stronger one.
+- zero double-booking
+- 15-minute reservation holds
+- PostgreSQL source-of-truth semantics
+- transactional outbox / Kafka delivery guarantees
+- reservation/payment idempotency
+- Stripe webhook/payment state transitions
+- authentication/authorization/security
+- distributed consistency and race conditions
 
-For genuinely hard tasks, consider **Sol Medium/High before blindly pushing Terra or Luna to Max**.
+For these tasks, use **Terra High** at minimum for reasoning and **Sol High/xHigh** when failure can cause financial, security, or data-integrity damage.
 
-Use **Max** only when lower efforts are insufficient or the expected cost of failure clearly outweighs additional latency/compute.
+---
 
-## 5. Verification Rule
+## 5. Free-First Rule
 
-Strong automatic verification makes cheaper models more attractive.
+When all of the following are true:
+
+- task is well specified
+- failure risk is low-to-medium
+- compiler/tests/lint/browser can strongly verify correctness
+- architecture is already decided
+
+prefer:
+
+1. **Hy3 High** for bounded implementation.
+2. **Muse Spark 1.2 xHigh** for larger cross-file / long-context / agentic implementation.
+3. Escalate only if verification fails repeatedly or hidden reasoning risk appears.
+
+A free retry is monetarily cheap, but developer time and context are not free. After **one meaningful repair loop**, reassess whether the problem is a model-capability issue rather than repeatedly retrying the same model.
+
+---
+
+## 6. Key Comparison Rules
+
+Prefer **Hy3 High over Luna/Terra** when the implementation is deterministic, bounded, and test-verifiable.
+
+Prefer **Muse xHigh over Hy3 High** when the task is larger, strongly agentic, cross-file, or needs >256K useful context.
+
+Prefer **Gemini High over Muse/Hy3** when frontend quality, visual iteration, browser/tool automation, or premium agent reliability matters.
+
+Prefer **Terra High over Hy3/Muse/Gemini** when precise backend reasoning, invariants, transactions, architecture, root-cause analysis, or weakly-verifiable correctness dominate.
+
+Prefer **Sol High/xHigh** when payment, security, data integrity, concurrency, distributed consistency, or production-critical behavior dominates.
+
+Prefer **Terra High over Luna Max** for difficult interactive planning/debugging. Luna Max's low nominal token price can be offset operationally by much higher reasoning volume and latency.
+
+---
+
+## 7. Verification Rule
+
+Strong automatic verification makes free/cheap models more attractive.
 
 If compiler + tests + lint + integration/browser checks can reliably reject bad work:
-- favor Luna or Gemini.
+
+- favor Hy3, Muse, Luna, or Gemini.
 
 If correctness is difficult to verify automatically:
+
 - favor Terra or Sol.
 
-## 6. Escalation Policy
+---
 
-Start at the lowest configuration that has a high probability of success.
+## 8. Escalation Policy
 
-Typical path:
+### Bounded implementation
 
-`Luna Medium -> Terra Medium/High -> Sol High -> Sol xhigh -> Sol Max`
+`Hy3 High -> one repair loop -> Luna High / Terra Medium -> Terra High`
 
-For agentic/frontend/large-context work, branch early to:
+### Large / cross-file / agentic implementation
 
-`Gemini High -> Terra High -> Sol High`
+`Muse xHigh -> one repair loop -> Gemini High or Terra High -> Sol High if critical`
 
-Do not repeatedly retry a weak model at extreme effort when the evidence suggests a base-capability limitation.
+### Frontend
 
-## 7. Cost Principle
+`Gemini High -> Terra High for architecture/state issues -> Sol only if critical`
+
+### Serious backend reasoning
+
+`Terra High -> Terra xHigh -> Sol High -> Sol xHigh -> Sol Max`
+
+Do not repeatedly retry a weaker model at extreme effort when evidence suggests a base-capability limitation.
+
+---
+
+## 9. Cost Principle
 
 Never optimize only for nominal $/token.
 
@@ -177,9 +272,11 @@ Use:
 
 `Effective Cost = token cost + retries + latency + developer review time + expected failure cost`
 
-A cheaper model may emit far more reasoning tokens and still win economically. A more expensive model may be cheaper overall if it avoids retries or prevents a costly mistake.
+Free models have zero model cost but not zero workflow cost. A paid stronger model can be cheaper overall when it prevents repeated failures or a hidden correctness bug.
 
-## 8. Response Format
+---
+
+## 10. Response Format
 
 When asked which model to use, respond concisely:
 
@@ -193,12 +290,14 @@ When asked which model to use, respond concisely:
 - Context: Small/Medium/Large/Very Large
 - Agentic demand: Low/Medium/High
 
-**Cheaper option:** MODEL — EFFORT, plus tradeoff.
+**Free/cheaper option:** MODEL — EFFORT, plus tradeoff.
 
 **Escalate to:** MODEL — EFFORT only if a specific condition occurs.
 
-## 9. Reference Rule
+---
 
-If the choice is ambiguous, unusually expensive, or the user requests quantitative justification, consult `AI_MODEL_REFERENCE.md`.
+## 11. Reference Rule
+
+If the choice is ambiguous, unusually expensive, high-risk, or the user requests quantitative justification, consult `.ai/AI_MODEL_REFERENCE.md`.
 
 For ordinary routing, **do not load the reference file unnecessarily**.
