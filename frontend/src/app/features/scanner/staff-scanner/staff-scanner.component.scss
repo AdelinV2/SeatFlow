@@ -1,0 +1,81 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.scanner-page {
+  background: radial-gradient(circle at 50% 0%, rgba(241, 245, 249, 0.8) 0%, var(--color-canvas) 100%);
+  color: var(--color-text-primary);
+  transition: background 300ms ease, color 300ms ease;
+}
+
+:host-context(.dark) .scanner-page,
+:host-context(html.dark) .scanner-page {
+  background: radial-gradient(circle at 50% 0%, rgba(30, 41, 59, 0.5) 0%, rgba(11, 15, 25, 1) 100%);
+}
+
+#qr-reader-container {
+  border: none !important;
+  background: transparent !important;
+
+  ::ng-deep video {
+    object-fit: cover !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 1rem !important;
+  }
+
+  ::ng-deep img {
+    display: none !important;
+  }
+
+  ::ng-deep div {
+    border: none !important;
+  }
+}
+
+.hud-reticle-overlay {
+  .reticle-corner {
+    position: absolute;
+    transition: all 250ms ease-out;
+  }
+}
+
+@keyframes laser-scan {
+  0% {
+    top: 5%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 92%;
+    opacity: 1;
+  }
+  100% {
+    top: 5%;
+    opacity: 0.8;
+  }
+}
+
+.laser-sweep {
+  animation: laser-scan 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.hud-header,
+.manual-entry-card,
+.history-card {
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.06);
+
+  :host-context(.dark) &,
+  :host-context(html.dark) & {
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.viewfinder-card {
+  box-shadow: 0 15px 35px -10px rgba(15, 23, 42, 0.08);
+
+  :host-context(.dark) &,
+  :host-context(html.dark) & {
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+  }
+}

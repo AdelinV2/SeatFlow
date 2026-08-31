@@ -240,7 +240,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Ticket code not recognized: " + request.ticketCode())
                     .build());
             return new ValidationResultResponse(false, null, request.ticketCode(), ValidationResult.INVALID,
-                    null, null, null, null, null, null, scanTime, "Invalid ticket: code does not exist");
+                    null, null, null, null, null, null, null, scanTime, "Invalid ticket: code does not exist");
         }
 
         Ticket ticket = ticketOpt.get();
@@ -253,7 +253,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Ticket was cancelled")
                     .build());
             return new ValidationResultResponse(false, ticket.getId(), ticket.getTicketCode(), ValidationResult.CANCELLED,
-                    null, null, ticket.getAttendeeName(), null, null, null, scanTime, "Ticket has been cancelled");
+                    null, null, ticket.getAttendeeName(), null, null, null, ticket.getTicketType(), scanTime, "Ticket has been cancelled");
         }
 
         if (ticket.getStatus() == TicketStatus.USED) {
@@ -264,7 +264,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Duplicate entry attempt")
                     .build());
             return new ValidationResultResponse(false, ticket.getId(), ticket.getTicketCode(), ValidationResult.ALREADY_USED,
-                    null, null, ticket.getAttendeeName(), null, null, null, scanTime, "Ticket has already been used for entry");
+                    null, null, ticket.getAttendeeName(), null, null, null, ticket.getTicketType(), scanTime, "Ticket has already been used for entry");
         }
 
         // Status is VALID -> grant entry, transition to USED, and audit.
@@ -280,9 +280,14 @@ public class TicketServiceImpl implements TicketService {
 
         EventEnrichment enrichment = enrichEvent(ticket.getEventId(), ticket.getSeatId());
 
+        String resolvedTicketType = ticket.getTicketType() != null && !ticket.getTicketType().isBlank()
+                ? ticket.getTicketType()
+                : "Standard";
+
         return new ValidationResultResponse(true, ticket.getId(), ticket.getTicketCode(), ValidationResult.SUCCESS,
                 enrichment.eventTitle(), enrichment.eventDate(), ticket.getAttendeeName(),
                 enrichment.sectionName(), enrichment.rowLabel(), enrichment.seatNumber(),
+                resolvedTicketType,
                 scanTime, "Entry granted successfully");
     }
 

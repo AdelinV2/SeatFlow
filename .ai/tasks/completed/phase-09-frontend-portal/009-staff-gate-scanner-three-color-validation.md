@@ -7,7 +7,7 @@
 - **Phase:** `Phase 09 - Frontend Portal`
 - **Related Specs:** `.ai/architecture/06-api-contracts.md` (Section 2.6), `.ai/architecture/07-frontend-specification.md` (Section 4.4), `frontend/AGENTS.md`
 - **Related ADRs:** `ADR-005` (Venue Gate Check-In Authorization and Dedicated Staff Scanner Flow)
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -15,14 +15,14 @@
 Implement the dedicated staff gate check-in scanner at `/scanner`, guarded by `staff.guard.ts` (`ROLE_STAFF` or `ROLE_ADMIN` per ADR-005). The component activates the device camera via `html5-qrcode`, detects QR codes, extracts the ticket code from deep-link URLs (`https://seatflow.app/tickets/guest/{ticketCode}`) or raw strings, validates tickets via `POST /api/scanner/tickets/validate`, and triggers the **3-Color Sensory Feedback Matrix** with Web Audio synth chimes and haptic feedback.
 
 ### Critical Invariants to Enforce:
-- [ ] **Role Authorization Guard (ADR-005):** `/scanner` route is strictly protected by `staff.guard.ts` (permitting `ROLE_STAFF` and `ROLE_ADMIN` only).
-- [ ] **3-Color Sensory Feedback Matrix:**
+- [x] **Role Authorization Guard (ADR-005):** `/scanner` route is strictly protected by `staff.guard.ts` (permitting `ROLE_STAFF` and `ROLE_ADMIN` only).
+- [x] **3-Color Sensory Feedback Matrix:**
   - 🟢 **SUCCESS (Emerald `#10B981`):** *Entry Granted* + high confirmation chime + short haptic vibration (`100ms`). Displays attendee name, section, row, seat.
   - 🟡 **ALREADY_USED (Amber `#F59E0B`):** *Ticket Already Scanned* + double warning beep + double vibration (`150ms-50ms-150ms`). Displays initial scan timestamp and gate device ID.
   - 🔴 **INVALID / CANCELLED (Rose `#F43F5E`):** *Invalid / Revoked Ticket* + low buzz tone + long alert vibration (`400ms`). Displays rejection reason.
-- [ ] **Zero Audio Asset Dependency (Web Audio API Synth):** Synthesize all tones (success chime, warning beep, error buzz) in real time using the browser Web Audio API (`AudioContext`) to prevent audio loading failures in offline/flaky network conditions.
-- [ ] **Deep-Link URL & Raw Code Parser:** Scanner must seamlessly extract the alphanumeric ticket code whether the QR contains a full URL (`https://seatflow.app/tickets/guest/SF-TKT-1234`) or a raw string (`SF-TKT-1234`).
-- [ ] **Manual Alphanumeric Fallback:** An accessible manual input box allows typing damaged ticket codes with immediate validation.
+- [x] **Zero Audio Asset Dependency (Web Audio API Synth):** Synthesize all tones (success chime, warning beep, error buzz) in real time using the browser Web Audio API (`AudioContext`) to prevent audio loading failures in offline/flaky network conditions.
+- [x] **Deep-Link URL & Raw Code Parser:** Scanner must seamlessly extract the alphanumeric ticket code whether the QR contains a full URL (`https://seatflow.app/tickets/guest/SF-TKT-1234`) or a raw string (`SF-TKT-1234`).
+- [x] **Manual Alphanumeric Fallback:** An accessible manual input box allows typing damaged ticket codes with immediate validation.
 
 ---
 
@@ -39,6 +39,7 @@ Implement the dedicated staff gate check-in scanner at `/scanner`, guarded by `s
 - `[NEW]` `frontend/src/app/services/scanner-api.service.spec.ts`
 - `[NEW]` `frontend/src/app/services/audio-feedback.service.spec.ts`
 - `[NEW]` `frontend/src/app/features/scanner/staff-scanner/staff-scanner.component.spec.ts`
+- `[NEW]` `frontend/src/app/features/scanner/validation-result-card/validation-result-card.component.spec.ts`
 - `[MODIFY]` `frontend/src/app/app.routes.ts`
 
 ---
@@ -316,9 +317,9 @@ To verify this task, run:
 ```bash
 cd frontend && npm test -- --watch=false --browsers=ChromeHeadless
 ```
-- [ ] `/scanner` is accessible only to users with `ROLE_STAFF` or `ROLE_ADMIN`.
-- [ ] HTML5 camera stream parses QR codes and extracts codes from deep URLs.
-- [ ] 3-Color Sensory Feedback Matrix triggers matching visual styles, Web Audio tones, and haptic vibrations.
-- [ ] Manual alphanumeric entry validates tickets as fallback.
-- [ ] All unit tests pass cleanly.
-- [ ] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/009-staff-gate-scanner-three-color-validation.md`.
+- [x] `/scanner` is accessible only to users with `ROLE_STAFF` or `ROLE_ADMIN`.
+- [x] HTML5 camera stream parses QR codes and extracts codes from deep URLs.
+- [x] 3-Color Sensory Feedback Matrix triggers matching visual styles, Web Audio tones, and haptic vibrations.
+- [x] Manual alphanumeric entry validates tickets as fallback.
+- [x] All unit tests pass cleanly.
+- [x] Task file is moved to `.ai/tasks/completed/phase-09-frontend-portal/009-staff-gate-scanner-three-color-validation.md`.

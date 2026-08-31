@@ -42,6 +42,7 @@ class EmailTemplateRendererTest {
                 "attendeeName", "John Doe",
                 "ticketCode", "SF-TKT-98765432",
                 "ticketId", ticketId.toString(),
+                "qrCodeImage", "data:image/png;base64,sampleQrImageData",
                 "eventName", "Rock Festival 2026",
                 "seatInfo", "Section VIP, Row 1, Seat 5",
                 "netAmount", new BigDecimal("80.00"),
@@ -55,6 +56,8 @@ class EmailTemplateRendererTest {
         assertThat(html).contains("John Doe");
         assertThat(html).contains("SF-TKT-98765432");
         assertThat(html).contains(ticketId.toString());
+        assertThat(html).contains("data:image/png;base64,sampleQrImageData");
+        assertThat(html).contains("Gate Admission QR Code");
         assertThat(html).contains("Rock Festival 2026");
         assertThat(html).contains("Section VIP, Row 1, Seat 5");
         assertThat(html).contains("$80.00");

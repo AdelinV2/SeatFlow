@@ -55,7 +55,7 @@ class TicketScannerControllerTest {
         UUID ticketId = UUID.randomUUID();
         when(ticketService.validateTicket(any(ValidateTicketRequest.class)))
                 .thenReturn(new ValidationResultResponse(true, ticketId, "SF-TKT-1234", ValidationResult.SUCCESS,
-                        "Concert", Instant.now(), "Jane Doe", "A", "1", 12, Instant.now(), "Entry granted"));
+                        "Concert", Instant.now(), "Jane Doe", "A", "1", 12, "Standard", Instant.now(), "Entry granted"));
 
         mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -63,7 +63,8 @@ class TicketScannerControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_STAFF))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(true))
-                .andExpect(jsonPath("$.result").value("SUCCESS"));
+                .andExpect(jsonPath("$.result").value("SUCCESS"))
+                .andExpect(jsonPath("$.ticketType").value("Standard"));
     }
 
     @Test
@@ -71,7 +72,7 @@ class TicketScannerControllerTest {
         UUID ticketId = UUID.randomUUID();
         when(ticketService.validateTicket(any(ValidateTicketRequest.class)))
                 .thenReturn(new ValidationResultResponse(true, ticketId, "SF-TKT-1234", ValidationResult.SUCCESS,
-                        "Concert", Instant.now(), "Jane Doe", "A", "1", 12, Instant.now(), "Entry granted"));
+                        "Concert", Instant.now(), "Jane Doe", "A", "1", 12, "VIP", Instant.now(), "Entry granted"));
 
         mockMvc.perform(post("/api/scanner/tickets/validate")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -79,7 +80,8 @@ class TicketScannerControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(true))
-                .andExpect(jsonPath("$.result").value("SUCCESS"));
+                .andExpect(jsonPath("$.result").value("SUCCESS"))
+                .andExpect(jsonPath("$.ticketType").value("VIP"));
     }
 
     @Test
