@@ -73,9 +73,9 @@ public class OutboxEventPublisher {
             } catch (Exception ex) {
                 int updated = outboxEventRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
                 if (updated == 0) {
-                    log.error("Outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}",
+                    log.error("Outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             MAX_RETRY_COUNT,
-                            event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                            event.getId(), event.getEventType(), event.getAggregateId(), MAX_RETRY_COUNT, ex);
                 } else {
                     log.error("Outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);

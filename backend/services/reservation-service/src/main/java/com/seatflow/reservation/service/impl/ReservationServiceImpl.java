@@ -126,8 +126,7 @@ public class ReservationServiceImpl implements ReservationService {
                     .map(SeatHold::getSeatId)
                     .collect(Collectors.toSet());
             if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                log.info("Idempotent replay for idempotencyKey={}, reservationId={}",
-                        request.idempotencyKey(), prior.getId());
+                log.info("Idempotent reservation replay. reservationId={}", prior.getId());
                 return reservationMapper.toResponse(prior);
             }
             throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
@@ -182,8 +181,8 @@ public class ReservationServiceImpl implements ReservationService {
                         .map(SeatHold::getSeatId)
                         .collect(Collectors.toSet());
                 if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                    log.info("Idempotent replay after constraint violation. idempotencyKey={}, reservationId={}",
-                            request.idempotencyKey(), prior.get().getId());
+                    log.info("Idempotent reservation replay after constraint violation. reservationId={}",
+                            prior.get().getId());
                     return reservationMapper.toResponse(prior.get());
                 }
                 throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
@@ -453,7 +452,7 @@ public class ReservationServiceImpl implements ReservationService {
                 "eventId", reservation.getEventId().toString(),
                 "status", "SUCCESS").increment();
 
-        log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatCount={}, amount={}",
+        log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatsCount={}, totalAmount={}",
                 reservationId, paymentId, reservation.getSeatHolds().size(), reservation.getTotalAmount());
     }
 
@@ -508,7 +507,7 @@ public class ReservationServiceImpl implements ReservationService {
                     "HOLD_TIMEOUT_EXCEEDED",
                     now));
 
-            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatCount={}",
+            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatsCount={}",
                     reservation.getId(), reservation.getEventId(), releasedSeatIds.size());
             processed++;
         }

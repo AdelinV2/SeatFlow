@@ -10,9 +10,12 @@ public final class LogstashSensitiveValueMasker implements ValueMasker {
 
     @Override
     public Object mask(JsonStreamContext context, Object value) {
-        if (value instanceof String stringValue) {
-            return SensitiveDataMaskingConverter.mask(stringValue);
+        if (!(value instanceof CharSequence) && !(value instanceof Number)) {
+            return null;
         }
-        return value;
+
+        String originalValue = value.toString();
+        String maskedValue = SensitiveDataMaskingConverter.mask(originalValue);
+        return maskedValue.equals(originalValue) ? null : maskedValue;
     }
 }

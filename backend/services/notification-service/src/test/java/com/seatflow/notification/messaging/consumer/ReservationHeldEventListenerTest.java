@@ -34,7 +34,7 @@ class ReservationHeldEventListenerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        listener = new ReservationHeldEventListener(notificationService, objectMapper);
+        listener = new ReservationHeldEventListener(notificationService, objectMapper, mock());
     }
 
     @Test

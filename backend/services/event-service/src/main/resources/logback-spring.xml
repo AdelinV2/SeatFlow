@@ -22,7 +22,7 @@
     <springProfile name="prod">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME}","service.environment":"${SPRING_PROFILES_ACTIVE:-prod}"}</customFields>
+                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME}","service.environment":"${SPRING_PROFILES_ACTIVE:prod}"}</customFields>
                 <includeMdcKeyName>trace.id</includeMdcKeyName>
                 <includeMdcKeyName>span.id</includeMdcKeyName>
                 <includeMdcKeyName>correlation.id</includeMdcKeyName>

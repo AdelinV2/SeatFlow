@@ -69,7 +69,7 @@ public class OutboxEventPublisher {
                 if (updated == 0) {
                     log.error("Payment outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(),
-                            event.getRetryCount(), ex);
+                            MAX_RETRY_COUNT, ex);
                     meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
                     log.error("Payment outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",

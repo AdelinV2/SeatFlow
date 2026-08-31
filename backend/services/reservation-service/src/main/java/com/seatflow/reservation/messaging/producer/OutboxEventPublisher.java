@@ -65,11 +65,11 @@ public class OutboxEventPublisher {
                 if (retryUpdated == 0) {
                     log.error("Outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
                             MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(),
-                            event.getRetryCount(), ex);
+                            MAX_RETRY_COUNT, ex);
                     meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
                 } else {
-                    log.error("Outbox delivery failed; retry incremented. outboxId={}, eventType={}, retryCount={}",
-                            event.getId(), event.getEventType(), event.getRetryCount(), ex);
+                    log.error("Outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
                 }
             }
         }

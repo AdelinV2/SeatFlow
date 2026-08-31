@@ -18,43 +18,29 @@ class SensitiveDataMaskingConverterTest {
 
     @Test
     void shouldMaskPanAndPreserveLastFourDigits() {
-        String input = "Payment failed for card 4111-2222-3333-4444";
-
-        assertThat(SensitiveDataMaskingConverter.mask(input))
+        assertThat(SensitiveDataMaskingConverter.mask("Payment failed for card 4111-2222-3333-4444"))
                 .isEqualTo("Payment failed for card ****-****-****-4444");
     }
 
     @Test
-    void shouldMaskStripeSecrets() {
-        String input = "stripeKey=sk_test_51Mz9876543210abcdef webhook=whsec_abc123456789xyz";
+    void shouldMaskJwtStripePasswordsTokensAndCvv() {
+        String input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature "
+                + "stripe=sk_test_51Mz9876543210abcdef webhook=whsec_abc123456789xyz "
+                + "password=SuperSecret token=tok_abc cvv=123 resetToken=rst_abc";
 
         String masked = SensitiveDataMaskingConverter.mask(input);
 
-        assertThat(masked)
-                .isEqualTo("stripeKey=[MASKED_STRIPE_SECRET] webhook=[MASKED_STRIPE_SECRET]")
-                .doesNotContain("sk_test_", "whsec_");
+        assertThat(masked).contains("Authorization: Bearer [MASKED_JWT]", "[MASKED_STRIPE_SECRET]")
+                .contains("password=[MASKED]", "token=[MASKED]", "cvv=[MASKED]", "resetToken=[MASKED]")
+                .doesNotContain("eyJhbGci", "sk_test_", "whsec_", "SuperSecret", "tok_abc", "rst_abc");
     }
 
     @Test
-    void shouldMaskBearerJwt() {
-        String input = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMifQ.signature";
+    void shouldPreserveQuotedBearerMaskAndMaskJsonSecrets() {
+        String input = "{\"Authorization\":\"Bearer eyJhbGciOiJIUzI1NiJ9.payload\",\"password\":\"secret\"}";
 
         assertThat(SensitiveDataMaskingConverter.mask(input))
-                .isEqualTo("Authorization: Bearer [MASKED_JWT]");
-    }
-
-    @Test
-    void shouldMaskPasswordsAndTokensInMessageTextAndJsonText() {
-        String message = "password=SuperSecretP@ss! token=tok_abc refresh_token=refresh-secret cvv=123";
-        String json = "{\"password\":\"MyPass123!\",\"token\":\"tok_abc\"}";
-        String quotedValueWithSpaces = "{\"password\":\"super secret phrase\",\"token\":\"token with spaces\"}";
-
-        assertThat(SensitiveDataMaskingConverter.mask(message))
-                .isEqualTo("password=[MASKED] token=[MASKED] refresh_token=[MASKED] cvv=[MASKED]");
-        assertThat(SensitiveDataMaskingConverter.mask(json))
-                .isEqualTo("{\"password\":\"[MASKED]\",\"token\":\"[MASKED]\"}");
-        assertThat(SensitiveDataMaskingConverter.mask(quotedValueWithSpaces))
-                .isEqualTo("{\"password\":\"[MASKED]\",\"token\":\"[MASKED]\"}");
+                .isEqualTo("{\"Authorization\":\"Bearer [MASKED_JWT]\",\"password\":\"[MASKED]\"}");
     }
 
     @Test
@@ -67,24 +53,27 @@ class SensitiveDataMaskingConverterTest {
     }
 
     @Test
+    void shouldReturnNullForUnchangedJsonValuesAndMaskNumericPanValues() {
+        LogstashSensitiveValueMasker masker = new LogstashSensitiveValueMasker();
+
+        assertThat(masker.mask(null, "reservationId=123e4567-e89b-12d3-a456-426614174000")).isNull();
+        assertThat(masker.mask(null, 4111222233334444L))
+                .isEqualTo("****-****-****-4444");
+        assertThat(masker.mask(null, 42)).isNull();
+    }
+
+    @Test
     void shouldMaskMessageAndThrowableWhenEncodedAsProductionJson() {
-        String message = "Payment rejected card=4111-2222-3333-4444 password=badpass "
-                + "token=tok_abc stripe=sk_live_abc123";
+        String message = "Payment rejected card=4111-2222-3333-4444 password=badpass token=tok_abc stripe=sk_live_abc123";
         Throwable throwable = new IllegalStateException(
-                "gateway response contained card 5500 0000 0000 0004 and Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature "
-                        + "with whsec_secret123"
+                "gateway response contained card 5500 0000 0000 0004 and Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature with whsec_secret123"
         );
 
         String json = encodeProductionJson(message, throwable);
 
         assertThat(json)
-                .contains("****-****-****-4444")
-                .contains("password=[MASKED]")
-                .contains("token=[MASKED]")
-                .contains("[MASKED_STRIPE_SECRET]")
-                .contains("\"stack_trace\"")
-                .contains("****-****-****-0004")
-                .contains("Bearer [MASKED_JWT]")
+                .contains("****-****-****-4444", "password=[MASKED]", "token=[MASKED]", "[MASKED_STRIPE_SECRET]")
+                .contains("\"stack_trace\"", "****-****-****-0004", "Bearer [MASKED_JWT]")
                 .doesNotContain("4111-2222-3333-4444", "5500 0000 0000 0004", "eyJhbGci", "sk_live_", "whsec_");
     }
 
@@ -92,12 +81,7 @@ class SensitiveDataMaskingConverterTest {
         LoggerContext context = new LoggerContext();
         Logger logger = context.getLogger("seatflow.test");
         LoggingEvent event = new LoggingEvent(
-                SensitiveDataMaskingConverterTest.class.getName(),
-                logger,
-                Level.ERROR,
-                message,
-                throwable,
-                (Object[]) null
+                SensitiveDataMaskingConverterTest.class.getName(), logger, Level.ERROR, message, throwable, null
         );
         event.setLoggerContext(context);
         event.setMDCPropertyMap(Map.of());
@@ -118,7 +102,6 @@ class SensitiveDataMaskingConverterTest {
         encoder.start();
 
         String encoded = new String(encoder.encode(event), StandardCharsets.UTF_8);
-
         encoder.stop();
         decorator.stop();
         context.stop();

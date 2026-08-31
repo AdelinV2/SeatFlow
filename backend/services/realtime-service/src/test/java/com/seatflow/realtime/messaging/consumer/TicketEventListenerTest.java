@@ -36,7 +36,7 @@ class TicketEventListenerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        listener = new TicketEventListener(realtimeFanOutPublisher, objectMapper);
+        listener = new TicketEventListener(realtimeFanOutPublisher, objectMapper, mock());
     }
 
     @Test

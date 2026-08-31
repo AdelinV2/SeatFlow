@@ -28,7 +28,7 @@ public class SensitiveDataMaskingConverter extends CompositeConverter<ILoggingEv
     );
 
     private static final Pattern KEY_VALUE_SECRET_PATTERN = Pattern.compile(
-            "(?i)([\\\"']?(?:password|passwd|authorization|client_secret|clientSecret|secret|token|apiKey|api_key|accessToken|access_token|refreshToken|refresh_token|verificationToken|verification_token|resetToken|reset_token|idempotencyKey|idempotency_key|cvv|cvc|cvc2|securityCode|security_code)[\\\"']?\\s*[:=]\\s*)(\\\"(?:\\\\.|[^\\\"\\\\])*\\\"|'[^']*'|[^\\\"'\\s,}&]+)"
+            "(?i)([\\\"']?(?:password|passwd|authorization|client_secret|clientSecret|secret|token|apiKey|api_key|accessToken|access_token|refreshToken|refresh_token|verificationToken|verification_token|resetToken|reset_token|idempotencyKey|idempotency_key|cvv|cvc|cvc2|securityCode|security_code)[\\\"']?\\s*[:=]\\s*)(\\\"(?:\\\\.|[^\\\"\\\\])*\\\"|'[^']*'|Bearer\\s+[^\\\"'\\s,}&]+|[^\\\"'\\s,}&]+)"
     );
 
     @Override
@@ -48,8 +48,6 @@ public class SensitiveDataMaskingConverter extends CompositeConverter<ILoggingEv
             return input;
         }
 
-        // Keep this order stable: the JSON and pattern appenders must produce
-        // the same replacement values for the same input.
         String result = JWT_PATTERN.matcher(input).replaceAll("Bearer [MASKED_JWT]");
         result = STRIPE_SECRET_PATTERN.matcher(result).replaceAll("[MASKED_STRIPE_SECRET]");
         result = maskPanNumbers(result);
@@ -62,7 +60,7 @@ public class SensitiveDataMaskingConverter extends CompositeConverter<ILoggingEv
 
         while (matcher.find()) {
             String candidate = matcher.group();
-            String digits = candidate.replaceAll("[\\s-]", "");
+            String digits = removePanSeparators(candidate);
             if (digits.length() >= 13
                     && digits.length() <= 19
                     && digits.chars().allMatch(Character::isDigit)) {
@@ -78,6 +76,17 @@ public class SensitiveDataMaskingConverter extends CompositeConverter<ILoggingEv
 
         matcher.appendTail(masked);
         return masked.toString();
+    }
+
+    private static String removePanSeparators(String candidate) {
+        StringBuilder digits = new StringBuilder(candidate.length());
+        for (int index = 0; index < candidate.length(); index++) {
+            char character = candidate.charAt(index);
+            if (character != ' ' && character != '-') {
+                digits.append(character);
+            }
+        }
+        return digits.toString();
     }
 
     private static String maskKeyValueSecrets(String input) {
@@ -114,9 +123,8 @@ public class SensitiveDataMaskingConverter extends CompositeConverter<ILoggingEv
         return "[MASKED]".equals(unquotedValue)
                 || "[MASKED_JWT]".equals(unquotedValue)
                 || "[MASKED_STRIPE_SECRET]".equals(unquotedValue)
-                // The JWT stage leaves the "Authorization: Bearer" prefix in
-                // place. Do not mask that prefix in the key/value stage.
-                || (key.toLowerCase().contains("authorization") && "Bearer".equalsIgnoreCase(unquotedValue));
+                || (key.toLowerCase().contains("authorization")
+                && "Bearer [MASKED_JWT]".equalsIgnoreCase(unquotedValue));
     }
 
     private static String stripWrappingQuotes(String value) {

@@ -132,11 +132,35 @@ public class MdcLoggingFilter extends OncePerRequestFilter {
         }
 
         if (StringUtils.hasText(context.traceId())) {
+            if (isValidTraceId(context.traceId())) {
             MDC.put(StructuredLogFields.TRACE_ID, context.traceId());
+            }
         }
         if (StringUtils.hasText(context.spanId())) {
+            if (isValidSpanId(context.spanId())) {
             MDC.put(StructuredLogFields.SPAN_ID, context.spanId());
+            }
         }
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
+    private boolean isValidTraceId(String traceId) {
+        return isValidW3cHexId(traceId, 32);
+    }
+
+    private boolean isValidSpanId(String spanId) {
+        return isValidW3cHexId(spanId, 16);
+    }
+
+    private boolean isValidW3cHexId(String value, int expectedLength) {
+        if (!StringUtils.hasText(value) || value.length() != expectedLength || value.chars().allMatch(ch -> ch == '0')) {
+            return false;
+        }
+        return value.chars().allMatch(ch -> (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'));
     }
 
     private String resolveClientIp(HttpServletRequest request) {
