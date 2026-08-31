@@ -3,6 +3,18 @@
 server:
   port: 0
 
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://seatflow.ciamlogin.com/test-tenant/v2.0
+          jwk-set-uri: https://seatflow.ciamlogin.com/test-tenant/discovery/v2.0/keys
+
 eureka:
   client:
     enabled: false

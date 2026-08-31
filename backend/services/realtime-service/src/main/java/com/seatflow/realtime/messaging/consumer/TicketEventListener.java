@@ -5,7 +5,8 @@ import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import com.seatflow.common.observability.context.CorrelationContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TicketEventListener {
 
-    private final SeatStatusBroadcaster seatStatusBroadcaster;
+    private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
@@ -45,11 +46,8 @@ public class TicketEventListener {
 
             if ("TicketIssued".equals(envelope.eventType())) {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
-                seatStatusBroadcaster.broadcastSeatStatus(
-                        event.eventId(),
-                        event.seatId(),
-                        SeatStatus.SOLD
-                );
+                realtimeFanOutPublisher.publish(envelope.eventId(),
+                        SeatStatusUpdateMessage.of(event.eventId(), event.seatId(), SeatStatus.SOLD));
             } else {
                 log.debug("Ignoring ticket event type: {}", envelope.eventType());
             }
