@@ -145,3 +145,4 @@ mvn -f backend/pom.xml clean verify -B --no-transfer-progress
 - [ ] No invalid header becomes a trace ID, no exporter failure alters business processing, and no secrets appear in OTLP configuration/logs.
 - [ ] Agent, collector, and Tempo endpoints use ports 4317, 4318, and 3200 exactly as specified.
 - [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/003-opentelemetry-distributed-tracing-and-w3c-context.md`.
+
