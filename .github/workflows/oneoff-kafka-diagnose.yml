@@ -1,6 +1,6 @@
 name: One-off - Diagnose Production Kafka
 
-# snapshot-trigger: 2026-09-01T21:26Z
+# snapshot-trigger: 2026-09-01T21:28Z
 on:
   push:
     branches: [ops/kafka-diagnose-20260901]
