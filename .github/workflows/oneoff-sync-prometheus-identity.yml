@@ -1,0 +1,86 @@
+name: One-off - Sync Prometheus Monitoring Identity
+
+on:
+  push:
+    branches: [ops/sync-prometheus-identity-20260901]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sync-monitoring-identity:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GCP with WIF
+        uses: ./.github/actions/setup-gcp-wif
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Synchronize monitoring password without exposing it
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+          GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "${GCP_VM_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --zone="${GCP_VM_ZONE}" \
+            --tunnel-through-iap --quiet \
+            --command='sudo bash -s' <<'REMOTE'
+          set -euo pipefail
+          project_id='seatflow-production-507311'
+          metadata_url='http://metadata.google.internal/computeMetadata/v1'
+          sync_url='https://txyyirobwnomhxygbacq.supabase.co/functions/v1/seatflow-sync-prom-76e30479bb3fb764'
+          sync_guard='xpMf0Hs-sdS5HOiJln3tDwCUzVAd9cLNSoOVKQZS72Q'
+          temp_response=$(mktemp)
+          trap 'rm -f "${temp_response}"' EXIT
+
+          metadata_response=$(curl -fsS -H 'Metadata-Flavor: Google' \
+            "${metadata_url}/instance/service-accounts/default/token")
+          access_token=$(printf '%s' "${metadata_response}" | jq -er '.access_token')
+          unset metadata_response
+
+          fetch_secret() {
+            local secret_name=$1 response encoded
+            response=$(curl -fsS \
+              -H "Authorization: Bearer ${access_token}" \
+              "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/${secret_name}/versions/latest:access")
+            encoded=$(printf '%s' "${response}" | jq -er '.payload.data')
+            printf '%s' "${encoded}" | base64 --decode
+          }
+
+          password=$(fetch_secret prometheus-identity-password)
+          if [[ -z ${password} || ${password} == *$'\n'* || ${password} == *$'\r'* ]]; then
+            echo 'Monitoring password secret is empty or malformed' >&2
+            exit 1
+          fi
+
+          payload=$(jq -n --arg password "${password}" '{password:$password}')
+          status=$(curl -sS -o "${temp_response}" -w '%{http_code}' \
+            -X POST "${sync_url}" \
+            -H "x-seatflow-sync: ${sync_guard}" \
+            -H 'Content-Type: application/json' \
+            --data-binary "${payload}")
+          unset password payload access_token sync_guard
+
+          if [[ ${status} != 200 ]]; then
+            echo "Supabase monitoring password synchronization failed with HTTP ${status}" >&2
+            jq -c '{ok,stage}' "${temp_response}" >&2 || true
+            exit 1
+          fi
+          jq -e '.ok == true and .scope == "metrics.read"' "${temp_response}" >/dev/null
+
+          /opt/seatflow/infra/scripts/refresh-prometheus-token.sh \
+            "${project_id}" /run/seatflow/prometheus-scrape-token
+          test -s /run/seatflow/prometheus-scrape-token
+          echo 'Monitoring identity synchronized and metrics token refresh verified.'
+          REMOTE
