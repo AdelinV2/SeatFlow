@@ -130,6 +130,10 @@ services:
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
       JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    # A cold simultaneous JVM startup on the 2-vCPU production VM was measured at
+    # ~397 seconds. Keep Docker from marking the gateway unhealthy before it binds.
+    healthcheck:
+      start_period: 480s
     mem_limit: 512m
     cpus: 0.6
     security_opt:
