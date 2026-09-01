@@ -16,6 +16,7 @@ token_file=$2
 metadata_url=http://metadata.google.internal/computeMetadata/v1
 supabase_auth_url='https://txyyirobwnomhxygbacq.supabase.co/auth/v1/token?grant_type=password'
 supabase_publishable_key='sb_publishable_PYk5C_1_YArT3EV24KjdDA_60lYr5ff'
+monitoring_email='prometheus@seat-flow.me'
 runtime_dir=$(dirname "${token_file}")
 
 install -d -o root -g root -m 0700 "${runtime_dir}"
@@ -57,20 +58,17 @@ fetch_secret() {
   fi
 }
 
-if ! email=$(fetch_secret prometheus-identity-email); then
-  exit 1
-fi
 if ! password=$(fetch_secret prometheus-identity-password); then
   exit 1
 fi
-if [[ -z ${email} || -z ${password} || ${email} == *$'\n'* || ${password} == *$'\n'* ]]; then
-  echo "Monitoring identity credentials are empty or malformed" >&2
+if [[ -z ${password} || ${password} == *$'\n'* || ${password} == *$'\r'* ]]; then
+  echo "Monitoring identity password is empty or malformed" >&2
   exit 1
 fi
 
-jq -n --arg email "${email}" --arg password "${password}" \
+jq -n --arg email "${monitoring_email}" --arg password "${password}" \
   '{email:$email,password:$password}' > "${temp_body}"
-unset email password access_token
+unset password access_token
 
 auth_status=$(curl -sS -o "${temp_response}" -w '%{http_code}' -X POST "${supabase_auth_url}" \
   -H "apikey: ${supabase_publishable_key}" \
