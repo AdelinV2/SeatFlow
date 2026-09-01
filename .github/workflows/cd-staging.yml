@@ -1,0 +1,142 @@
+name: CD - Develop Artifact Validation
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cd-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+  AR_BASE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+
+jobs:
+  build-images:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: eureka-server, context: ./backend, dockerfile: ./backend/services/eureka-server/Dockerfile }
+          - { image: api-gateway, context: ./backend, dockerfile: ./backend/services/api-gateway/Dockerfile }
+          - { image: user-service, context: ./backend, dockerfile: ./backend/services/user-service/Dockerfile }
+          - { image: seat-map-service, context: ./backend, dockerfile: ./backend/services/seat-map-service/Dockerfile }
+          - { image: event-service, context: ./backend, dockerfile: ./backend/services/event-service/Dockerfile }
+          - { image: reservation-service, context: ./backend, dockerfile: ./backend/services/reservation-service/Dockerfile }
+          - { image: payment-service, context: ./backend, dockerfile: ./backend/services/payment-service/Dockerfile }
+          - { image: ticket-service, context: ./backend, dockerfile: ./backend/services/ticket-service/Dockerfile }
+          - { image: realtime-service, context: ./backend, dockerfile: ./backend/services/realtime-service/Dockerfile }
+          - { image: notification-service, context: ./backend, dockerfile: ./backend/services/notification-service/Dockerfile }
+          - { image: frontend, context: ./frontend, dockerfile: ./frontend/Dockerfile }
+          - { image: otel-collector, context: ./docker, dockerfile: ./docker/otel/Dockerfile.collector }
+          - { image: tempo, context: ./docker, dockerfile: ./docker/otel/Dockerfile.tempo }
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GCP with WIF
+        uses: ./.github/actions/setup-gcp-wif
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push immutable image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.AR_BASE }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ env.AR_BASE }}/${{ matrix.image }}:staging-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: true
+          sbom: true
+
+  validate-contracts:
+    name: Validate production contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-placeholder
+          DB_USERNAME: seatflow
+          DB_PASSWORD: ci-placeholder
+          REDIS_PASSWORD: ci-placeholder
+          STRIPE_API_KEY: ci-placeholder
+          STRIPE_WEBHOOK_SECRET: ci-placeholder
+          RESEND_API_KEY: ci-placeholder
+          GRAFANA_ADMIN_PASSWORD: ci-placeholder
+          PROMETHEUS_SCRAPE_TOKEN_FILE: ./prometheus/prometheus-scrape-token.example
+          AR_BASE: europe-west1-docker.pkg.dev/example/seatflow
+          SEATFLOW_IMAGE_TAG: 0000000000000000000000000000000000000000
+        run: >-
+          docker compose
+          -f docker/docker-compose.yml
+          -f docker/docker-compose.services.yml
+          -f docker/docker-compose.monitoring.yml
+          -f docker/docker-compose.prod.yml
+          config --quiet
+
+      - name: Validate Terraform
+        run: |
+          terraform fmt -check -recursive infra/terraform
+          terraform -chdir=infra/terraform/environments/production init -backend=false
+          terraform -chdir=infra/terraform/environments/production validate
+
+      - name: Validate workflow and shell contracts
+        shell: pwsh
+        run: .github/workflows/tests/cd-workflow-contract.ps1
+
+  publish-manifest:
+    name: Publish immutable deployment manifest
+    runs-on: ubuntu-latest
+    needs: [build-images, validate-contracts]
+    steps:
+      - name: Create non-secret release manifest
+        run: |
+          jq -n \
+            --arg sha "${GITHUB_SHA}" \
+            --arg registry "${AR_BASE}" \
+            --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{schemaVersion: 1, imageTag: $sha, registry: $registry, createdAt: $created,
+              images: ["eureka-server","api-gateway","user-service","seat-map-service",
+                "event-service","reservation-service","payment-service","ticket-service",
+                "realtime-service","notification-service","frontend","otel-collector","tempo"]}' \
+            > deployment-manifest.json
+
+      - name: Upload deployment manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-deployment-${{ github.sha }}
+          path: deployment-manifest.json
+          retention-days: 30
+

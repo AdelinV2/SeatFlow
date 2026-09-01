@@ -3,7 +3,7 @@
 This runbook is the authoritative, step-by-step operational guide for provisioning, configuring, verifying, securing, and maintaining the single-VM **SeatFlow** production deployment on Google Cloud Platform (GCP).
 
 Related ADR: [ADR-008: Compute Engine Single-VM Portfolio Deployment](../../.ai/decisions/ADR-008-compute-engine-single-vm-portfolio-deployment.md)  
-Related Task: [TASK-P10-008](../../.ai/tasks/completed/phase-10-devops-observability/008-compute-engine-gcp-production-terraform.md)
+Related Tasks: [TASK-P10-008](../../.ai/tasks/completed/phase-10-devops-observability/008-compute-engine-gcp-production-terraform.md), [TASK-P10-007](../../.ai/tasks/phase-10-devops-observability/007-github-actions-compute-engine-cd-wif.md)
 
 ---
 
@@ -14,7 +14,7 @@ SeatFlow runs the complete portfolio microservices topology on a single, high-ca
 | Component | Target Specification | Notes |
 |---|---|---|
 | **GCP Project** | `seatflow-production-507311` | Dedicated portfolio production project |
-| **Region / Zone** | `europe-west1` / `europe-west1-b` | Belgium region |
+| **Region / Zone** | `europe-west1` / `europe-west1-c` | Belgium region; `-c` selected after repeated `pd-balanced` capacity failures in `-b` |
 | **Compute Instance** | `e2-highmem-2` | 2 vCPU, 16 GiB RAM |
 | **Boot Storage** | 80 GB `pd-balanced` | Protected from auto-deletion |
 | **Domain & Static IP** | `seat-flow.me` | Static external IPv4 attached to VM |
@@ -94,7 +94,7 @@ Inspect the plan output to ensure only the approved resources are being provisio
 - 1 Artifact Registry repository (`seatflow`)
 - 2 Service Accounts (`seatflow-vm-runtime`, `seatflow-github-deploy`)
 - 1 Workload Identity Pool + Provider for `AdelinV2/SeatFlow`
-- 14 Secret Manager containers
+- 8 Secret Manager containers
 
 ### 4.4 Apply Infrastructure
 ```bash
@@ -142,27 +142,33 @@ Terraform provisions empty Secret Manager containers to maintain zero secrets in
 ```bash
 PROJECT_ID="seatflow-production-507311"
 
-# Database Passwords
-echo -n "CHANGE_ME_ADMIN_PW" | gcloud secrets versions add postgres-admin-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_USER_PW" | gcloud secrets versions add postgres-user-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_SEATMAP_PW" | gcloud secrets versions add postgres-seatmap-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_EVENT_PW" | gcloud secrets versions add postgres-event-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_RESERVATION_PW" | gcloud secrets versions add postgres-reservation-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_PAYMENT_PW" | gcloud secrets versions add postgres-payment-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_TICKET_PW" | gcloud secrets versions add postgres-ticket-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_NOTIFICATION_PW" | gcloud secrets versions add postgres-notification-service-password --data-file=- --project=${PROJECT_ID}
+# 1. PostgreSQL Admin Superuser Password (maps to POSTGRES_PASSWORD)
+echo -n "CHANGE_ME_POSTGRES_ADMIN_PASSWORD" | gcloud secrets versions add postgres-admin-password --data-file=- --project=${PROJECT_ID}
 
-# Stripe API Keys
+# 2. PostgreSQL Application Role Password (maps to DB_PASSWORD for 'seatflow' user)
+echo -n "CHANGE_ME_POSTGRES_APP_PASSWORD" | gcloud secrets versions add postgres-app-password --data-file=- --project=${PROJECT_ID}
+
+# 3. Redis Auth Password (maps to REDIS_PASSWORD)
+echo -n "CHANGE_ME_REDIS_PASSWORD" | gcloud secrets versions add redis-password --data-file=- --project=${PROJECT_ID}
+
+# 4. Stripe API Secret Key (maps to STRIPE_API_KEY)
 echo -n "sk_live_..." | gcloud secrets versions add stripe-api-key --data-file=- --project=${PROJECT_ID}
+
+# 5. Stripe Webhook Signing Secret (maps to STRIPE_WEBHOOK_SECRET)
 echo -n "whsec_..." | gcloud secrets versions add stripe-webhook-secret --data-file=- --project=${PROJECT_ID}
 
-# JWT Authentication
-echo -n "https://auth.seat-flow.me/auth/v1" | gcloud secrets versions add jwt-issuer-uri --data-file=- --project=${PROJECT_ID}
-echo -n "https://auth.seat-flow.me/auth/v1/.well-known/jwks.json" | gcloud secrets versions add jwt-jwk-set-uri --data-file=- --project=${PROJECT_ID}
-
-# Email & CORS
+# 6. Resend Email API Key (maps to RESEND_API_KEY)
 echo -n "re_..." | gcloud secrets versions add resend-api-key --data-file=- --project=${PROJECT_ID}
-echo -n "https://seat-flow.me,https://www.seat-flow.me" | gcloud secrets versions add cors-allowed-origins --data-file=- --project=${PROJECT_ID}
+
+# 7. Grafana Admin Password (maps to GRAFANA_ADMIN_PASSWORD)
+echo -n "CHANGE_ME_GRAFANA_ADMIN_PASSWORD" | gcloud secrets versions add grafana-admin-password --data-file=- --project=${PROJECT_ID}
+
+# 8. Prometheus Actuator Scrape JWT Token (maps to PROMETHEUS_SCRAPE_TOKEN / /run/secrets/prometheus-scrape-token)
+echo -n "CHANGE_ME_JWT_METRICS_READ_TOKEN" | gcloud secrets versions add prometheus-scrape-token --data-file=- --project=${PROJECT_ID}
+
+# 9. Dedicated monitoring identity credentials (used only by the VM token refresher)
+echo -n "prometheus@seat-flow.me" | gcloud secrets versions add prometheus-identity-email --data-file=- --project=${PROJECT_ID}
+echo -n "CHANGE_ME_MONITORING_IDENTITY_PASSWORD" | gcloud secrets versions add prometheus-identity-password --data-file=- --project=${PROJECT_ID}
 ```
 
 ---
@@ -174,7 +180,7 @@ Because unrestricted port 22 is disabled in the firewall, all SSH connections mu
 ```bash
 # Connect to the VM securely through IAP tunnel
 gcloud compute ssh seatflow-production \
-  --zone=europe-west1-b \
+  --zone=europe-west1-c \
   --project=seatflow-production-507311 \
   --tunnel-through-iap
 ```
@@ -200,7 +206,7 @@ For HTTPS on `seat-flow.me`, provision Let's Encrypt SSL certificates inside the
 
 ```bash
 # Connect to the VM via IAP
-gcloud compute ssh seatflow-production --zone=europe-west1-b --project=seatflow-production-507311 --tunnel-through-iap
+gcloud compute ssh seatflow-production --zone=europe-west1-c --project=seatflow-production-507311 --tunnel-through-iap
 
 # Install Certbot
 sudo apt-get update
@@ -240,7 +246,7 @@ Expected output:
  SeatFlow GCP Foundation Verification
  Environment: production
  Project ID:  seatflow-production-507311
- Region/Zone: europe-west1 / europe-west1-b
+ Region/Zone: europe-west1 / europe-west1-c
 ==============================================================================
 ==> 1. Verifying Required GCP APIs...
   [PASS] Service API enabled: compute.googleapis.com
@@ -300,7 +306,7 @@ gunzip -c "${BACKUP_FILE}" | docker exec -i seatflow-postgres psql -U postgres
 Create on-demand disk snapshots prior to major version upgrades:
 ```bash
 gcloud compute disks snapshot seatflow-production \
-  --zone=europe-west1-b \
+  --zone=europe-west1-c \
   --snapshot-names="seatflow-manual-snapshot-$(date +%Y%m%d)" \
   --project=seatflow-production-507311
 ```
@@ -312,7 +318,7 @@ gcloud compute disks snapshot seatflow-production \
 ### 11.1 Container Status & Logs
 ```bash
 # Connect to VM
-gcloud compute ssh seatflow-production --zone=europe-west1-b --tunnel-through-iap
+gcloud compute ssh seatflow-production --zone=europe-west1-c --tunnel-through-iap
 
 # Check all running containers
 docker ps -a
@@ -352,3 +358,53 @@ sudo systemctl restart seatflow.service
 > Running `terraform destroy` will terminate the Compute Engine VM, purge network attachments, and drop persistent disk state.
 >
 > The VM resource has `deletion_protection = true` enabled in Terraform to prevent accidental destruction from the console and CLI.
+
+---
+
+## 13. GitHub Actions Deployment Configuration
+
+Create a protected GitHub Environment named `production`, require an approving reviewer, and define these non-secret variables. The `develop` artifact-validation workflow reads the same identifiers as repository variables; it does not create a second runtime stack.
+
+| Variable | Value |
+|---|---|
+| `GCP_PROJECT_ID` | `seatflow-production-507311` |
+| `GCP_REGION` | `europe-west1` |
+| `GCP_WIF_PROVIDER` | `projects/515874727347/locations/global/workloadIdentityPools/seatflow-github-pool/providers/seatflow-github-provider` |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | `seatflow-github-deploy@seatflow-production-507311.iam.gserviceaccount.com` |
+| `ARTIFACT_REGISTRY_REPOSITORY` | `seatflow` |
+| `GCP_VM_NAME` | `seatflow-production` |
+| `GCP_VM_ZONE` | `europe-west1-c` |
+| `GATEWAY_HEALTH_URL` | `https://seat-flow.me/api/events?size=1` |
+
+No GCP service-account key or runtime application secret belongs in GitHub. GitHub obtains a short-lived GCP credential through WIF, while the VM reads only its approved runtime secrets through the attached service account.
+
+### 13.1 Release Sequence
+
+1. Merge an approved release into `main` or push a semantic `vX.Y.Z` tag.
+2. The protected production workflow builds and pushes every deployable image using the full commit SHA.
+3. GitHub transfers only Compose, deployment scripts, and non-secret release metadata through IAP/OS Login.
+4. The VM reads Secret Manager through the metadata identity, validates Compose, pulls images, runs each database migration stage once, replaces services, and verifies the stack.
+5. Successful non-secret metadata is stored in `/opt/seatflow/deployment/current.env`; the previous release is retained in `previous.env`.
+
+The seven database-backed application containers have normal startup Flyway disabled in the production override. `run-production-migrations.sh` owns the ordered, release-idempotent migration stage and creates a root-only marker after all migrations succeed.
+
+### 13.2 Automatic and Manual Rollback
+
+Failed verification automatically restores the previous immutable image SHA and re-runs health checks. It never executes Flyway `clean`, `undo`, `repair`, or any schema reversal.
+
+For a manual image rollback:
+
+```bash
+gcloud compute ssh seatflow-production \
+  --zone=europe-west1-c \
+  --project=seatflow-production-507311 \
+  --tunnel-through-iap \
+  --command="sudo /opt/seatflow/infra/scripts/rollback-compose-release.sh /opt/seatflow https://seat-flow.me/api/events?size=1"
+```
+
+If no `previous.env` exists, stop and investigate rather than inventing a mutable image selector.
+
+### 13.3 Runtime Secret Readiness
+
+All eight Secret Manager containers must have an enabled version before the first release. `prometheus-scrape-token` must contain an IdP-issued JWT with only `metrics.read`; do not use a random token. A Stripe webhook signing secret must come from the exact test-mode endpoint `https://seat-flow.me/api/payments/webhook`, not from a local Stripe CLI listener.
+

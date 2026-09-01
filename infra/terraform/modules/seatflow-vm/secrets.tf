@@ -1,23 +1,21 @@
 # Secret Manager Containers for SeatFlow Runtime Configuration & Secrets
 # INVARIANT: Only empty containers are provisioned by Terraform.
 # Real secret payloads are injected out-of-band via gcloud secrets versions add.
+# The monitoring identity pair is used only to mint short-lived Supabase access
+# tokens for Prometheus; it is never written to source control or image layers.
 
 locals {
   secret_names = [
     "postgres-admin-password",
-    "postgres-user-service-password",
-    "postgres-seatmap-service-password",
-    "postgres-event-service-password",
-    "postgres-reservation-service-password",
-    "postgres-payment-service-password",
-    "postgres-ticket-service-password",
-    "postgres-notification-service-password",
+    "postgres-app-password",
+    "redis-password",
     "stripe-api-key",
     "stripe-webhook-secret",
-    "jwt-issuer-uri",
-    "jwt-jwk-set-uri",
     "resend-api-key",
-    "cors-allowed-origins"
+    "grafana-admin-password",
+    "prometheus-scrape-token",
+    "prometheus-identity-email",
+    "prometheus-identity-password"
   ]
 }
 
@@ -38,3 +36,4 @@ resource "google_secret_manager_secret" "secrets" {
 
   depends_on = [google_project_service.services]
 }
+

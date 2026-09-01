@@ -7,8 +7,10 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
       - 'infra/**'
-      - '.github/workflows/ci-pr-check.yml'
+      - '.github/**'
   workflow_dispatch:
 
 concurrency:
@@ -77,4 +79,78 @@ jobs:
       - name: Shell Scripts Syntax Check
         run: |
           bash -n infra/scripts/*.sh
+
+  frontend-build:
+    name: Frontend CI (Node 22 / Angular)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Test and Build Frontend
+        working-directory: frontend
+        run: |
+          npm test -- --watch=false
+          npm run build -- --configuration production
+
+  deployment-contracts:
+    name: Compose, Shell, and CD Contract Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Validate Production Compose Contract
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-placeholder
+          DB_USERNAME: seatflow
+          DB_PASSWORD: ci-placeholder
+          REDIS_PASSWORD: ci-placeholder
+          STRIPE_API_KEY: ci-placeholder
+          STRIPE_WEBHOOK_SECRET: ci-placeholder
+          RESEND_API_KEY: ci-placeholder
+          GRAFANA_ADMIN_PASSWORD: ci-placeholder
+          PROMETHEUS_SCRAPE_TOKEN_FILE: ./prometheus/prometheus-scrape-token.example
+          AR_BASE: europe-west1-docker.pkg.dev/example/seatflow
+          SEATFLOW_IMAGE_TAG: 0000000000000000000000000000000000000000
+        run: >-
+          docker compose
+          -f docker/docker-compose.yml
+          -f docker/docker-compose.services.yml
+          -f docker/docker-compose.monitoring.yml
+          -f docker/docker-compose.prod.yml
+          config --quiet
+
+      - name: Run ShellCheck
+        run: >-
+          docker run --rm -v "$PWD/infra/scripts:/work:ro" -w /work
+          koalaman/shellcheck:v0.10.0
+          bootstrap-seatflow-vm.sh deploy-compose-release.sh render-runtime-env.sh
+          rollback-compose-release.sh run-production-migrations.sh
+          verify-compose-release.sh verify-gcp-foundation.sh
+
+      - name: Run actionlint
+        run: >-
+          docker run --rm
+          -v "$PWD/.github:/repo/.github:ro"
+          -v "$PWD/.git:/repo/.git:ro"
+          -w /repo rhysd/actionlint:1.7.7
+
+      - name: Run CD Workflow Contract Tests
+        shell: pwsh
+        run: .github/workflows/tests/cd-workflow-contract.ps1
 

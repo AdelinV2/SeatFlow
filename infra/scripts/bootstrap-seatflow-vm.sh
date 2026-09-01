@@ -37,6 +37,8 @@ if ! command -v docker &>/dev/null; then
   fi
 
   ARCH="$(dpkg --print-architecture)"
+  # The target Ubuntu image provides /etc/os-release.
+  # shellcheck disable=SC1091
   CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
   echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
@@ -130,4 +132,10 @@ EOF
 systemctl daemon-reload
 systemctl enable seatflow.service
 
+# The release pipeline installs the token refresher script and unit files.
+# Enabling the timer here keeps the service ready across VM reboots while
+# remaining harmless before the first application release exists.
+systemctl enable seatflow-prometheus-token-refresh.timer 2>/dev/null || true
+
 echo "==> [SeatFlow Bootstrap] Bootstrap completed successfully."
+

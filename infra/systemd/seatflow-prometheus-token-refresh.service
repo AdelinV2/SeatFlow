@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh SeatFlow Prometheus Supabase access token
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/seatflow/infra/scripts/refresh-prometheus-token.sh seatflow-production-507311 /run/seatflow/prometheus-scrape-token
+User=root
+Group=root
+
