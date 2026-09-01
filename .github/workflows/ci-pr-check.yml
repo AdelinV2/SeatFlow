@@ -102,7 +102,7 @@ jobs:
       - name: Test and Build Frontend
         working-directory: frontend
         run: |
-          npm test -- --watch=false
+          npm test -- --watch=false --browsers=ChromeHeadless
           npm run build -- --configuration production
 
   deployment-contracts:
@@ -139,8 +139,8 @@ jobs:
         run: >-
           docker run --rm -v "$PWD/infra/scripts:/work:ro" -w /work
           koalaman/shellcheck:v0.10.0
-          bootstrap-seatflow-vm.sh deploy-compose-release.sh render-runtime-env.sh
-          rollback-compose-release.sh run-production-migrations.sh
+          bootstrap-seatflow-vm.sh deploy-compose-release.sh refresh-prometheus-token.sh
+          render-runtime-env.sh rollback-compose-release.sh run-production-migrations.sh
           verify-compose-release.sh verify-gcp-foundation.sh
 
       - name: Run actionlint
@@ -153,4 +153,3 @@ jobs:
       - name: Run CD Workflow Contract Tests
         shell: pwsh
         run: .github/workflows/tests/cd-workflow-contract.ps1
-
