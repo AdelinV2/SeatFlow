@@ -34,7 +34,11 @@ jobs:
       - name: Validate repaired scripts
         run: |
           bash -n infra/scripts/*.sh
-          docker run --rm --entrypoint sh -v "$PWD/infra/scripts:/work:ro" koalaman/shellcheck:v0.10.0 -c 'shellcheck /work/*.sh'
+          docker run --rm -v "$PWD/infra/scripts:/work:ro" -w /work koalaman/shellcheck:v0.10.0 \
+            bootstrap-seatflow-vm.sh configure-http-edge.sh configure-https-edge.sh \
+            deploy-compose-release.sh refresh-prometheus-token.sh render-runtime-env.sh \
+            rollback-compose-release.sh run-production-migrations.sh verify-compose-release.sh \
+            verify-gcp-foundation.sh
           git diff --check
 
       - name: Commit repaired bootstrap contract
