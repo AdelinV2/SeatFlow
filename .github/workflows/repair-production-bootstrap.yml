@@ -1,0 +1,241 @@
+name: Repair Production Bootstrap Contract
+
+on:
+  push:
+    branches:
+      - feat/p10-007-github-actions-compute-engine-cd-wif
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/p10-007-github-actions-compute-engine-cd-wif
+          fetch-depth: 0
+
+      - name: Repair production bootstrap and edge contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          compose = Path('docker/docker-compose.prod.yml')
+          text = compose.read_text()
+          text = text.replace(
+              'ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://seatflow.app}',
+              'ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://seat-flow.me,https://www.seat-flow.me}'
+          )
+          realtime_marker = '''      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}\n      REALTIME_REDIS_CHANNEL: ${REALTIME_REDIS_CHANNEL:-seatflow:realtime:seat-status}\n'''
+          realtime_replacement = '''      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}\n      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://seat-flow.me,https://www.seat-flow.me}\n      REALTIME_REDIS_CHANNEL: ${REALTIME_REDIS_CHANNEL:-seatflow:realtime:seat-status}\n'''
+          if realtime_marker not in text:
+              raise SystemExit('Realtime CORS marker not found')
+          text = text.replace(realtime_marker, realtime_replacement, 1)
+          old_frontend = '''    # TLS remains the responsibility of the P10-008 edge/certificate deployment.\n    # Do not publish 443 until it provides a tested listener and read-only cert mount.\n    ports: !override ["80:8080"]\n'''
+          new_frontend = '''    # The host Nginx edge owns public 80/443. The SPA container is reachable only\n    # from the VM loopback interface, so pre-DNS rehearsals never expose port 8080.\n    ports: !override ["127.0.0.1:8080:8080"]\n'''
+          if old_frontend not in text:
+              raise SystemExit('Frontend port marker not found')
+          compose.write_text(text.replace(old_frontend, new_frontend, 1))
+
+          render = Path('infra/scripts/render-runtime-env.sh')
+          text = render.read_text()
+          text = text.replace(
+              'temp_runtime=$(mktemp "${runtime_dir}/runtime.env.XXXXXX")\ntemp_prometheus=$(mktemp "${runtime_dir}/prometheus-scrape-token.XXXXXX")\ntrap \'rm -f "${temp_runtime}" "${temp_prometheus}"\' EXIT\n',
+              'temp_runtime=$(mktemp "${runtime_dir}/runtime.env.XXXXXX")\ntrap \'rm -f "${temp_runtime}"\' EXIT\n'
+          )
+          insert_after = '''append_secret_env() {\n  local environment_name=$1\n  local secret_name=$2\n  local secret_value\n  secret_value=$(fetch_secret "${secret_name}")\n  if [[ -z ${secret_value} || ${secret_value} == *$'\\n'* || ${secret_value} == *$'\\r'* ]]; then\n    echo "Secret ${secret_name} is empty or is not a single-line value" >&2\n    exit 1\n  fi\n  printf '%s=%s\\n' "${environment_name}" "${secret_value}" >> "${temp_runtime}"\n  unset secret_value\n}\n'''
+          optional_fn = '''\nappend_stripe_webhook_secret() {\n  local secret_value\n  if secret_value=$(fetch_secret stripe-webhook-secret 2>/dev/null); then\n    if [[ -z ${secret_value} || ${secret_value} == *$'\\n'* || ${secret_value} == *$'\\r'* ]]; then\n      echo "Secret stripe-webhook-secret is malformed" >&2\n      exit 1\n    fi\n  else\n    # The real Stripe endpoint cannot exist until public HTTPS is live. Use a\n    # deployment-local, cryptographically random value so unsolicited webhook\n    # requests remain unverifiable during the pre-DNS rehearsal. It is replaced\n    # automatically on the next deployment once Secret Manager has the real whsec.\n    secret_value=$(head -c 32 /dev/urandom | base64 | tr -d '\\n')\n    echo "Stripe webhook endpoint is not configured yet; using an ephemeral bootstrap signing value" >&2\n  fi\n  printf '%s=%s\\n' STRIPE_WEBHOOK_SECRET "${secret_value}" >> "${temp_runtime}"\n  unset secret_value\n}\n'''
+          if insert_after not in text:
+              raise SystemExit('append_secret_env function marker not found')
+          text = text.replace(insert_after, insert_after + optional_fn, 1)
+          text = text.replace(
+              'SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES=authenticated\nEOF\n',
+              'SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES=authenticated\nALLOWED_ORIGINS=https://seat-flow.me,https://www.seat-flow.me\nCORS_ALLOWED_ORIGINS=https://seat-flow.me,https://www.seat-flow.me\nEOF\n'
+          )
+          text = text.replace(
+              'append_secret_env STRIPE_WEBHOOK_SECRET stripe-webhook-secret\n',
+              'append_stripe_webhook_secret\n'
+          )
+          old_prom = '''fetch_secret prometheus-scrape-token > "${temp_prometheus}"\nif [[ ! -s ${temp_prometheus} ]]; then\n  echo "Secret prometheus-scrape-token is empty" >&2\n  exit 1\nfi\n\ninstall -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"\ninstall -o root -g root -m 0600 "${temp_prometheus}" "${prometheus_token_file}"\nunset access_token\n'''
+          new_prom = '''if [[ ! -s ${prometheus_token_file} ]]; then\n  echo "Fresh Prometheus scrape token is missing; token refresh must run before runtime rendering" >&2\n  exit 1\nfi\nchown root:root "${prometheus_token_file}"\nchmod 0600 "${prometheus_token_file}"\n\ninstall -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"\nunset access_token\n'''
+          if old_prom not in text:
+              raise SystemExit('Prometheus bootstrap token marker not found')
+          render.write_text(text.replace(old_prom, new_prom, 1))
+
+          deploy = Path('infra/scripts/deploy-compose-release.sh')
+          text = deploy.read_text()
+          timer_marker = '''  systemctl daemon-reload\n  systemctl enable --now seatflow-prometheus-token-refresh.timer\nfi\n\nif [[ -f ${deployment_dir}/current.env ]]; then\n'''
+          timer_replacement = '''  systemctl daemon-reload\n  systemctl enable --now seatflow-prometheus-token-refresh.timer\n  # Generate a fresh short-lived metrics JWT now; do not wait for the timer.\n  systemctl start seatflow-prometheus-token-refresh.service\nfi\n\nif [[ ! -s /run/seatflow/prometheus-scrape-token ]]; then\n  echo "Prometheus token refresh did not create the runtime token file" >&2\n  exit 1\nfi\n\n"${seatflow_root}/infra/scripts/configure-http-edge.sh"\n\nif [[ -f ${deployment_dir}/current.env ]]; then\n'''
+          if timer_marker not in text:
+              raise SystemExit('Token timer marker not found')
+          text = text.replace(timer_marker, timer_replacement, 1)
+          text = text.replace(
+              '"${seatflow_root}/infra/scripts/verify-compose-release.sh" \\\n    "${seatflow_root}" "${smoke_url}"\n',
+              '"${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}"\n',
+              1
+          )
+          text = text.replace(
+              '"${seatflow_root}/infra/scripts/rollback-compose-release.sh" \\\n      "${seatflow_root}" "${smoke_url}" || true\n',
+              '"${seatflow_root}/infra/scripts/rollback-compose-release.sh" "${seatflow_root}" || true\n',
+              1
+          )
+          success_marker = '''install -o root -g root -m 0600 "${temp_metadata}" "${deployment_dir}/current.env"\necho "SeatFlow release ${release_version} deployed successfully"\n'''
+          success_replacement = '''install -o root -g root -m 0600 "${temp_metadata}" "${deployment_dir}/current.env"\n\n# DNS cutover is deliberately deferred until the stack is healthy. If DNS is\n# already pointing at this VM, finish TLS and public HTTPS verification now.\nset +e\n"${seatflow_root}/infra/scripts/configure-https-edge.sh" "${smoke_url}"\nedge_status=$?\nset -e\nif [[ ${edge_status} -eq 10 ]]; then\n  echo "SeatFlow release is internally healthy; DNS/HTTPS cutover remains pending"\nelif [[ ${edge_status} -ne 0 ]]; then\n  echo "Application rollout succeeded but HTTPS edge configuration failed" >&2\n  exit "${edge_status}"\nelse\n  echo "SeatFlow release passed internal and public HTTPS verification"\nfi\n\necho "SeatFlow release ${release_version} deployed successfully"\n'''
+          if success_marker not in text:
+              raise SystemExit('Deployment success marker not found')
+          deploy.write_text(text.replace(success_marker, success_replacement, 1))
+
+          Path('infra/scripts/configure-http-edge.sh').write_text(r'''#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "configure-http-edge.sh must run as root" >&2
+  exit 1
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v nginx >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y --no-install-recommends nginx
+fi
+
+install -d -o root -g root -m 0755 /var/www/certbot
+rm -f /etc/nginx/sites-enabled/default
+
+cat > /etc/nginx/snippets/seatflow-proxy.conf <<'EOF'
+proxy_pass http://127.0.0.1:8080;
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+proxy_connect_timeout 5s;
+proxy_buffering off;
+EOF
+
+cert_dir=/etc/letsencrypt/live/seat-flow.me
+if [[ -s ${cert_dir}/fullchain.pem && -s ${cert_dir}/privkey.pem ]]; then
+  cat > /etc/nginx/sites-available/seatflow <<'EOF'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name seat-flow.me www.seat-flow.me api.seat-flow.me;
+  location /.well-known/acme-challenge/ { root /var/www/certbot; }
+  location / { return 301 https://$host$request_uri; }
+}
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  server_name seat-flow.me www.seat-flow.me api.seat-flow.me;
+  ssl_certificate /etc/letsencrypt/live/seat-flow.me/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/seat-flow.me/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_session_cache shared:SSL:10m;
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  location / { include /etc/nginx/snippets/seatflow-proxy.conf; }
+}
+EOF
+else
+  cat > /etc/nginx/sites-available/seatflow <<'EOF'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name seat-flow.me www.seat-flow.me api.seat-flow.me _;
+  location /.well-known/acme-challenge/ { root /var/www/certbot; }
+  location / { include /etc/nginx/snippets/seatflow-proxy.conf; }
+}
+EOF
+fi
+
+ln -sfn /etc/nginx/sites-available/seatflow /etc/nginx/sites-enabled/seatflow
+nginx -t
+systemctl enable nginx
+systemctl restart nginx
+''')
+
+          Path('infra/scripts/configure-https-edge.sh').write_text(r'''#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${EUID} -ne 0 ]]; then
+  echo "configure-https-edge.sh must run as root" >&2
+  exit 1
+fi
+if [[ $# -ne 1 || ! $1 =~ ^https:// ]]; then
+  echo "Usage: $0 <https-smoke-url>" >&2
+  exit 2
+fi
+smoke_url=$1
+metadata_url=http://metadata.google.internal/computeMetadata/v1
+expected_ip=$(curl -fsS -H 'Metadata-Flavor: Google' \
+  "${metadata_url}/instance/network-interfaces/0/access-configs/0/external-ip")
+
+for host in seat-flow.me www.seat-flow.me api.seat-flow.me; do
+  if ! getent ahostsv4 "${host}" | awk '{print $1}' | grep -Fxq "${expected_ip}"; then
+    echo "DNS for ${host} is not pointing to the SeatFlow VM yet; HTTPS configuration deferred"
+    exit 10
+  fi
+done
+
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v certbot >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y --no-install-recommends certbot
+fi
+
+certbot certonly --webroot \
+  --webroot-path /var/www/certbot \
+  --non-interactive --agree-tos --register-unsafely-without-email \
+  --keep-until-expiring \
+  -d seat-flow.me -d www.seat-flow.me -d api.seat-flow.me
+
+install -d -o root -g root -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+cat > /etc/letsencrypt/renewal-hooks/deploy/seatflow-nginx-reload.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+nginx -t
+systemctl reload nginx
+EOF
+chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/seatflow-nginx-reload.sh
+
+/opt/seatflow/infra/scripts/configure-http-edge.sh
+systemctl enable --now certbot.timer 2>/dev/null || true
+
+public_status=$(curl -fsS -o /dev/null -w '%{http_code}' "${smoke_url}")
+if [[ ! ${public_status} =~ ^2[0-9]{2}$ ]]; then
+  echo "Public HTTPS smoke probe failed with HTTP ${public_status}" >&2
+  exit 1
+fi
+
+echo "HTTPS edge is configured and the public smoke probe passed"
+''')
+
+          ci = Path('.github/workflows/ci-pr-check.yml')
+          text = ci.read_text()
+          marker = '''          bootstrap-seatflow-vm.sh deploy-compose-release.sh refresh-prometheus-token.sh\n          render-runtime-env.sh rollback-compose-release.sh run-production-migrations.sh\n'''
+          replacement = '''          bootstrap-seatflow-vm.sh configure-http-edge.sh configure-https-edge.sh\n          deploy-compose-release.sh refresh-prometheus-token.sh render-runtime-env.sh\n          rollback-compose-release.sh run-production-migrations.sh\n'''
+          if marker not in text:
+              raise SystemExit('ShellCheck workflow marker not found')
+          ci.write_text(text.replace(marker, replacement, 1))
+
+      - name: Validate repaired scripts
+        run: |
+          bash -n infra/scripts/*.sh
+          docker run --rm -v "$PWD/infra/scripts:/work:ro" -w /work koalaman/shellcheck:v0.10.0 *.sh
+          git diff --check
+
+      - name: Commit repaired bootstrap contract
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docker/docker-compose.prod.yml infra/scripts .github/workflows/ci-pr-check.yml
+          git commit -m "fix(infra): support safe pre-DNS production rehearsal"
+          git push origin HEAD:feat/p10-007-github-actions-compute-engine-cd-wif
