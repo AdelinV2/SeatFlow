@@ -17,11 +17,13 @@ resource "google_artifact_registry_repository_iam_member" "vm_runtime_ar_reader"
   member     = "serviceAccount:${google_service_account.vm_runtime.email}"
 }
 
-# Runtime SA: Access Secret Manager secret versions
-resource "google_project_iam_member" "vm_runtime_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.vm_runtime.email}"
+# Runtime SA: Access Secret Manager secret versions (scoped strictly to SeatFlow runtime secrets)
+resource "google_secret_manager_secret_iam_member" "vm_runtime_secret_accessor" {
+  for_each  = google_secret_manager_secret.secrets
+  project   = var.project_id
+  secret_id = each.value.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.vm_runtime.email}"
 }
 
 # Runtime SA: Emit Cloud Logging logs
@@ -57,10 +59,10 @@ resource "google_artifact_registry_repository_iam_member" "github_deploy_ar_writ
   member     = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 
-# Deploy SA: Compute Instance Administration (deploy releases, inspect status)
-resource "google_project_iam_member" "github_deploy_compute_admin" {
+# Deploy SA: Compute Viewer (describe instances and verify deployment target status)
+resource "google_project_iam_member" "github_deploy_compute_viewer" {
   project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
+  role    = "roles/compute.viewer"
   member  = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 

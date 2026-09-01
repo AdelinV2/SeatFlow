@@ -45,6 +45,7 @@ REQUIRED_SERVICES=(
   "iam.googleapis.com"
   "iamcredentials.googleapis.com"
   "sts.googleapis.com"
+  "iap.googleapis.com"
   "logging.googleapis.com"
   "monitoring.googleapis.com"
 )
@@ -204,14 +205,14 @@ else
   fail "Deploy Service Account NOT found: ${DEPLOY_SA}"
 fi
 
-# Guardrail: Ensure neither SA has project Owner or Editor
+# Guardrail: Ensure neither SA has project Owner or Editor, and Runtime SA has no project-wide secretAccessor
 PROJECT_IAM=$(gcloud projects get-iam-policy "${PROJECT_ID}" --format="json" 2>/dev/null || true)
 
-RUNTIME_OVERPRIV=$(echo "${PROJECT_IAM}" | jq -r --arg sa "serviceAccount:${RUNTIME_SA}" '.bindings[] | select((.role == "roles/owner" or .role == "roles/editor") and (.members[]? == $sa))')
+RUNTIME_OVERPRIV=$(echo "${PROJECT_IAM}" | jq -r --arg sa "serviceAccount:${RUNTIME_SA}" '.bindings[] | select((.role == "roles/owner" or .role == "roles/editor" or .role == "roles/secretmanager.secretAccessor") and (.members[]? == $sa))')
 if [ -z "${RUNTIME_OVERPRIV}" ]; then
-  pass "Guardrail Check: Runtime SA has NO Owner/Editor privileges"
+  pass "Guardrail Check: Runtime SA has NO Owner/Editor/project-wide secretAccessor privileges"
 else
-  fail "Guardrail Check: Runtime SA possesses excessive Owner/Editor role!"
+  fail "Guardrail Check: Runtime SA possesses excessive project-level privileges: ${RUNTIME_OVERPRIV}"
 fi
 
 DEPLOY_OVERPRIV=$(echo "${PROJECT_IAM}" | jq -r --arg sa "serviceAccount:${DEPLOY_SA}" '.bindings[] | select((.role == "roles/owner" or .role == "roles/editor") and (.members[]? == $sa))')
@@ -227,19 +228,13 @@ fi
 echo "==> 7. Verifying Secret Manager Containers (Empty Containers Check)..."
 EXPECTED_SECRETS=(
   "postgres-admin-password"
-  "postgres-user-service-password"
-  "postgres-seatmap-service-password"
-  "postgres-event-service-password"
-  "postgres-reservation-service-password"
-  "postgres-payment-service-password"
-  "postgres-ticket-service-password"
-  "postgres-notification-service-password"
+  "postgres-app-password"
+  "redis-password"
   "stripe-api-key"
   "stripe-webhook-secret"
-  "jwt-issuer-uri"
-  "jwt-jwk-set-uri"
   "resend-api-key"
-  "cors-allowed-origins"
+  "grafana-admin-password"
+  "prometheus-scrape-token"
 )
 
 EXISTING_SECRETS=$(gcloud secrets list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null || true)

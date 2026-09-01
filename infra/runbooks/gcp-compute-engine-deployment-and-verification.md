@@ -94,7 +94,7 @@ Inspect the plan output to ensure only the approved resources are being provisio
 - 1 Artifact Registry repository (`seatflow`)
 - 2 Service Accounts (`seatflow-vm-runtime`, `seatflow-github-deploy`)
 - 1 Workload Identity Pool + Provider for `AdelinV2/SeatFlow`
-- 14 Secret Manager containers
+- 8 Secret Manager containers
 
 ### 4.4 Apply Infrastructure
 ```bash
@@ -142,27 +142,29 @@ Terraform provisions empty Secret Manager containers to maintain zero secrets in
 ```bash
 PROJECT_ID="seatflow-production-507311"
 
-# Database Passwords
-echo -n "CHANGE_ME_ADMIN_PW" | gcloud secrets versions add postgres-admin-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_USER_PW" | gcloud secrets versions add postgres-user-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_SEATMAP_PW" | gcloud secrets versions add postgres-seatmap-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_EVENT_PW" | gcloud secrets versions add postgres-event-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_RESERVATION_PW" | gcloud secrets versions add postgres-reservation-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_PAYMENT_PW" | gcloud secrets versions add postgres-payment-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_TICKET_PW" | gcloud secrets versions add postgres-ticket-service-password --data-file=- --project=${PROJECT_ID}
-echo -n "CHANGE_ME_NOTIFICATION_PW" | gcloud secrets versions add postgres-notification-service-password --data-file=- --project=${PROJECT_ID}
+# 1. PostgreSQL Admin Superuser Password (maps to POSTGRES_PASSWORD)
+echo -n "CHANGE_ME_POSTGRES_ADMIN_PASSWORD" | gcloud secrets versions add postgres-admin-password --data-file=- --project=${PROJECT_ID}
 
-# Stripe API Keys
+# 2. PostgreSQL Application Role Password (maps to DB_PASSWORD for 'seatflow' user)
+echo -n "CHANGE_ME_POSTGRES_APP_PASSWORD" | gcloud secrets versions add postgres-app-password --data-file=- --project=${PROJECT_ID}
+
+# 3. Redis Auth Password (maps to REDIS_PASSWORD)
+echo -n "CHANGE_ME_REDIS_PASSWORD" | gcloud secrets versions add redis-password --data-file=- --project=${PROJECT_ID}
+
+# 4. Stripe API Secret Key (maps to STRIPE_API_KEY)
 echo -n "sk_live_..." | gcloud secrets versions add stripe-api-key --data-file=- --project=${PROJECT_ID}
+
+# 5. Stripe Webhook Signing Secret (maps to STRIPE_WEBHOOK_SECRET)
 echo -n "whsec_..." | gcloud secrets versions add stripe-webhook-secret --data-file=- --project=${PROJECT_ID}
 
-# JWT Authentication
-echo -n "https://auth.seat-flow.me/auth/v1" | gcloud secrets versions add jwt-issuer-uri --data-file=- --project=${PROJECT_ID}
-echo -n "https://auth.seat-flow.me/auth/v1/.well-known/jwks.json" | gcloud secrets versions add jwt-jwk-set-uri --data-file=- --project=${PROJECT_ID}
-
-# Email & CORS
+# 6. Resend Email API Key (maps to RESEND_API_KEY)
 echo -n "re_..." | gcloud secrets versions add resend-api-key --data-file=- --project=${PROJECT_ID}
-echo -n "https://seat-flow.me,https://www.seat-flow.me" | gcloud secrets versions add cors-allowed-origins --data-file=- --project=${PROJECT_ID}
+
+# 7. Grafana Admin Password (maps to GRAFANA_ADMIN_PASSWORD)
+echo -n "CHANGE_ME_GRAFANA_ADMIN_PASSWORD" | gcloud secrets versions add grafana-admin-password --data-file=- --project=${PROJECT_ID}
+
+# 8. Prometheus Actuator Scrape JWT Token (maps to PROMETHEUS_SCRAPE_TOKEN / /run/secrets/prometheus-scrape-token)
+echo -n "CHANGE_ME_JWT_METRICS_READ_TOKEN" | gcloud secrets versions add prometheus-scrape-token --data-file=- --project=${PROJECT_ID}
 ```
 
 ---
