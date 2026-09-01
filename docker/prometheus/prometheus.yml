@@ -7,21 +7,21 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'seatflow-gateway'
-    metrics_path: '/actuator/prometheus'
-    authorization:
-      type: Bearer
-      credentials_file: /run/secrets/prometheus-scrape-token
-    static_configs:
-      - targets: ['host.docker.internal:8080']
-
   - job_name: 'seatflow-eureka'
     metrics_path: '/actuator/prometheus'
     authorization:
       type: Bearer
       credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
-      - targets: ['host.docker.internal:8761']
+      - targets: ['eureka-server:8761']
+
+  - job_name: 'seatflow-gateway'
+    metrics_path: '/actuator/prometheus'
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/prometheus-scrape-token
+    static_configs:
+      - targets: ['api-gateway:8080']
 
   - job_name: 'seatflow-services'
     metrics_path: '/actuator/prometheus'
@@ -30,20 +30,29 @@ scrape_configs:
       credentials_file: /run/secrets/prometheus-scrape-token
     static_configs:
       - targets:
-          - 'host.docker.internal:8081'
-          - 'host.docker.internal:8082'
-          - 'host.docker.internal:8083'
-          - 'host.docker.internal:8084'
-          - 'host.docker.internal:8085'
-          - 'host.docker.internal:8086'
-          - 'host.docker.internal:8087'
-          - 'host.docker.internal:8088'
-    # OpenMetrics reserves counter-family names ending in `_created`. Keep the
-    # application source valid and restore SeatFlow's stable dashboard name at
-    # ingestion time.
+          - 'user-service:8081'
+          - 'seat-map-service:8082'
+          - 'event-service:8083'
+          - 'reservation-service:8084'
+          - 'payment-service:8085'
+          - 'ticket-service:8086'
+          - 'realtime-service:8087'
+          - 'notification-service:8088'
     metric_relabel_configs:
       - source_labels: [__name__]
         regex: 'seatflow_reservations_created_events_total'
         target_label: __name__
         replacement: 'seatflow_reservations_created_total'
         action: replace
+
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+
+  - job_name: 'tempo'
+    static_configs:
+      - targets: ['tempo:3200']
+
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']

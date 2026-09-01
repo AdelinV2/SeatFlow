@@ -8,7 +8,7 @@ spring:
       ssl:
         enabled: ${REDIS_SSL_ENABLED:false}
   kafka:
-    bootstrap-servers: kafka:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
       group-id: realtime-service
       auto-offset-reset: latest
@@ -17,7 +17,9 @@ spring:
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+  instance:
+    prefer-ip-address: true
 management:
   tracing:
     sampling:

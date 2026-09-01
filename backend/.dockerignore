@@ -1,0 +1,16 @@
+# Backend .dockerignore
+.git
+.gitignore
+.idea
+.vscode
+target/
+**/target/
+*.log
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+.env
+.env.*
+!.env.example

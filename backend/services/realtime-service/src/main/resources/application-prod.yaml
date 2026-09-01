@@ -1,14 +1,14 @@
 spring:
   data:
     redis:
-      host: ${REDIS_HOST}
+      host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}
       password: ${REDIS_PASSWORD:}
       ssl:
-        enabled: ${REDIS_SSL_ENABLED:true}
+        enabled: ${REDIS_SSL_ENABLED:false}
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:realtime-service}
       auto-offset-reset: latest
@@ -17,7 +17,9 @@ spring:
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL}
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+  instance:
+    prefer-ip-address: true
 
 seatflow:
   observability:
@@ -33,7 +35,7 @@ logging:
 management:
   tracing:
     sampling:
-      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.2}
   opentelemetry:
     resource-attributes:
       "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
@@ -43,3 +45,6 @@ management:
       export:
         otlp:
           endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://otel-collector:4318/v1/traces}
+  endpoint:
+    health:
+      show-details: never

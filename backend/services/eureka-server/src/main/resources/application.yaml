@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8761}
 
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   application:
     name: eureka-server
   security:

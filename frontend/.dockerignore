@@ -1,0 +1,17 @@
+node_modules
+dist
+.angular
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+npm-debug.log
+coverage
+.idea
+.vscode

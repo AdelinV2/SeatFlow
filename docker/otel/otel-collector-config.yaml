@@ -7,6 +7,10 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 150
+    spike_limit_mib: 50
   batch:
     timeout: 1s
     send_batch_size: 512
@@ -21,6 +25,9 @@ processors:
       - key: service.version
         action: upsert
         value: ${env:SEATFLOW_VERSION:-dev}
+      - key: service.instance.id
+        action: upsert
+        value: ${env:HOSTNAME:-unknown}
 
 exporters:
   otlphttp/tempo:
@@ -50,7 +57,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [resourcedetection, attributes, batch]
+      processors: [memory_limiter, resourcedetection, attributes, batch]
       exporters: [otlphttp/tempo, debug]
   telemetry:
     logs:

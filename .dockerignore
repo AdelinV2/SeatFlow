@@ -1,0 +1,23 @@
+# Root .dockerignore — prevent leaking secrets, git history, and build artifacts into images
+.git
+.gitignore
+.idea
+.vscode
+*.log
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+.env
+.env.*
+!.env.example
+target/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+backend/*/target/
+docker/prometheus/prometheus-scrape-token
+.ai/
+*.md
+!README.md

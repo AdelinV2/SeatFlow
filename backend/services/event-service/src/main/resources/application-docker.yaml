@@ -1,12 +1,12 @@
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/${DB_NAME:seatflow_event}
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:seatflow_event}
     username: ${DB_USERNAME:seatflow}
     password: ${DB_PASSWORD:seatflow_dev}
     hikari:
       maximum-pool-size: 10
   kafka:
-    bootstrap-servers: kafka:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -16,15 +16,30 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI}
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:api://seatflow-backend}
 
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   instance:
     prefer-ip-address: true
+
+seat-map-service:
+  service-id: ${SEAT_MAP_SERVICE_ID:seat-map-service}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      seatMapClient:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
 
 logging:
   level:

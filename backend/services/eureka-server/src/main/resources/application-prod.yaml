@@ -1,11 +1,11 @@
-# GCP Cloud Run / GKE (Staging & Production).
-# Strict self-preservation, JSON logs, actuator details hidden.
+# Production Docker Compose on single VM (not Cloud Run).
+# Uses private Docker DNS (eureka-server) and JSON logging.
 eureka:
   instance:
     hostname: ${EUREKA_HOSTNAME:eureka-server}
   client:
     service-url:
-      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://eureka-server:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   server:
     enable-self-preservation: true
     eviction-interval-timer-in-ms: 30000
@@ -20,7 +20,7 @@ logging:
 management:
   tracing:
     sampling:
-      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.2}
   opentelemetry:
     resource-attributes:
       "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
