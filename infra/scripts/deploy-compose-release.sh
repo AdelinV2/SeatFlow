@@ -54,8 +54,10 @@ if [[ -d ${release_root}/infra/systemd ]]; then
     /etc/systemd/system/seatflow-prometheus-token-refresh.timer
   systemctl daemon-reload
   systemctl enable --now seatflow-prometheus-token-refresh.timer
-  # Generate a fresh short-lived metrics JWT immediately; do not wait for the timer.
-  systemctl start seatflow-prometheus-token-refresh.service
+  # Generate the first short-lived metrics JWT inline so safe diagnostics are
+  # visible to the deployment runner. The systemd timer owns later refreshes.
+  "${seatflow_root}/infra/scripts/refresh-prometheus-token.sh" \
+    "${project_id}" /run/seatflow/prometheus-scrape-token
 fi
 
 if [[ ! -s /run/seatflow/prometheus-scrape-token ]]; then
@@ -128,4 +130,3 @@ else
 fi
 
 echo "SeatFlow release ${release_version} deployed successfully"
-
