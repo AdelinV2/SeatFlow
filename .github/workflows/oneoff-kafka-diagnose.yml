@@ -1,0 +1,45 @@
+name: One-off - Diagnose Production Kafka
+
+on:
+  push:
+    branches: [ops/kafka-diagnose-20260901]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose-kafka:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - name: Authenticate to GCP with WIF
+        uses: ./.github/actions/setup-gcp-wif
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Diagnose Kafka without secrets
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+          GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "${GCP_VM_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --zone="${GCP_VM_ZONE}" \
+            --tunnel-through-iap --quiet \
+            --command='sudo bash -s' <<'REMOTE'
+          set -u
+          echo '=== KAFKA STATE ==='
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} started={{.State.StartedAt}}' seatflow-kafka
+          echo '=== KAFKA HEALTHCHECK HISTORY ==='
+          docker inspect --format '{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}' seatflow-kafka | tail -20
+          echo '=== DIRECT TOPICS PROBE ==='
+          docker exec seatflow-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list 2>&1 | tail -40 || true
+          echo '=== KAFKA LOG TAIL ==='
+          docker logs --tail 100 seatflow-kafka 2>&1 | tail -100
+          REMOTE
