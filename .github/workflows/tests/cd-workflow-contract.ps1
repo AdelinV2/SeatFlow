@@ -93,6 +93,14 @@ Assert-Matches $httpsEdgeScript 'metadata\.google\.internal' 'HTTPS cutover must
 Assert-Matches $httpsEdgeScript 'exit 10' 'HTTPS cutover must expose a distinct DNS-not-ready status.'
 Assert-Matches $httpsEdgeScript 'certbot certonly' 'HTTPS cutover must provision the certificate only after DNS is ready.'
 Assert-Matches $migrationScript 'migrations-\$\{image_tag\}\.done' 'Migrations must be release-idempotent.'
+Assert-Matches $migrationScript 'docker-compose\.prod-health\.yml' 'Migration dependencies must use the same production health override as rollout verification.'
+Assert-Matches $migrationScript 'verify_flyway_history' 'Migration completion must verify Flyway history in PostgreSQL.'
+Assert-Matches $migrationScript 'verify_required_schema' 'Migration completion must verify required service tables in PostgreSQL.'
+Assert-Matches $migrationScript 'Successfully applied \[0-9\]\+ migration' 'Migration completion must require an explicit Flyway applied-migration signal.'
+Assert-Matches $migrationScript 'application_services=\(' 'Migration startup must quiesce application containers on the single production VM.'
+if ($migrationScript -match '\|Started \.\*Application') {
+    throw 'A generic Spring Started Application log line must never count as migration success.'
+}
 Assert-Matches $rollbackScript 'database schema was not changed' 'Rollback must explicitly preserve forward database state.'
 
 # Secret-bearing values must never be printed to stdout/stderr. The only allowed
