@@ -14,12 +14,6 @@ concurrency:
   group: cd-production
   cancel-in-progress: false
 
-env:
-  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  GCP_REGION: ${{ vars.GCP_REGION }}
-  ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
-  AR_BASE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
-
 jobs:
   build-images:
     name: Build release ${{ matrix.image }}
@@ -56,12 +50,12 @@ jobs:
       - name: Authenticate to GCP with WIF
         uses: ./.github/actions/setup-gcp-wif
         with:
-          project_id: ${{ env.GCP_PROJECT_ID }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Configure Artifact Registry authentication
-        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -72,7 +66,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ env.AR_BASE }}/${{ matrix.image }}:${{ github.sha }}
+          tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/${{ matrix.image }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: true
@@ -90,7 +84,7 @@ jobs:
       - name: Authenticate to GCP with WIF
         uses: ./.github/actions/setup-gcp-wif
         with:
-          project_id: ${{ env.GCP_PROJECT_ID }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
@@ -99,16 +93,17 @@ jobs:
           jq -n \
             --arg sha "${GITHUB_SHA}" \
             --arg version "${GITHUB_REF_NAME}" \
-            --arg registry "${AR_BASE}" \
+            --arg registry "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}" \
             '{schemaVersion: 1, imageTag: $sha, releaseVersion: $version, registry: $registry}' \
             > deployment-manifest.json
 
       - name: Package deployment contract
         run: |
-          tar -czf "/tmp/seatflow-${GITHUB_SHA}.tar.gz" docker infra/scripts deployment-manifest.json
+          tar -czf "/tmp/seatflow-${GITHUB_SHA}.tar.gz" docker infra/scripts infra/systemd deployment-manifest.json
 
       - name: Upload release bundle through IAP
         env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
           GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
         run: |
@@ -120,6 +115,9 @@ jobs:
 
       - name: Deploy release through IAP and OS Login
         env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
           GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
           GATEWAY_HEALTH_URL: ${{ vars.GATEWAY_HEALTH_URL }}
@@ -145,4 +143,3 @@ jobs:
           name: production-deployment-${{ github.sha }}
           path: deployment-manifest.json
           retention-days: 90
-

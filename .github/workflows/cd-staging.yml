@@ -18,11 +18,6 @@ jobs:
     name: Build ${{ matrix.image }}
     runs-on: ubuntu-latest
     environment: production
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
-      AR_BASE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
     strategy:
       fail-fast: false
       matrix:
@@ -48,12 +43,12 @@ jobs:
       - name: Authenticate to GCP with WIF
         uses: ./.github/actions/setup-gcp-wif
         with:
-          project_id: ${{ env.GCP_PROJECT_ID }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Configure Artifact Registry authentication
-        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -65,8 +60,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ env.AR_BASE }}/${{ matrix.image }}:${{ github.sha }}
-            ${{ env.AR_BASE }}/${{ matrix.image }}:staging-${{ github.sha }}
+            ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/${{ matrix.image }}:staging-${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: true
@@ -121,17 +116,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-images, validate-contracts]
     environment: production
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
-      AR_BASE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
     steps:
       - name: Create non-secret release manifest
         run: |
           jq -n \
             --arg sha "${GITHUB_SHA}" \
-            --arg registry "${AR_BASE}" \
+            --arg registry "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}" \
             --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{schemaVersion: 1, imageTag: $sha, registry: $registry, createdAt: $created,
               images: ["eureka-server","api-gateway","user-service","seat-map-service",
