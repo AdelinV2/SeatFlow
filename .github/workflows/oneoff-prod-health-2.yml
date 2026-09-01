@@ -52,3 +52,5 @@ jobs:
           systemctl is-active seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ACTIVE=/'
           systemctl is-enabled seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ENABLED=/'
           REMOTE
+
+# second read-only snapshot
