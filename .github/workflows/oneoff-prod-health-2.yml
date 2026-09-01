@@ -13,17 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
+      - uses: actions/checkout@v7
       - name: Authenticate to GCP with WIF
         uses: ./.github/actions/setup-gcp-wif
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
-      - name: Diagnose Java startup without exposing environment
+      - name: Inspect active deployment phase
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -31,26 +28,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gcloud compute ssh "${GCP_VM_NAME}" \
-            --project="${GCP_PROJECT_ID}" \
-            --zone="${GCP_VM_ZONE}" \
-            --tunnel-through-iap --quiet \
-            --command='sudo bash -s' <<'REMOTE'
+          gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
           set -u
-          services=(seatflow-eureka seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-notification seatflow-realtime seatflow-gateway)
-          for name in "${services[@]}"; do
-            if ! docker inspect "${name}" >/dev/null 2>&1; then
-              echo "=== ${name}: MISSING ==="
-              continue
+          echo '=== ACTIVE RELEASE PROCESSES ==='
+          ps -eo pid,etime,args | grep -E 'deploy-compose-release|rollback-compose-release|verify-compose-release|docker compose' | grep -v grep || true
+          echo '=== RELEASE METADATA (NON-SECRET) ==='
+          for f in /opt/seatflow/deployment/current.env /opt/seatflow/deployment/previous.env; do
+            if [[ -f ${f} ]]; then
+              echo "--- ${f}"
+              grep -E '^SEATFLOW_(IMAGE_TAG|RELEASE_VERSION|RELEASE_TIMESTAMP)=' "${f}" || true
+            else
+              echo "--- ${f} missing"
             fi
-            echo "=== ${name} STATE ==="
-            docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}} error={{.State.Error}}' "${name}"
-            echo "--- recent health results ---"
-            docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}{{end}}' "${name}" | tail -10
-            echo "--- filtered application errors ---"
-            docker logs --tail 220 "${name}" 2>&1 \
-              | grep -Ei 'ERROR|Exception|Caused by|FATAL|OutOfMemory|Killed|connection refused|authentication failed|permission denied|does not exist|failed to|unable to|Flyway|HikariPool' \
-              | sed -E 's#(password|token|secret|api[_-]?key)=([^[:space:]]+)#\1=[REDACTED]#Ig' \
-              | tail -45 || true
+          done
+          echo '=== CORE DEPENDENCY HEALTH ==='
+          for n in seatflow-postgres seatflow-redis seatflow-kafka seatflow-eureka; do
+            docker inspect --format '{{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' "${n}" || true
           done
           REMOTE
