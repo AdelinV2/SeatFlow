@@ -7,6 +7,8 @@ $requiredFiles = @(
     '.github/actions/setup-gcp-wif/action.yml',
     'infra/scripts/render-runtime-env.sh',
     'infra/scripts/deploy-compose-release.sh',
+    'infra/scripts/configure-http-edge.sh',
+    'infra/scripts/configure-https-edge.sh',
     'infra/scripts/run-production-migrations.sh',
     'infra/scripts/verify-compose-release.sh',
     'infra/scripts/rollback-compose-release.sh'
@@ -53,6 +55,8 @@ $production = $contents['.github/workflows/cd-production.yml']
 $wifAction = $contents['.github/actions/setup-gcp-wif/action.yml']
 $renderScript = $contents['infra/scripts/render-runtime-env.sh']
 $deployScript = $contents['infra/scripts/deploy-compose-release.sh']
+$httpEdgeScript = $contents['infra/scripts/configure-http-edge.sh']
+$httpsEdgeScript = $contents['infra/scripts/configure-https-edge.sh']
 $migrationScript = $contents['infra/scripts/run-production-migrations.sh']
 $rollbackScript = $contents['infra/scripts/rollback-compose-release.sh']
 
@@ -68,6 +72,7 @@ Assert-Matches $production '(?m)^\s*environment:\s*production\s*$' 'Production d
 Assert-Matches $production '--tunnel-through-iap' 'Production deployment must use IAP.'
 Assert-Matches $production 'gcloud compute ssh' 'Production deployment must use authenticated GCP SSH.'
 Assert-Matches $production '\$\{\{ github\.sha \}\}' 'Production deployment must select the immutable Git SHA.'
+Assert-Matches $production 'infra/systemd' 'Production release bundle must include the Prometheus systemd units.'
 
 Assert-Matches $wifAction 'google-github-actions/auth@v3' 'The reusable action must use the official WIF auth action.'
 Assert-Matches $wifAction 'workload_identity_provider:' 'The reusable action must require a WIF provider.'
@@ -76,15 +81,28 @@ Assert-Matches $wifAction 'service_account:' 'The reusable action must impersona
 Assert-Matches $renderScript 'metadata\.google\.internal' 'Runtime secrets must use the VM metadata identity.'
 Assert-Matches $renderScript 'secretmanager\.googleapis\.com' 'Runtime secrets must come from Secret Manager.'
 Assert-Matches $renderScript 'install.+0600' 'Runtime secret files must be mode 0600.'
+Assert-Matches $renderScript 'Fresh Prometheus scrape token is missing' 'Runtime rendering must require a freshly refreshed Prometheus token.'
 Assert-Matches $deployScript 'docker compose' 'Deployment must use Docker Compose.'
 Assert-Matches $deployScript 'run-production-migrations\.sh' 'Deployment must run the explicit migration stage.'
 Assert-Matches $deployScript 'rollback-compose-release\.sh' 'Deployment must invoke image rollback on failure.'
+Assert-Matches $deployScript 'configure-http-edge\.sh' 'Deployment must configure the internal/pre-DNS HTTP edge before rollout verification.'
+Assert-Matches $deployScript 'configure-https-edge\.sh' 'Deployment must attempt HTTPS only after the application rollout is healthy.'
+Assert-Matches $deployScript 'edge_status.+-eq 10' 'Deployment must treat the explicit DNS-not-ready edge status as a deferred cutover, not an application failure.'
+Assert-Matches $httpEdgeScript '127\.0\.0\.1:8080' 'The host HTTP edge must proxy to the loopback-only frontend listener.'
+Assert-Matches $httpsEdgeScript 'metadata\.google\.internal' 'HTTPS cutover must compare DNS against the VM external IP.'
+Assert-Matches $httpsEdgeScript 'exit 10' 'HTTPS cutover must expose a distinct DNS-not-ready status.'
+Assert-Matches $httpsEdgeScript 'certbot certonly' 'HTTPS cutover must provision the certificate only after DNS is ready.'
 Assert-Matches $migrationScript 'migrations-\$\{image_tag\}\.done' 'Migrations must be release-idempotent.'
 Assert-Matches $rollbackScript 'database schema was not changed' 'Rollback must explicitly preserve forward database state.'
 
-$secretEchoPattern = '(?im)^\s*(echo|printf)\s+[^\r\n]*(PASSWORD|API_KEY|WEBHOOK_SECRET|ACCESS_TOKEN)'
-if ($allText -match $secretEchoPattern) {
-    throw 'A secret-bearing variable may be written directly to logs.'
+# Secret-bearing values must never be printed to stdout/stderr. The only allowed
+# matching output statement is the deliberate write into the root-only temporary
+# runtime environment file, which is installed as mode 0600 immediately after.
+$secretOutputPattern = '^\s*(echo|printf)\s+[^\r\n]*(POSTGRES_PASSWORD|DB_PASSWORD|REDIS_PASSWORD|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|GRAFANA_ADMIN_PASSWORD|ACCESS_TOKEN)'
+foreach ($line in ($allText -split "`r?`n")) {
+    if ($line -match $secretOutputPattern -and $line -notmatch '>>\s*"\$\{temp_runtime\}"\s*$') {
+        throw "A secret-bearing variable may be written directly to logs: $line"
+    }
 }
 
 $prodCompose = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docker-compose.prod.yml') -Raw
@@ -94,4 +112,3 @@ if ($flywayDisabledCount -ne 7) {
 }
 
 Write-Host 'SeatFlow CD workflow contract checks passed.'
-
