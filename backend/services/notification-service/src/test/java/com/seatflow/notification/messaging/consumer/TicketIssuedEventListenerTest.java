@@ -33,7 +33,7 @@ class TicketIssuedEventListenerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        listener = new TicketIssuedEventListener(notificationService, objectMapper, mock());
+        listener = new TicketIssuedEventListener(notificationService, objectMapper, mock(com.seatflow.common.observability.tracing.KafkaListenerTraceScope.class));
     }
 
     @Test

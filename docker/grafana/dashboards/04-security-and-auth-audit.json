@@ -1,58 +1,146 @@
 {
-  "annotations": { "list": [] },
-  "editable": true,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "#5794F2",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "id": null,
   "panels": [
     {
-      "type": "timeseries",
-      "title": "Unauthorized Requests (401)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "HTTP 401 responses across the private services and gateway. Only the bounded status and application dimensions are queried.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 401,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_auth_unauthorized_total[5m]))", "legendFormat": "401/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(http_server_requests_seconds_count{status=\"401\",application=~\"$application\",environment=~\"$environment\"}[5m]))", "format": "time_series", "legendFormat": "401/s", "refId": "A" }
+      ],
+      "title": "Unauthorized request rate (401)",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Forbidden Requests (403)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Bounded payment failure counter used as an operational signal for failed Stripe payment/webhook outcomes.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "id": 402,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_auth_forbidden_total[5m]))", "legendFormat": "403/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(seatflow_payments_failed_total{reason=\"STRIPE_FAILED\"}[5m]))", "format": "time_series", "legendFormat": "Stripe payment failures/s", "refId": "A" }
+      ],
+      "title": "Stripe webhook/payment failures",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "JWT Validation Failures",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Gateway rate-limit responses. The query uses the bounded gateway application and HTTP status dimensions.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "id": 403,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_auth_jwt_invalid_total[5m]))", "legendFormat": "invalid/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(http_server_requests_seconds_count{application=\"api-gateway\",environment=~\"$environment\",status=\"429\"}[5m]))", "format": "time_series", "legendFormat": "gateway 429/s", "refId": "A" }
+      ],
+      "title": "Gateway rate-limit responses (429)",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Idempotency Key Replays",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Optional Google Cloud managed-metric export. This panel intentionally shows no data until Cloud Armor metrics are explicitly exported to Prometheus.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "id": 404,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_idempotency_replay_total[5m]))", "legendFormat": "replays/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(cloud_armor_policy_request_count{outcome=\"DENY\"}[5m]))", "format": "time_series", "legendFormat": "Cloud Armor denied/s", "refId": "A" }
+      ],
+      "title": "Cloud Armor blocks (optional export)",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Privileged (ADMIN) Actions",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "tempo", "uid": "seatflow-tempo" },
+      "description": "TraceQL search for failed traces. Select an application to narrow the bounded service dimension, then follow a trace to its structured logs.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 8 },
+      "id": 405,
+      "options": { "legend": { "displayMode": "hidden", "placement": "bottom" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_auth_admin_action_total[5m]))", "legendFormat": "admin actions/s" }
-      ]
+        { "datasource": { "type": "tempo", "uid": "seatflow-tempo" }, "query": "{ resource.service.name =~ \"$application\" && status = error }", "queryType": "traceql", "refId": "A", "tableType": "traces" }
+      ],
+      "title": "Tempo failed-trace search",
+      "type": "traces"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "seatflow-logs" },
+      "description": "Structured payment-service warnings/errors related to signed webhook verification. Raw request headers and secrets are not queried.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "id": 406,
+      "options": { "deduplication": { "enabled": true }, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLines": false },
+      "targets": [
+        { "datasource": { "type": "loki", "uid": "seatflow-logs" }, "expr": "{service_name=\"payment-service\"} | json | level=~\"WARN|ERROR\" | message=~\".*Stripe webhook.*(signature|verification).*\"", "legendFormat": "payment-service", "queryType": "range", "refId": "A" }
+      ],
+      "title": "Stripe webhook verification logs",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "seatflow-logs" },
+      "description": "Security audit stream for authentication, authorization, and rate-limit decisions. Follow the derived trace link for request context.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "id": 407,
+      "options": { "deduplication": { "enabled": true }, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLines": false },
+      "targets": [
+        { "datasource": { "type": "loki", "uid": "seatflow-logs" }, "expr": "{service_name=~\"$application\"} | json | level=~\"WARN|ERROR\" | message=~\".*(authentication|authorization|rate.?limit|security).*\"", "legendFormat": "{{service_name}}", "queryType": "range", "refId": "A" }
+      ],
+      "title": "Security audit logs",
+      "type": "logs"
     }
   ],
+  "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["seatflow", "security", "auth"],
-  "templating": { "list": [] },
+  "tags": ["seatflow", "phase-10", "security", "audit"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Application",
+        "multi": true,
+        "name": "application",
+        "options": [],
+        "query": "api-gateway,user-service,seat-map-service,event-service,reservation-service,payment-service,ticket-service,realtime-service,notification-service,eureka-server",
+        "regex": "/^(api-gateway|user-service|seat-map-service|event-service|reservation-service|payment-service|ticket-service|realtime-service|notification-service|eureka-server)$/",
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Environment",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "local,docker,staging,prod,test",
+        "regex": "/^(local|docker|staging|prod|test)$/",
+        "type": "custom"
+      }
+    ]
+  },
   "time": { "from": "now-6h", "to": "now" },
+  "timezone": "UTC",
   "title": "SeatFlow Security & Auth Audit",
-  "uid": "seatflow-security-04",
+  "uid": "seatflow-security-audit",
   "version": 1
 }

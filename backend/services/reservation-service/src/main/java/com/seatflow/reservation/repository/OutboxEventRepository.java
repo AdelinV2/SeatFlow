@@ -14,6 +14,8 @@ import java.util.UUID;
 @Repository
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> {
 
+    long countByPublishedAtIsNull();
+
     long countByAggregateIdAndEventType(UUID aggregateId, String eventType);
 
     @Query(value = """

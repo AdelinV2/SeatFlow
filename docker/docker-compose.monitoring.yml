@@ -48,7 +48,6 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=7d"
-      - "--web.enable-lifecycle"
     expose:
       - "9090"
     healthcheck:
@@ -59,6 +58,37 @@ services:
       start_period: 15s
     networks:
       - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: seatflow-kafka-exporter
+    restart: unless-stopped
+    command:
+      - "--kafka.server=kafka:9092"
+      - "--web.listen-address=:9308"
+    ports:
+      - "${KAFKA_EXPORTER_PORT:-9308}:9308"
+    expose:
+      - "9308"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9308/metrics || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - seatflow-net
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: json-file
       options:
@@ -82,6 +112,10 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on:
       prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      loki:
         condition: service_healthy
     expose:
       - "3000"
@@ -156,20 +190,31 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  alloy:
-    image: grafana/alloy:v1.17.1@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b
-    container_name: seatflow-alloy
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: seatflow-promtail
     restart: unless-stopped
     volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - alloy_data:/var/lib/alloy/data
-    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+      - promtail_data:/tmp/positions
+    command: ["-config.file=/etc/promtail/config.yml"]
     depends_on:
       loki:
         condition: service_healthy
+    expose:
+      - "9080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9080/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - seatflow-net
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: json-file
       options:
@@ -189,5 +234,5 @@ volumes:
     driver: local
   loki_data:
     driver: local
-  alloy_data:
+  promtail_data:
     driver: local

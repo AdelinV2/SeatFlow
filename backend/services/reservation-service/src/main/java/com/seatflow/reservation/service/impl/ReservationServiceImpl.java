@@ -40,6 +40,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.observability.metrics.MetricTagPolicy;
 import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
@@ -51,6 +52,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import jakarta.annotation.PostConstruct;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -87,6 +89,15 @@ public class ReservationServiceImpl implements ReservationService {
     @Autowired
     void configureTransactionTemplate(PlatformTransactionManager transactionManager) {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
+    @PostConstruct
+    void registerActiveHoldsGauge() {
+        Gauge.builder(SeatFlowMetricNames.RESERVATIONS_ACTIVE_HOLDS,
+                        seatHoldRepository,
+                        repository -> repository.countByStatus(SeatHoldStatus.HELD))
+                .description("Current reservation seat holds in HELD state")
+                .register(meterRegistry);
     }
 
     @Override

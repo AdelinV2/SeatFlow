@@ -1,67 +1,139 @@
 {
-  "annotations": { "list": [] },
-  "editable": true,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "#5794F2",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "5xx percentage above 1% for 2m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "100 * sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 1) > 1",
+        "for": "2m",
+        "iconColor": "#F2495C",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "sre"],
+        "type": "dashboard"
+      },
+      {
+        "name": "Pending outbox above 100 for 1m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "seatflow_outbox_pending > 100",
+        "for": "1m",
+        "iconColor": "#FF9830",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "outbox"],
+        "type": "dashboard"
+      },
+      {
+        "name": "Outbox p99 above 30s for 5m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "histogram_quantile(0.99, sum by (le, service, event_type) (rate(seatflow_outbox_publish_latency_seconds_bucket[5m]))) > 30",
+        "for": "5m",
+        "iconColor": "#FF9830",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "outbox"],
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "id": null,
   "panels": [
     {
-      "type": "stat",
-      "title": "Total Reservations Created",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Authoritative active-hold gauge exported by reservation-service. PostgreSQL remains the source of truth.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 0 },
+      "id": 101,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(seatflow_reservations_created_total)", "legendFormat": "reservations" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(seatflow_reservations_active_holds)", "format": "time_series", "instant": true, "legendFormat": "active holds", "refId": "A" }
+      ],
+      "title": "Active seat holds",
+      "type": "stat"
     },
     {
-      "type": "stat",
-      "title": "Reservation Conflicts (double-booking)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Committed reservation hold creations over the selected dashboard range.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 0 },
+      "id": 102,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(seatflow_reservations_conflicts_total)", "legendFormat": "conflicts" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(increase(seatflow_reservations_created_total[$__range]))", "format": "time_series", "instant": true, "legendFormat": "created holds", "refId": "A" }
+      ],
+      "title": "Created holds",
+      "type": "stat"
     },
     {
-      "type": "stat",
-      "title": "Payments Completed",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Expiration rate divided by committed hold creation rate. A zero denominator is clamped to one for safe no-data behavior.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "max": 100, "min": 0, "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 0 },
+      "id": 103,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(seatflow_payments_completed_total)", "legendFormat": "payments" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "100 * sum(rate(seatflow_reservations_expired_total[5m])) / clamp_min(sum(rate(seatflow_reservations_created_total[5m])), 1)", "format": "time_series", "instant": true, "legendFormat": "expiration percentage", "refId": "A" }
+      ],
+      "title": "Hold expiration percentage",
+      "type": "stat"
     },
     {
-      "type": "timeseries",
-      "title": "Tickets Issued (rate)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Successful payment state transitions recorded by the payment service. This is a checkout outcome counter, not a database-derived revenue query.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 0 },
+      "id": 104,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(rate(seatflow_tickets_issued_total[5m]))", "legendFormat": "tickets/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(increase(seatflow_payments_processed_total{status=\"SUCCESS\"}[$__range]))", "format": "time_series", "instant": true, "legendFormat": "successful payments", "refId": "A" }
+      ],
+      "title": "Successful payments",
+      "type": "stat"
     },
     {
-      "type": "timeseries",
-      "title": "Revenue (successful payments)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Committed reservations that reached confirmation divided by committed reservation holds in the selected range.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "max": 100, "min": 0, "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "id": 105,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(seatflow_payments_amount_total)", "legendFormat": "revenue" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "100 * sum(increase(seatflow_reservations_confirmed_total[$__range])) / clamp_min(sum(increase(seatflow_reservations_created_total[$__range])), 1)", "format": "time_series", "instant": true, "legendFormat": "hold to confirmation", "refId": "A" }
+      ],
+      "title": "Reservation funnel conversion",
+      "type": "gauge"
     },
     {
-      "type": "timeseries",
-      "title": "Seat Hold Expirations",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Rate of committed hold expirations. Use the SRE dashboard for request and infrastructure context.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "id": 106,
+      "options": { "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_reservations_expired_total[5m]))", "legendFormat": "expired/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(seatflow_reservations_expired_total[5m]))", "format": "time_series", "legendFormat": "expired holds/s", "refId": "A" }
+      ],
+      "title": "Hold expirations",
+      "type": "timeseries"
     }
   ],
+  "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["seatflow", "business"],
+  "tags": ["seatflow", "phase-10", "business", "executive"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
-  "title": "SeatFlow Executive & Business KPIs",
-  "uid": "seatflow-exec-01",
+  "timezone": "UTC",
+  "title": "SeatFlow Executive & Business",
+  "uid": "seatflow-executive",
   "version": 1
 }

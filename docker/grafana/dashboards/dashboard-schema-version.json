@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "manifestVersion": 1,
+  "dashboardSchemaVersion": 39,
+  "uid": "seatflow-schema-manifest",
+  "title": "SeatFlow Dashboard Schema Manifest",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "UTC",
+  "tags": [
+    "seatflow",
+    "phase-10",
+    "schema-manifest"
+  ],
+  "panels": [],
+  "folderUid": "seatflow-production",
+  "datasourceUids": [
+    "seatflow-prometheus",
+    "seatflow-tempo",
+    "seatflow-logs"
+  ],
+  "dashboards": [
+    {
+      "file": "01-seatflow-executive-and-business.json",
+      "uid": "seatflow-executive",
+      "title": "SeatFlow Executive & Business"
+    },
+    {
+      "file": "02-microservices-sre-and-red-health.json",
+      "uid": "seatflow-sre-red",
+      "title": "SeatFlow Microservices SRE & RED Health"
+    },
+    {
+      "file": "03-kafka-and-outbox-pipeline.json",
+      "uid": "seatflow-kafka-outbox",
+      "title": "SeatFlow Kafka & Outbox Pipeline"
+    },
+    {
+      "file": "04-security-and-auth-audit.json",
+      "uid": "seatflow-security-audit",
+      "title": "SeatFlow Security & Auth Audit"
+    }
+  ]
+}

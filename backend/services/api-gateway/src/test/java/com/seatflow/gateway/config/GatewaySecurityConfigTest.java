@@ -21,7 +21,8 @@ import static org.mockito.Mockito.when;
                 "eureka.client.enabled=false",
                 "spring.cloud.discovery.enabled=false",
                 "spring.cloud.gateway.server.webflux.discovery.locator.enabled=false",
-                "spring.data.redis.repositories.enabled=false"
+                "spring.data.redis.repositories.enabled=false",
+                "management.health.redis.enabled=false"
         })
 class GatewaySecurityConfigTest {
 

@@ -17,21 +17,38 @@ class PrometheusConfigurationContractTest {
     private static final Pattern TARGET = Pattern.compile("['\"]([^'\"]+):(\\d+)['\"]");
 
     @Test
-    void scrapeTargetsShouldMatchHostRunApplicationTopology() throws IOException {
+    void scrapeTargetsShouldMatchComposeApplicationTopology() throws IOException {
         Path repository = locateRepositoryRoot();
         String prometheus = Files.readString(repository.resolve("docker/prometheus/prometheus.yml"));
-        String compose = Files.readString(repository.resolve("docker/docker-compose.yml"));
+        String compose = Files.readString(repository.resolve("docker/docker-compose.yml"))
+                + Files.readString(repository.resolve("docker/docker-compose.monitoring.yml"));
 
         Matcher matcher = TARGET.matcher(prometheus);
-        Set<String> allowedHosts = Set.of("localhost", "host.docker.internal");
+        Set<String> allowedHosts = Set.of(
+                "localhost",
+                "host.docker.internal",
+                "eureka-server",
+                "api-gateway",
+                "user-service",
+                "seat-map-service",
+                "event-service",
+                "reservation-service",
+                "payment-service",
+                "ticket-service",
+                "realtime-service",
+                "notification-service",
+                "kafka-exporter",
+                "otel-collector",
+                "tempo",
+                "loki");
         int targetCount = 0;
         while (matcher.find()) {
             assertThat(matcher.group(1)).isIn(allowedHosts);
             targetCount++;
         }
 
-        assertThat(targetCount).isEqualTo(11);
-        assertThat(prometheus).contains("host.docker.internal:8761");
+        assertThat(targetCount).isEqualTo(15);
+        assertThat(prometheus).contains("eureka-server:8761");
         assertThat(prometheus).contains(
                 "regex: 'seatflow_reservations_created_events_total'",
                 "replacement: 'seatflow_reservations_created_total'");

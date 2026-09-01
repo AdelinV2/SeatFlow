@@ -4,6 +4,7 @@ import com.seatflow.realtime.messaging.redis.RedisSeatStatusSubscriber;
 import lombok.extern.slf4j.Slf4j;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,6 +57,10 @@ public class RedisPubSubConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(
+            name = "seatflow.realtime.redis.listener.enabled",
+            havingValue = "true",
+            matchIfMissing = true)
     @DependsOn({"realtimeRedisMessageExecutor", "realtimeRedisSubscriptionExecutor"})
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory connectionFactory,

@@ -15,7 +15,10 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "seatflow.realtime.redis.listener.enabled=false",
+        "management.health.redis.enabled=false"
+})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class SecurityConfigTest {
