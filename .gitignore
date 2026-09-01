@@ -64,12 +64,15 @@ out/
 .env
 .env.*
 !.env.example
+gha-creds-*.json
 *.pem
 *.key
 docker/prometheus/prometheus-scrape-token
 
 # Terraform
 **/.terraform/*
+**/tfplan
+**/tfplan.*
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
@@ -94,4 +97,5 @@ Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
 ._*
+
 

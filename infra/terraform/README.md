@@ -165,3 +165,4 @@ Execute the automated foundation verification script:
 ```
 
 For complete step-by-step operations, DNS mapping, SSL provisioning, and disaster recovery procedures, refer to [GCP Compute Engine Deployment Runbook](../runbooks/gcp-compute-engine-deployment-and-verification.md).
+

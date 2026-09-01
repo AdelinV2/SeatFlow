@@ -9,7 +9,7 @@ set -euo pipefail
 ENVIRONMENT="${1:-production}"
 PROJECT_ID="${GCP_PROJECT_ID:-seatflow-production-507311}"
 REGION="${GCP_REGION:-europe-west1}"
-ZONE="${GCP_ZONE:-europe-west1-b}"
+ZONE="${GCP_ZONE:-europe-west1-c}"
 VM_NAME="${GCP_VM_NAME:-seatflow-production}"
 REPO_NAME="${ARTIFACT_REGISTRY_REPO:-seatflow}"
 WIF_POOL="${GCP_WIF_POOL:-seatflow-github-pool}"
@@ -235,6 +235,8 @@ EXPECTED_SECRETS=(
   "resend-api-key"
   "grafana-admin-password"
   "prometheus-scrape-token"
+  "prometheus-identity-email"
+  "prometheus-identity-password"
 )
 
 EXISTING_SECRETS=$(gcloud secrets list --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null || true)
@@ -297,3 +299,4 @@ else
   echo "=============================================================================="
   exit 1
 fi
+

@@ -395,3 +395,4 @@ terraform -chdir=infra/terraform/environments/production plan -refresh=false -ou
 - [x] Runbook covers deploy, HTTPS, backup/restore, VM recovery and Terraform recovery.
 - [x] P10-007 receives all non-secret outputs needed to deploy production Compose.
 - [x] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/008-compute-engine-gcp-production-terraform.md`.
+

@@ -13,7 +13,7 @@ variable "region" {
 variable "zone" {
   type        = string
   description = "GCP Zone for Compute Engine VM"
-  default     = "europe-west1-b"
+  default     = "europe-west1-c"
 }
 
 variable "environment" {
@@ -111,3 +111,4 @@ variable "workload_identity_provider_id" {
   description = "Workload Identity Provider ID"
   default     = "seatflow-github-provider"
 }
+

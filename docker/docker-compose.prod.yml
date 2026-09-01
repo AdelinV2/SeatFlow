@@ -124,7 +124,7 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://seatflow.app}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://seat-flow.me,https://www.seat-flow.me}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
       JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
@@ -149,6 +149,7 @@ services:
       - "8081"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: user-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -187,6 +188,7 @@ services:
       - "8082"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: seat-map-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -225,6 +227,7 @@ services:
       - "8083"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: event-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -263,6 +266,7 @@ services:
       - "8084"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: reservation-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -301,6 +305,7 @@ services:
       - "8085"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: payment-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -341,6 +346,7 @@ services:
       - "8086"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: ticket-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -393,6 +399,7 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://seat-flow.me,https://www.seat-flow.me}
       REALTIME_REDIS_CHANNEL: ${REALTIME_REDIS_CHANNEL:-seatflow:realtime:seat-status}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
@@ -418,6 +425,7 @@ services:
       - "8088"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
       SEATFLOW_DEPLOYMENT_ENV: prod
       SEATFLOW_SERVICE_NAME: notification-service
       SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
@@ -453,9 +461,9 @@ services:
 
   frontend:
     image: ${AR_BASE}/frontend:${SEATFLOW_IMAGE_TAG:?required}
-    # TLS remains the responsibility of the P10-008 edge/certificate deployment.
-    # Do not publish 443 until it provides a tested listener and read-only cert mount.
-    ports: !override ["80:8080"]
+    # The host Nginx edge owns public 80/443. The SPA container is reachable only
+    # from the VM loopback interface, so pre-DNS rehearsals never expose port 8080.
+    ports: !override ["127.0.0.1:8080:8080"]
     mem_limit: 128m
     cpus: 0.3
     security_opt:
