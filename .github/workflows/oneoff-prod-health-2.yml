@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Rescue blocked Kafka healthcheck and resume Compose
+      - name: Apply lightweight Kafka healthcheck on live VM
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -32,18 +32,16 @@ jobs:
           set -euo pipefail
           cd /opt/seatflow
 
-          # Release #6 still has the pre-fix base Compose file with Kafka timeout
-          # hard-coded to 10s. Apply a temporary runtime-only override so the
-          # current deployment can finish. The permanent fix is already on develop.
           override=/run/seatflow/kafka-health-rescue.yml
           cat > "${override}" <<'YAML'
           services:
             kafka:
               healthcheck:
-                timeout: 45s
+                test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9092'"]
+                timeout: 5s
                 interval: 10s
-                retries: 10
-                start_period: 30s
+                retries: 12
+                start_period: 60s
           YAML
           chown root:root "${override}"
           chmod 0600 "${override}"
@@ -52,10 +50,10 @@ jobs:
           compose=(docker compose -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.monitoring.yml -f docker-compose.prod.yml -f "${override}" --env-file "${runtime}")
           "${compose[@]}" config --quiet
 
-          # Recreate only Kafka. The named Kafka data volume remains attached.
+          # Recreate only Kafka; the named data volume is preserved.
           "${compose[@]}" up -d --no-deps --force-recreate kafka
 
-          for i in $(seq 1 12); do
+          for i in $(seq 1 18); do
             health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' seatflow-kafka)
             echo "KAFKA_HEALTH=${health}"
             if [[ ${health} == healthy ]]; then
@@ -65,8 +63,8 @@ jobs:
           done
 
           health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' seatflow-kafka)
-          [[ ${health} == healthy ]] || { echo "Kafka did not become healthy after rescue" >&2; exit 1; }
+          [[ ${health} == healthy ]] || { echo "Kafka did not become healthy with lightweight probe" >&2; exit 1; }
 
           echo 'KAFKA_RESCUE=healthy'
-          docker inspect --format 'kafka status={{.State.Status}} health={{.State.Health.Status}} restarts={{.RestartCount}}' seatflow-kafka
+          docker inspect --format 'kafka status={{.State.Status}} health={{.State.Health.Status}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' seatflow-kafka
           REMOTE
