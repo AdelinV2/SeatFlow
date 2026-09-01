@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Diagnose Kafka without secrets
+      - name: Snapshot container dependency chain
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -28,18 +28,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gcloud compute ssh "${GCP_VM_NAME}" \
-            --project="${GCP_PROJECT_ID}" \
-            --zone="${GCP_VM_ZONE}" \
-            --tunnel-through-iap --quiet \
-            --command='sudo bash -s' <<'REMOTE'
+          gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
           set -u
-          echo '=== KAFKA STATE ==='
-          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} started={{.State.StartedAt}}' seatflow-kafka
-          echo '=== KAFKA HEALTHCHECK HISTORY ==='
-          docker inspect --format '{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}' seatflow-kafka | tail -20
-          echo '=== DIRECT TOPICS PROBE ==='
-          docker exec seatflow-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list 2>&1 | tail -40 || true
-          echo '=== KAFKA LOG TAIL ==='
-          docker logs --tail 100 seatflow-kafka 2>&1 | tail -100
+          printf '%-30s %-10s %-11s %-8s %-5s\n' NAME STATUS HEALTH RESTARTS OOM
+          docker ps -a --format '{{.Names}}' | sort | while read -r n; do
+            docker inspect --format '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.OOMKilled}}' "${n}"
+          done | while IFS='|' read -r n s h r o; do
+            printf '%-30s %-10s %-11s %-8s %-5s\n' "${n#/}" "$s" "$h" "$r" "$o"
+          done
+          echo '=== NON-HEALTHY LAST HEALTH RESULT ==='
+          docker ps -a --format '{{.Names}}' | sort | while read -r n; do
+            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$n")
+            if [[ $health != healthy && $health != none ]]; then
+              echo "--- $n health=$health"
+              docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}{{end}}' "$n" | tail -4
+            fi
+          done
           REMOTE
