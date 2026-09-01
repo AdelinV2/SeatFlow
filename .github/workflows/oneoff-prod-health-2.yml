@@ -1,0 +1,54 @@
+name: One-off - Inspect Live Production Health 2
+
+on:
+  push:
+    branches: [ops/prod-health-20260901-2]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inspect-production:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GCP with WIF
+        uses: ./.github/actions/setup-gcp-wif
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Inspect non-secret container health
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+          GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "${GCP_VM_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --zone="${GCP_VM_ZONE}" \
+            --tunnel-through-iap --quiet \
+            --command='sudo bash -s' <<'REMOTE'
+          set -euo pipefail
+          printf '%-34s %-12s %-12s %-8s\n' NAME STATUS HEALTH RESTARTS
+          docker ps -a --format '{{.Names}}' | sort | while read -r name; do
+            status=$(docker inspect --format '{{.State.Status}}' "${name}")
+            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${name}")
+            restarts=$(docker inspect --format '{{.RestartCount}}' "${name}")
+            printf '%-34s %-12s %-12s %-8s\n' "${name}" "${status}" "${health}" "${restarts}"
+          done
+          if [[ -f /run/seatflow/prometheus-scrape-token ]]; then
+            stat -c 'PROM_TOKEN mode=%a owner=%U group=%G size=%s' /run/seatflow/prometheus-scrape-token
+          else
+            echo 'PROM_TOKEN missing'
+          fi
+          systemctl is-active seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ACTIVE=/'
+          systemctl is-enabled seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ENABLED=/'
+          REMOTE
