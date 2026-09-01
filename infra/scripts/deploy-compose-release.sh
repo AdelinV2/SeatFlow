@@ -86,6 +86,7 @@ compose=(docker compose
   -f "${seatflow_root}/docker-compose.services.yml"
   -f "${seatflow_root}/docker-compose.monitoring.yml"
   -f "${seatflow_root}/docker-compose.prod.yml"
+  -f "${seatflow_root}/docker-compose.prod-health.yml"
   --env-file "${runtime_file}")
 
 rollout() {

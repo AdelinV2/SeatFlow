@@ -1,0 +1,57 @@
+# Production-only health windows for the single e2-highmem-2 VM.
+# Cold simultaneous JVM startup is CPU-bound on 2 vCPU; these grace periods
+# prevent Docker from reporting false failures while retaining normal probes
+# after startup. Local Compose defaults remain intentionally faster.
+
+services:
+  kafka:
+    healthcheck:
+      # Avoid kafka-topics.sh here: that probe launches a JVM every interval and
+      # materially worsens CPU starvation during a full production cold start.
+      # A successful TCP connect proves the broker listener is accepting clients;
+      # application clients retain their own Kafka retry/reconnect behavior.
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9092'"]
+      timeout: 5s
+      interval: 10s
+      retries: 12
+      start_period: 60s
+
+  eureka-server:
+    healthcheck:
+      start_period: 480s
+
+  api-gateway:
+    healthcheck:
+      start_period: 480s
+
+  user-service:
+    healthcheck:
+      start_period: 480s
+
+  seat-map-service:
+    healthcheck:
+      start_period: 480s
+
+  event-service:
+    healthcheck:
+      start_period: 480s
+
+  reservation-service:
+    healthcheck:
+      start_period: 480s
+
+  payment-service:
+    healthcheck:
+      start_period: 480s
+
+  ticket-service:
+    healthcheck:
+      start_period: 480s
+
+  realtime-service:
+    healthcheck:
+      start_period: 480s
+
+  notification-service:
+    healthcheck:
+      start_period: 480s
