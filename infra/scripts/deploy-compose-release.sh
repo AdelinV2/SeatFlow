@@ -54,7 +54,16 @@ if [[ -d ${release_root}/infra/systemd ]]; then
     /etc/systemd/system/seatflow-prometheus-token-refresh.timer
   systemctl daemon-reload
   systemctl enable --now seatflow-prometheus-token-refresh.timer
+  # Generate a fresh short-lived metrics JWT immediately; do not wait for the timer.
+  systemctl start seatflow-prometheus-token-refresh.service
 fi
+
+if [[ ! -s /run/seatflow/prometheus-scrape-token ]]; then
+  echo "Prometheus token refresh did not create the runtime token file" >&2
+  exit 1
+fi
+
+"${seatflow_root}/infra/scripts/configure-http-edge.sh"
 
 if [[ -f ${deployment_dir}/current.env ]]; then
   install -o root -g root -m 0600 \
@@ -83,15 +92,13 @@ rollout() {
   "${seatflow_root}/infra/scripts/run-production-migrations.sh" \
     "${seatflow_root}" "${image_tag}"
   "${compose[@]}" up -d --remove-orphans
-  "${seatflow_root}/infra/scripts/verify-compose-release.sh" \
-    "${seatflow_root}" "${smoke_url}"
+  "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}"
 }
 
 if ! rollout; then
   echo "Release verification failed" >&2
   if [[ -f ${deployment_dir}/previous.env ]]; then
-    "${seatflow_root}/infra/scripts/rollback-compose-release.sh" \
-      "${seatflow_root}" "${smoke_url}" || true
+    "${seatflow_root}/infra/scripts/rollback-compose-release.sh" "${seatflow_root}" || true
   fi
   exit 1
 fi
@@ -104,5 +111,21 @@ SEATFLOW_RELEASE_VERSION=${release_version}
 SEATFLOW_RELEASE_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 install -o root -g root -m 0600 "${temp_metadata}" "${deployment_dir}/current.env"
+
+# DNS cutover is deliberately deferred until the stack is healthy. If DNS is
+# already pointing at this VM, finish TLS and public HTTPS verification now.
+set +e
+"${seatflow_root}/infra/scripts/configure-https-edge.sh" "${smoke_url}"
+edge_status=$?
+set -e
+if [[ ${edge_status} -eq 10 ]]; then
+  echo "SeatFlow release is internally healthy; DNS/HTTPS cutover remains pending"
+elif [[ ${edge_status} -ne 0 ]]; then
+  echo "Application rollout succeeded but HTTPS edge configuration failed" >&2
+  exit "${edge_status}"
+else
+  echo "SeatFlow release passed internal and public HTTPS verification"
+fi
+
 echo "SeatFlow release ${release_version} deployed successfully"
 

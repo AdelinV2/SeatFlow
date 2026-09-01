@@ -28,8 +28,7 @@ fi
 umask 077
 install -d -o root -g root -m 0700 "${runtime_dir}"
 temp_runtime=$(mktemp "${runtime_dir}/runtime.env.XXXXXX")
-temp_prometheus=$(mktemp "${runtime_dir}/prometheus-scrape-token.XXXXXX")
-trap 'rm -f "${temp_runtime}" "${temp_prometheus}"' EXIT
+trap 'rm -f "${temp_runtime}"' EXIT
 
 access_token=$(curl -fsS -H 'Metadata-Flavor: Google' \
   "${metadata_url}/instance/service-accounts/default/token" | jq -er '.access_token')
@@ -56,6 +55,23 @@ append_secret_env() {
   unset secret_value
 }
 
+append_stripe_webhook_secret() {
+  local secret_value
+  if secret_value=$(fetch_secret stripe-webhook-secret 2>/dev/null); then
+    if [[ -z ${secret_value} || ${secret_value} == *$'\n'* || ${secret_value} == *$'\r'* ]]; then
+      echo "Secret stripe-webhook-secret is malformed" >&2
+      exit 1
+    fi
+  else
+    # The real Stripe endpoint cannot exist until public HTTPS is live. Use a
+    # deployment-local random value so pre-DNS webhook requests cannot validate.
+    secret_value=$(head -c 32 /dev/urandom | base64 | tr -d '\n')
+    echo "Stripe webhook endpoint is not configured yet; using an ephemeral bootstrap signing value" >&2
+  fi
+  printf '%s=%s\n' STRIPE_WEBHOOK_SECRET "${secret_value}" >> "${temp_runtime}"
+  unset secret_value
+}
+
 cat > "${temp_runtime}" <<EOF
 COMPOSE_PROJECT_NAME=seatflow
 POSTGRES_USER=postgres
@@ -68,24 +84,26 @@ PROMETHEUS_SCRAPE_TOKEN_FILE=${prometheus_token_file}
 SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1
 SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json
 SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES=authenticated
+ALLOWED_ORIGINS=https://seat-flow.me,https://www.seat-flow.me
+CORS_ALLOWED_ORIGINS=https://seat-flow.me,https://www.seat-flow.me
 EOF
 
 append_secret_env POSTGRES_PASSWORD postgres-admin-password
 append_secret_env DB_PASSWORD postgres-app-password
 append_secret_env REDIS_PASSWORD redis-password
 append_secret_env STRIPE_API_KEY stripe-api-key
-append_secret_env STRIPE_WEBHOOK_SECRET stripe-webhook-secret
+append_stripe_webhook_secret
 append_secret_env RESEND_API_KEY resend-api-key
 append_secret_env GRAFANA_ADMIN_PASSWORD grafana-admin-password
 
-fetch_secret prometheus-scrape-token > "${temp_prometheus}"
-if [[ ! -s ${temp_prometheus} ]]; then
-  echo "Secret prometheus-scrape-token is empty" >&2
+if [[ ! -s ${prometheus_token_file} ]]; then
+  echo "Fresh Prometheus scrape token is missing; token refresh must run before runtime rendering" >&2
   exit 1
 fi
+chown root:root "${prometheus_token_file}"
+chmod 0600 "${prometheus_token_file}"
 
 install -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"
-install -o root -g root -m 0600 "${temp_prometheus}" "${prometheus_token_file}"
 unset access_token
 
 echo "Rendered root-owned SeatFlow runtime files"
