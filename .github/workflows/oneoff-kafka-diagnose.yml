@@ -1,6 +1,6 @@
 name: One-off - Diagnose Production Kafka
 
-# snapshot-trigger: 2026-09-01T21:06Z
+# snapshot-trigger: 2026-09-01T21:08Z
 on:
   push:
     branches: [ops/kafka-diagnose-20260901]
@@ -21,7 +21,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Inspect production runtime without mutations
+      - name: Verify production edge probe parsing without mutations
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -34,50 +34,22 @@ jobs:
 
           echo '=== RELEASE ==='
           grep '^SEATFLOW_IMAGE_TAG=' /run/seatflow/runtime.env 2>/dev/null || true
-          find /opt/seatflow/deployment -maxdepth 1 -type f -name 'migrations-*.done' -printf '%f\n' 2>/dev/null | sort || true
 
-          echo '=== CONTAINER STATE ==='
-          docker ps -a --format '{{.Names}}|{{.Status}}|{{.Image}}' \
-            | grep '^seatflow-' \
-            | sort || true
-
-          echo '=== HEALTH/RESTARTS ==='
-          while read -r container; do
-            [[ -n ${container} ]] || continue
-            status=$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null || echo missing)
-            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container}" 2>/dev/null || echo unknown)
-            restarts=$(docker inspect --format '{{.RestartCount}}' "${container}" 2>/dev/null || echo unknown)
-            printf '%s|status=%s|health=%s|restarts=%s\n' "${container}" "${status}" "${health}" "${restarts}"
-          done < <(docker ps -a --format '{{.Names}}' | grep '^seatflow-' | sort)
-
-          echo '=== GATEWAY READINESS ==='
-          docker exec seatflow-gateway wget -qO- http://127.0.0.1:8080/actuator/health/readiness 2>/dev/null \
-            | jq -c '{status}' || echo 'gateway-readiness-unavailable'
-
-          echo '=== EUREKA REGISTERED APPS ==='
-          docker exec seatflow-eureka wget -qO- --header='Accept: application/json' http://127.0.0.1:8761/eureka/apps 2>/dev/null \
-            | jq -c '{registered: ((.applications.application // []) | length), names: [(.applications.application // [])[]?.name]}' \
-            || echo 'eureka-unavailable'
-
-          echo '=== FRONTEND HEALTH ==='
+          echo '=== FRONTEND STATUS PARSED ==='
           docker exec seatflow-frontend wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 \
-            | awk '/HTTP\// {print $2}' \
+            | awk '$1 ~ /^HTTP\// {print $2}' \
             | tail -1 || true
 
-          echo '=== WEBSOCKET PROBE ==='
+          echo '=== WEBSOCKET STATUS PARSED ==='
           docker exec seatflow-frontend wget -qSO /dev/null \
             --header='Connection: Upgrade' \
             --header='Upgrade: websocket' \
             http://127.0.0.1:8080/ws 2>&1 \
-            | awk '/HTTP\// {print $2}' \
+            | awk '$1 ~ /^HTTP\// {print $2}' \
             | tail -1 || true
 
-          echo '=== RECENT SERVICE ERRORS ==='
-          for container in seatflow-gateway seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-realtime seatflow-notification; do
-            echo "--- ${container}"
-            docker logs --since 20m "${container}" 2>&1 \
-              | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
-              | grep -Ei 'error|exception|failed|outofmemory|killed|oom' \
-              | tail -30 || true
-          done
+          echo '=== CORE RUNTIME ==='
+          docker inspect --format 'gateway={{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' seatflow-gateway
+          docker inspect --format 'frontend={{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' seatflow-frontend
+          docker exec seatflow-gateway wget -qO- http://127.0.0.1:8080/actuator/health/readiness 2>/dev/null | jq -c '{status}'
           REMOTE
