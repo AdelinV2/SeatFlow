@@ -32,20 +32,27 @@ jobs:
           set -euo pipefail
           cd /opt/seatflow
 
-          runtime=/run/seatflow/runtime.env
-          if grep -q '^KAFKA_HEALTHCHECK_TIMEOUT=' "${runtime}"; then
-            sed -i 's/^KAFKA_HEALTHCHECK_TIMEOUT=.*/KAFKA_HEALTHCHECK_TIMEOUT=45s/' "${runtime}"
-          else
-            printf '\nKAFKA_HEALTHCHECK_TIMEOUT=45s\n' >> "${runtime}"
-          fi
-          chown root:root "${runtime}"
-          chmod 0600 "${runtime}"
+          # Release #6 still has the pre-fix base Compose file with Kafka timeout
+          # hard-coded to 10s. Apply a temporary runtime-only override so the
+          # current deployment can finish. The permanent fix is already on develop.
+          override=/run/seatflow/kafka-health-rescue.yml
+          cat > "${override}" <<'YAML'
+          services:
+            kafka:
+              healthcheck:
+                timeout: 45s
+                interval: 10s
+                retries: 10
+                start_period: 30s
+          YAML
+          chown root:root "${override}"
+          chmod 0600 "${override}"
 
-          compose=(docker compose -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.monitoring.yml -f docker-compose.prod.yml --env-file "${runtime}")
+          runtime=/run/seatflow/runtime.env
+          compose=(docker compose -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.monitoring.yml -f docker-compose.prod.yml -f "${override}" --env-file "${runtime}")
           "${compose[@]}" config --quiet
 
-          # Recreate only Kafka so Docker applies the larger production timeout.
-          # Named Kafka data remains attached; no volume or data deletion occurs.
+          # Recreate only Kafka. The named Kafka data volume remains attached.
           "${compose[@]}" up -d --no-deps --force-recreate kafka
 
           for i in $(seq 1 12); do
@@ -60,12 +67,6 @@ jobs:
           health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' seatflow-kafka)
           [[ ${health} == healthy ]] || { echo "Kafka did not become healthy after rescue" >&2; exit 1; }
 
-          # The original deployment may still be blocked inside its Compose call;
-          # resume the same desired stack after Kafka is healthy.
-          "${compose[@]}" up -d --remove-orphans
-          echo 'COMPOSE_RESCUE=success'
-
-          for n in seatflow-postgres seatflow-redis seatflow-kafka seatflow-eureka seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-notification seatflow-realtime seatflow-gateway seatflow-frontend; do
-            docker inspect --format '{{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' "${n}" 2>/dev/null || true
-          done
+          echo 'KAFKA_RESCUE=healthy'
+          docker inspect --format 'kafka status={{.State.Status}} health={{.State.Health.Status}} restarts={{.RestartCount}}' seatflow-kafka
           REMOTE
