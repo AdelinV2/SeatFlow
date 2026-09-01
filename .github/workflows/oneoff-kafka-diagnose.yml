@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Watch production cold-start health without mutations
+      - name: Diagnose JVM restarts and health probes without mutations
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -29,84 +29,48 @@ jobs:
         run: |
           set -euo pipefail
           gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
-          set -euo pipefail
-
-          services=(
-            seatflow-eureka
-            seatflow-gateway
-            seatflow-user
-            seatflow-seatmap
-            seatflow-event
-            seatflow-reservation
-            seatflow-payment
-            seatflow-ticket
-            seatflow-realtime
-            seatflow-notification
-          )
-
-          print_state() {
-            printf '%-28s %-10s %-11s %-8s %-5s\n' NAME STATUS HEALTH RESTARTS OOM
-            for name in "${services[@]}" seatflow-kafka seatflow-postgres seatflow-redis seatflow-frontend; do
-              if docker inspect "${name}" >/dev/null 2>&1; then
-                docker inspect --format '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.RestartCount}}|{{.State.OOMKilled}}' "${name}" \
-                  | while IFS='|' read -r n status health restarts oom; do
-                      printf '%-28s %-10s %-11s %-8s %-5s\n' "${n#/}" "${status}" "${health}" "${restarts}" "${oom}"
-                    done
-              fi
-            done
+          set -u
+          redact() {
+            sed -E \
+              -e 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
+              -e 's#Bearer [A-Za-z0-9._~+/=-]+#Bearer [REDACTED]#Ig'
           }
 
-          all_healthy=false
-          for attempt in $(seq 1 72); do
-            bad=false
-            pending=false
+          echo '=== HOST PRESSURE ==='
+          uptime
+          awk '/MemTotal|MemFree|MemAvailable|SwapTotal|SwapFree/ {print}' /proc/meminfo
+          echo '=== CONTAINER STATS ==='
+          docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} pids={{.PIDs}}' | sort
+          echo '=== KERNEL OOM SIGNALS ==='
+          dmesg -T 2>/dev/null | grep -Ei 'out of memory|oom-kill|killed process' | tail -20 || true
 
-            for name in "${services[@]}"; do
-              status=$(docker inspect --format '{{.State.Status}}' "${name}")
-              health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${name}")
-              restarts=$(docker inspect --format '{{.RestartCount}}' "${name}")
-              oom=$(docker inspect --format '{{.State.OOMKilled}}' "${name}")
-
-              if [[ ${oom} == true || ${restarts} -gt 0 || ${status} != running ]]; then
-                echo "RUNTIME_FAILURE name=${name} status=${status} health=${health} restarts=${restarts} oom=${oom}" >&2
-                bad=true
-              elif [[ ${health} == unhealthy ]]; then
-                echo "HEALTH_FAILURE name=${name}" >&2
-                docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}{{end}}' "${name}" | tail -4
-                bad=true
-              elif [[ ${health} != healthy ]]; then
-                pending=true
-              fi
-            done
-
-            if [[ ${bad} == true ]]; then
-              print_state
-              exit 1
-            fi
-
-            if [[ ${pending} == false ]]; then
-              all_healthy=true
-              echo "ALL_JVM_HEALTHY attempt=${attempt}"
-              break
-            fi
-
-            if (( attempt % 6 == 0 )); then
-              echo "COLD_START_PROGRESS attempt=${attempt}"
-              print_state
-            fi
-            sleep 10
+          services=(seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-realtime seatflow-notification seatflow-gateway)
+          echo '=== EFFECTIVE STATE ==='
+          for name in "${services[@]}"; do
+            docker inspect --format '{{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' "${name}"
           done
 
-          print_state
-          [[ ${all_healthy} == true ]] || { echo 'JVM services did not all become healthy within watcher window' >&2; exit 1; }
+          echo '=== EFFECTIVE HEALTH CONFIG ==='
+          for name in seatflow-realtime seatflow-user seatflow-gateway; do
+            echo "--- ${name}"
+            docker inspect --format '{{json .Config.Healthcheck}}' "${name}"
+          done
 
-          kafka_health=$(docker inspect --format '{{.State.Health.Status}}' seatflow-kafka)
-          kafka_restarts=$(docker inspect --format '{{.RestartCount}}' seatflow-kafka)
-          kafka_oom=$(docker inspect --format '{{.State.OOMKilled}}' seatflow-kafka)
-          [[ ${kafka_health} == healthy && ${kafka_restarts} -eq 0 && ${kafka_oom} == false ]] || {
-            echo "KAFKA_FINAL_FAILURE health=${kafka_health} restarts=${kafka_restarts} oom=${kafka_oom}" >&2
-            exit 1
-          }
+          echo '=== RESTARTED SERVICE ERROR SIGNALS ==='
+          for name in seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-notification; do
+            echo "--- ${name}"
+            docker logs --tail 220 "${name}" 2>&1 \
+              | redact \
+              | grep -Ei 'error|exception|failed|fatal|shutdown|terminated|killed|started .* in|application run failed|connection refused|timeout' \
+              | tail -60 || true
+          done
 
-          echo 'COLD_START_WATCH=healthy'
+          echo '=== REALTIME LOG SIGNALS ==='
+          docker logs --tail 260 seatflow-realtime 2>&1 \
+            | redact \
+            | grep -Ei 'error|exception|failed|fatal|shutdown|terminated|killed|started .* in|application run failed|connection refused|timeout|kafka|eureka' \
+            | tail -100 || true
+
+          echo '=== REALTIME HEALTH HISTORY ==='
+          docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " start=" .Start " end=" .End " output=" .Output}}{{end}}{{end}}' seatflow-realtime | tail -12
           REMOTE
