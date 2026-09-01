@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  inspect-production:
+  resume-production:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Inspect active deployment phase
+      - name: Resume Compose after transient dependency startup
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -29,20 +29,13 @@ jobs:
         run: |
           set -euo pipefail
           gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
-          set -u
-          echo '=== ACTIVE RELEASE PROCESSES ==='
-          ps -eo pid,etime,args | grep -E 'deploy-compose-release|rollback-compose-release|verify-compose-release|docker compose' | grep -v grep || true
-          echo '=== RELEASE METADATA (NON-SECRET) ==='
-          for f in /opt/seatflow/deployment/current.env /opt/seatflow/deployment/previous.env; do
-            if [[ -f ${f} ]]; then
-              echo "--- ${f}"
-              grep -E '^SEATFLOW_(IMAGE_TAG|RELEASE_VERSION|RELEASE_TIMESTAMP)=' "${f}" || true
-            else
-              echo "--- ${f} missing"
-            fi
-          done
-          echo '=== CORE DEPENDENCY HEALTH ==='
-          for n in seatflow-postgres seatflow-redis seatflow-kafka seatflow-eureka; do
-            docker inspect --format '{{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' "${n}" || true
+          set -euo pipefail
+          cd /opt/seatflow
+          compose=(docker compose -f docker-compose.yml -f docker-compose.services.yml -f docker-compose.monitoring.yml -f docker-compose.prod.yml --env-file /run/seatflow/runtime.env)
+          "${compose[@]}" config --quiet
+          "${compose[@]}" up -d --remove-orphans
+          echo 'COMPOSE_RESUME=success'
+          for n in seatflow-postgres seatflow-redis seatflow-kafka seatflow-eureka seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-notification seatflow-realtime seatflow-gateway seatflow-frontend; do
+            docker inspect --format '{{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}}' "${n}" 2>/dev/null || true
           done
           REMOTE
