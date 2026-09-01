@@ -1,0 +1,46 @@
+name: Finalize Production Bootstrap Repair
+
+on:
+  push:
+    branches:
+      - feat/p10-007-github-actions-compute-engine-cd-wif
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/p10-007-github-actions-compute-engine-cd-wif
+          fetch-depth: 0
+
+      - name: Extract and apply prepared patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64, re, subprocess
+          source = Path('.github/workflows/repair-production-bootstrap.yml').read_text()
+          match = re.search(r"echo '([A-Za-z0-9+/=]+)' \\| base64 -d > /tmp/patch\\.py", source)
+          if not match:
+              raise SystemExit('Prepared patch payload not found')
+          Path('/tmp/patch.py').write_bytes(base64.b64decode(match.group(1)))
+          subprocess.run(['python', '/tmp/patch.py'], check=True)
+
+      - name: Validate repaired scripts
+        run: |
+          bash -n infra/scripts/*.sh
+          docker run --rm --entrypoint sh -v "$PWD/infra/scripts:/work:ro" koalaman/shellcheck:v0.10.0 -c 'shellcheck /work/*.sh'
+          git diff --check
+
+      - name: Commit repaired bootstrap contract
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docker/docker-compose.prod.yml infra/scripts .github/workflows/ci-pr-check.yml
+          git commit -m "fix(infra): support safe pre-DNS production rehearsal"
+          git push origin HEAD:feat/p10-007-github-actions-compute-engine-cd-wif
