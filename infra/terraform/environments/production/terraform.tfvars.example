@@ -1,0 +1,22 @@
+# SeatFlow GCP Production Terraform Variables Example
+# Copy to terraform.tfvars for local execution (strictly gitignored)
+
+project_id                    = "seatflow-production-507311"
+region                        = "europe-west1"
+zone                          = "europe-west1-b"
+environment                   = "production"
+vm_name                       = "seatflow-production"
+machine_type                  = "e2-highmem-2"
+boot_disk_size_gb             = 80
+boot_disk_type                = "pd-balanced"
+boot_disk_image               = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
+github_repo                   = "AdelinV2/SeatFlow"
+domain_name                   = "seat-flow.me"
+enable_ops_agent              = true
+deletion_protection           = true
+network_name                  = "seatflow-vpc"
+subnet_name                   = "seatflow-subnet"
+subnet_cidr                   = "10.0.1.0/24"
+artifact_registry_repo_id     = "seatflow"
+workload_identity_pool_id     = "seatflow-github-pool"
+workload_identity_provider_id = "seatflow-github-provider"

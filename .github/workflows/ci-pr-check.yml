@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'infra/**'
       - '.github/workflows/ci-pr-check.yml'
   workflow_dispatch:
 
@@ -45,3 +46,35 @@ jobs:
           name: surefire-reports
           path: 'backend/**/target/surefire-reports/'
           if-no-files-found: ignore
+
+  terraform-lint:
+    name: Terraform Lint & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      - name: Check Terraform Formatting
+        run: |
+          terraform fmt -check -recursive infra/terraform
+
+      - name: Validate Production Environment
+        run: |
+          terraform -chdir=infra/terraform/environments/production init -backend=false
+          terraform -chdir=infra/terraform/environments/production validate
+
+      - name: Validate Staging-Validation Environment
+        run: |
+          terraform -chdir=infra/terraform/environments/staging-validation init -backend=false
+          terraform -chdir=infra/terraform/environments/staging-validation validate
+
+      - name: Shell Scripts Syntax Check
+        run: |
+          bash -n infra/scripts/*.sh
+

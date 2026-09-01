@@ -7,7 +7,7 @@
 - **Phase:** `Phase 10 - DevOps & Observability`
 - **Related Specs:** `AGENTS.md`, `.ai/architecture/08-observability-and-deployment.md`, `.ai/tasks/phase-10-devops-observability/007-github-actions-compute-engine-cd-wif.md`
 - **Related ADRs:** `.ai/decisions/ADR-008-compute-engine-single-vm-portfolio-deployment.md`, `.ai/decisions/ADR-007-terraform-for-gcp-runtime-infrastructure.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 
@@ -18,16 +18,16 @@ Use Terraform to provision the cost-conscious GCP production foundation for Seat
 This task explicitly replaces the previous Cloud Run / Cloud SQL / Memorystore / managed-Kafka topology.
 
 ### Critical Invariants
-- [ ] Default runtime host is one `e2-highmem-2` VM (2 vCPU, 16 GiB RAM), configurable by Terraform variable but not silently oversized.
-- [ ] All application/data/observability runtime containers execute through production Docker Compose on that VM.
-- [ ] Terraform provisions Artifact Registry, VM/networking/storage/IAM/WIF/Secret Manager infrastructure.
-- [ ] Real secret values never enter Terraform state or repository files.
-- [ ] Public ingress is restricted to the application edge ports required for HTTP/HTTPS; internal runtime ports are never Internet-exposed.
-- [ ] Prefer OS Login / IAP or another authenticated GCP administration path instead of unrestricted public SSH.
-- [ ] Persistent VM storage is protected against accidental destruction where practical.
-- [ ] No Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, Cloud CDN, or dedicated HTTPS load balancer is provisioned for MVP.
-- [ ] No second always-on staging VM is required.
-- [ ] Terraform state is remote/versioned and excluded from source control.
+- [x] Default runtime host is one `e2-highmem-2` VM (2 vCPU, 16 GiB RAM), configurable by Terraform variable but not silently oversized.
+- [x] All application/data/observability runtime containers execute through production Docker Compose on that VM.
+- [x] Terraform provisions Artifact Registry, VM/networking/storage/IAM/WIF/Secret Manager infrastructure.
+- [x] Real secret values never enter Terraform state or repository files.
+- [x] Public ingress is restricted to the application edge ports required for HTTP/HTTPS; internal runtime ports are never Internet-exposed.
+- [x] Prefer OS Login / IAP or another authenticated GCP administration path instead of unrestricted public SSH.
+- [x] Persistent VM storage is protected against accidental destruction where practical.
+- [x] No Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, Cloud CDN, or dedicated HTTPS load balancer is provisioned for MVP.
+- [x] No second always-on staging VM is required.
+- [x] Terraform state is remote/versioned and excluded from source control.
 
 ---
 
@@ -392,12 +392,12 @@ terraform -chdir=infra/terraform/environments/production plan -refresh=false -ou
 ./infra/scripts/verify-gcp-foundation.sh production
 ```
 
-- [ ] One approved Compute Engine VM foundation is reproducible through Terraform.
-- [ ] Default machine target is `e2-highmem-2` with persistent storage and static IP.
-- [ ] Public firewall exposes only the approved web edge; unrestricted admin/internal ports are absent.
-- [ ] Artifact Registry, Secret Manager, IAM and WIF are provisioned with least privilege.
-- [ ] No secret value exists in Terraform source/state/output.
-- [ ] No Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, or dedicated load-balancer resource is required/provisioned.
-- [ ] Runbook covers deploy, HTTPS, backup/restore, VM recovery and Terraform recovery.
-- [ ] P10-007 receives all non-secret outputs needed to deploy production Compose.
-- [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/008-compute-engine-gcp-production-terraform.md`.
+- [x] One approved Compute Engine VM foundation is reproducible through Terraform.
+- [x] Default machine target is `e2-highmem-2` with persistent storage and static IP.
+- [x] Public firewall exposes only the approved web edge; unrestricted admin/internal ports are absent.
+- [x] Artifact Registry, Secret Manager, IAM and WIF are provisioned with least privilege.
+- [x] No secret value exists in Terraform source/state/output.
+- [x] No Cloud Run, Cloud SQL, Memorystore, managed Kafka, GKE, Cloud Armor, or dedicated load-balancer resource is required/provisioned.
+- [x] Runbook covers deploy, HTTPS, backup/restore, VM recovery and Terraform recovery.
+- [x] P10-007 receives all non-secret outputs needed to deploy production Compose.
+- [x] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/008-compute-engine-gcp-production-terraform.md`.

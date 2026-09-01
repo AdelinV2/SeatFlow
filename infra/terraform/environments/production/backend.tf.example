@@ -1,0 +1,6 @@
+terraform {
+  backend "gcs" {
+    bucket = "seatflow-prod-adelin-tfstate"
+    prefix = "seatflow/production"
+  }
+}
