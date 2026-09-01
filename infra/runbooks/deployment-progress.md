@@ -7,45 +7,37 @@ This file tracks non-secret operator state for the GCP production rollout. Secre
 ## DONE
 
 - Read the P10-007/P10-008 task contracts, deployment architecture, and ADR-006/007/008/009.
-- Created the mandatory operator branch `feat/p10-008-gcp-production-terraform` from the current local `develop` state.
-- Confirmed the target GCP project `seatflow-production-507311` is active and the authenticated account can inspect it.
-- Confirmed the versioned, uniform-access GCS state bucket `seatflow-prod-adelin-tfstate` exists in `EUROPE-WEST1`.
-- Confirmed the production state prefix currently contains no Terraform state object.
-- Confirmed the checked-in Terraform configuration validates before backend repair.
-- Confirmed the runtime contract uses one shared application PostgreSQL credential and the expected eight Secret Manager containers.
-- Confirmed runtime Secret Manager access is secret-scoped rather than project-wide.
-- Confirmed WIF is restricted to `AdelinV2/SeatFlow`, public web ingress is limited to 80/443, and SSH ingress is limited to the IAP CIDR.
-- Activated the ignored production `backend.tf` from the checked-in example so state can be stored remotely and versioned.
-- Applied 46 non-VM foundation resources successfully to the remote state.
-- Confirmed two VM attempts in `europe-west1-b` failed only because GCP reported no capacity for an 80 GB `pd-balanced` disk; neither attempt left an instance or disk.
-- Selected `europe-west1-c` as the same-region capacity fallback and updated production operational defaults accordingly.
-- Completed Terraform apply with 47 resources in remote state and confirmed a post-apply no-change plan.
-- Verified the production VM is RUNNING as `e2-highmem-2` with an attached 80 GB `pd-balanced` non-auto-delete boot disk, deletion protection, Shielded VM, OS Login, STANDARD scheduling, and the Terraform static IP.
-- Verified the VPC, subnet, exact firewall rules, nine required APIs, Artifact Registry, WIF condition, least-privilege IAM, eight secret containers, and absence of broad runtime Secret Manager access.
-- Verified VM bootstrap: Docker Engine, Docker Compose, Ops Agent, `seatflow.service`, `/opt/seatflow`, and `/run/seatflow`.
-- Generated and installed version 1 for `postgres-admin-password`, `postgres-app-password`, `redis-password`, and `grafana-admin-password` without exposing values.
-- Installed version 1 for the existing Stripe test API key and Resend API key without exposing values.
-- Audited Stripe test mode and confirmed there are currently no registered webhook endpoints.
-- Disabled the recoverable `stripe-webhook-secret` version 1 after confirming it was not associated with a Stripe endpoint.
-- Audited Cloudflare and confirmed the active zone still contains four obsolete GitHub Pages apex records; existing Resend and mail records are intact.
-- Confirmed the Supabase project has no existing monitoring user carrying `metrics.read`.
-- Implemented P10-007 WIF workflows, immutable image builds, VM metadata-identity secret access, explicit migrations, bounded verification, and image rollback on `feat/p10-007-github-actions-compute-engine-cd-wif`.
-- Passed Bash syntax, ShellCheck, actionlint, CD contract tests, full production Compose rendering, and Terraform format/init/validate.
-- Configured Supabase Auth production URL handling: Site URL `https://seat-flow.me`, while retaining local redirects and adding exact callback/reset-password redirects for the apex and `www` hosts.
-- Created the GitHub `production` environment and stored all eight non-secret GCP deployment identifiers as environment-scoped variables.
-- Applied the Supabase access-token hook `public.custom_access_token_hook`, created the dedicated `prometheus@seat-flow.me` identity, assigned only the protected `metrics_read` app-metadata flag, and verified a Supabase-issued JWT with `scope=metrics.read`.
-- Added Terraform-managed monitoring identity secret containers and a root-only VM token refresher with a 45-minute systemd timer; the initial metrics JWT is stored in Secret Manager without recording its value.
+- Confirmed the target GCP project `seatflow-production-507311`, remote Terraform state, production VPC/subnet/firewall/API foundation, Artifact Registry, WIF configuration, least-privilege IAM, and secret-scoped runtime access.
+- Deployed the production VM `seatflow-production` in `europe-west1-c` as `e2-highmem-2` with the Terraform-managed static IP, protected boot disk, Shielded VM, OS Login, Docker Engine/Compose, Ops Agent, `seatflow.service`, `/opt/seatflow`, and `/run/seatflow`.
+- Installed the required PostgreSQL, Redis, Grafana, Stripe test API, and Resend secret versions without recording secret values.
+- Audited Stripe test mode and confirmed no webhook endpoint exists yet; disabled the obsolete recoverable `stripe-webhook-secret` version because it was not associated with a Stripe endpoint.
+- Audited Cloudflare and confirmed the zone still contains obsolete GitHub Pages apex records while Resend/mail records remain intact. DNS has intentionally not been changed yet.
+- Configured Supabase Auth production URLs for `https://seat-flow.me` while retaining localhost redirects.
+- Applied `public.custom_access_token_hook`, created the dedicated `prometheus@seat-flow.me` monitoring identity, set protected `metrics_read=true` app metadata, and verified its Supabase JWT contains only `scope=metrics.read` for the monitoring scope contract.
+- Added Terraform-managed monitoring identity secret containers plus a root-only Prometheus JWT refresh service/timer. Deployment now forces an immediate refresh before runtime rendering and preserves the fresh `/run/seatflow/prometheus-scrape-token` instead of overwriting it from Secret Manager.
+- Implemented P10-007 GitHub OIDC/WIF workflows, immutable Artifact Registry builds, IAP/OS Login VM delivery, explicit Flyway migrations, bounded Compose verification, and immutable-image rollback.
+- Configured the GitHub `production` environment with the eight required non-secret GCP deployment variables.
+- Documented the GitHub plan/repository limitation: the environment settings surface does not expose a required-reviewer protection rule. Do not fabricate this gate; use `AdelinV2` as reviewer identity where GitHub permits it.
+- Normalized production shell scripts to LF and expanded CI ShellCheck coverage, including the Prometheus refresh and edge scripts.
+- Fixed frontend CI to run all tests in `ChromeHeadless`; the full suite reaches 358/358 passing tests on Linux runners.
+- Made the Angular production build deterministic by disabling network-dependent Google Fonts inlining while preserving production optimization.
+- Added safe two-phase edge deployment: host Nginx can provide an HTTP pre-DNS rehearsal, the frontend container is loopback-only, production CORS defaults target `seat-flow.me`/`www.seat-flow.me`, and Certbot/public HTTPS is deferred until all production DNS names resolve to the VM.
+- Made first deployment independent of a pre-existing Stripe webhook signing secret by using a deployment-local random bootstrap value until the real Stripe endpoint can be created after HTTPS is live.
+- Corrected CD workflows so environment-scoped GitHub variables are read from jobs using `environment: production`, and ensured the production release bundle includes `infra/systemd`.
+- Removed all temporary repair workflows used during CI recovery; only the permanent deployment workflows remain.
 
 ## BLOCKED
 
-- Stripe production-style test webhook creation depends on working HTTPS routing; the endpoint must generate a new signing secret.
-- The current GitHub environment settings surface exposes no required-reviewer protection rule for this repository, so `AdelinV2` cannot yet be configured as the reviewer gate. The environment and its scoped deployment variables are otherwise ready.
+- Stripe test webhook creation is intentionally blocked until public HTTPS routing is live; the real endpoint must generate a new signing secret that replaces the bootstrap value.
+- GitHub required-reviewer enforcement is unavailable in the repository/environment settings currently exposed for this plan. This does not block the technical release, but the limitation must remain documented.
 
 ## PENDING
 
-- Apply the approved Cloudflare DNS record changes only after the release is ready, provision the origin certificate, and verify HTTPS.
-- Implement the accepted dedicated `metrics.read` Prometheus credential lifecycle.
-- Create the Stripe test webhook endpoint after HTTPS is live and install its generated signing secret.
-- Resolve the GitHub plan/repository capability needed to enforce the `AdelinV2` production-reviewer gate.
-- Commit the verified P10-007 implementation, then perform and verify the first production deployment.
-
+- Obtain a fully green PR #4 CI run after the final cleanup/runbook commit and merge PR #4 into `develop`.
+- Verify the automatic `develop` artifact-validation workflow builds and pushes all immutable images and publishes its deployment manifest.
+- Promote the verified `develop` release to `main` using the repository's normal GitHub flow so the production workflow performs the first VM deployment.
+- Verify on the VM: migrations, all required containers, gateway readiness, Eureka registration, frontend health, observability stack, Prometheus token refresh service/timer, and the pre-DNS host Nginx edge.
+- Only after the internal release is healthy, apply the approved Cloudflare cutover: apex `seat-flow.me` to `207.175.104.184`, remove obsolete GitHub Pages apex A records, `www` to `seat-flow.me` DNS-only, and `api.seat-flow.me` to `207.175.104.184` DNS-only; preserve Resend/mail records.
+- Complete Certbot provisioning and public HTTPS verification after DNS resolves to the VM.
+- Create the Stripe test webhook after HTTPS is live, install its generated signing secret without exposing it, redeploy/refresh the runtime contract if required, and verify webhook delivery.
+- Perform final public production routing/observability verification and update this runbook to the completed state.
