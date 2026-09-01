@@ -1,6 +1,6 @@
 name: One-off - Diagnose Production Kafka
 
-# snapshot-trigger: 2026-09-01T21:22Z
+# snapshot-trigger: 2026-09-01T21:24Z
 on:
   push:
     branches: [ops/kafka-diagnose-20260901]
@@ -21,7 +21,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Inspect release progress without mutations
+      - name: Inspect Eureka startup without mutations
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -31,24 +31,24 @@ jobs:
           set -euo pipefail
           gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
           set -euo pipefail
-
           echo '=== RELEASE ==='
           grep '^SEATFLOW_IMAGE_TAG=' /run/seatflow/runtime.env 2>/dev/null || true
-          echo '=== MIGRATION MARKERS ==='
-          find /opt/seatflow/deployment -maxdepth 1 -type f -name 'migrations-*.done' -printf '%f\n' 2>/dev/null | sort || true
-          echo '=== ACTIVE/RECENT MIGRATION CONTAINERS ==='
-          docker ps -a --filter 'name=seatflow-migrate-' --format '{{.Names}}|{{.Status}}|{{.Image}}' | sort || true
-          echo '=== SERVICE HEALTH ==='
-          for c in seatflow-eureka seatflow-gateway seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-realtime seatflow-notification seatflow-frontend seatflow-otel-collector seatflow-tempo; do
-            if docker inspect "$c" >/dev/null 2>&1; then
-              docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|image={{.Config.Image}}' "$c" | sed 's#^/##'
-            fi
-          done
-          echo '=== FINAL PROBES ==='
-          docker exec seatflow-gateway wget -qO- http://127.0.0.1:8080/actuator/health/readiness 2>/dev/null | jq -c '{gateway_status: .status}' || true
-          docker exec seatflow-eureka wget -qO- --header='Accept: application/json' http://127.0.0.1:8761/eureka/apps 2>/dev/null | jq -c '{eureka_registered: ((.applications.application // []) | length)}' || true
-          printf 'frontend_status='
-          docker exec seatflow-frontend wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 | awk '$1 ~ /^HTTP\// {print $2}' | tail -1 || true
-          printf 'websocket_status='
-          docker exec seatflow-frontend wget -qSO /dev/null --header='Connection: Upgrade' --header='Upgrade: websocket' http://127.0.0.1:8080/ws 2>&1 | awk '$1 ~ /^HTTP\// {print $2}' | tail -1 || true
+          echo '=== EUREKA STATE ==='
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} started={{.State.StartedAt}}' seatflow-eureka || true
+          echo '=== EUREKA HEALTH HISTORY ==='
+          docker inspect --format '{{range .State.Health.Log}}{{.Start}}|exit={{.ExitCode}}|{{printf "%q" .Output}}{{println}}{{end}}' seatflow-eureka 2>/dev/null | tail -10 || true
+          echo '=== EUREKA LOG SIGNALS ==='
+          docker logs --tail 160 seatflow-eureka 2>&1 \
+            | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
+            | grep -Ei 'starting|started|tomcat|eureka|error|exception|failed|oom|outofmemory|killed|application' \
+            | tail -100 || true
+          echo '=== HOST MEMORY ==='
+          free -m
+          echo '=== CONTAINER MEMORY ==='
+          docker stats --no-stream --format '{{.Name}}|{{.MemUsage}}|{{.CPUPerc}}' \
+            | grep -E '^seatflow-(eureka|postgres|redis|kafka|otel-collector|tempo)\|' || true
+          echo '=== KERNEL OOM SIGNALS ==='
+          journalctl -k --since '15 minutes ago' --no-pager 2>/dev/null \
+            | grep -Ei 'out of memory|oom-kill|killed process' \
+            | tail -30 || true
           REMOTE
