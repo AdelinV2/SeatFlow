@@ -188,6 +188,14 @@ export class AuthService {
 
   private async initializeSession(): Promise<void> {
     try {
+      this.supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          this.syncSession(session);
+        } else {
+          this.clearSession();
+        }
+      });
+
       const { data, error } = await this.supabase.auth.getSession();
       if (error) {
         this.clearSession();
@@ -197,14 +205,6 @@ export class AuthService {
       } else {
         this.clearSession();
       }
-
-      this.supabase.auth.onAuthStateChange((_event, session) => {
-        if (session) {
-          this.syncSession(session);
-        } else {
-          this.clearSession();
-        }
-      });
     } catch (error: unknown) {
       this.clearSession();
       this.lastError.set(error instanceof Error ? error.message : 'Session initialization failed');
