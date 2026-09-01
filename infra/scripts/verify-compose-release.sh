@@ -63,7 +63,9 @@ printf '%s' "${eureka_apps}" | jq -e \
   '(.applications.application // []) | length >= 9' >/dev/null
 
 frontend_status=$("${compose[@]}" exec -T frontend \
-  wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 | awk '/HTTP\// {print $2}' | tail -1)
+  wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 \
+  | awk '$1 ~ /^HTTP\// {print $2}' \
+  | tail -1)
 [[ ${frontend_status} == 200 ]]
 
 websocket_status=$("${compose[@]}" exec -T frontend \
@@ -71,7 +73,7 @@ websocket_status=$("${compose[@]}" exec -T frontend \
     --header='Connection: Upgrade' \
     --header='Upgrade: websocket' \
     http://127.0.0.1:8080/ws 2>&1 \
-  | awk '/HTTP\// {print $2}' \
+  | awk '$1 ~ /^HTTP\// {print $2}' \
   | tail -1 || true)
 if [[ ! ${websocket_status} =~ ^(101|200|400|401|403|426)$ ]]; then
   echo "WebSocket edge probe returned unexpected status: ${websocket_status:-none}" >&2
