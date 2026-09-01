@@ -9,7 +9,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "seatflow.realtime.redis.listener.enabled=false",
+        "management.health.redis.enabled=false"
+})
 @ActiveProfiles("test")
 class RealtimeServiceApplicationTests {
 

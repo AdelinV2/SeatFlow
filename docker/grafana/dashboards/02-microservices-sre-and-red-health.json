@@ -1,58 +1,170 @@
 {
-  "annotations": { "list": [] },
-  "editable": true,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "#5794F2",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "5xx percentage above 1% for 2m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "100 * sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) by (application) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])) by (application), 1) > 1",
+        "for": "2m",
+        "iconColor": "#F2495C",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "sre"],
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "id": null,
   "panels": [
     {
-      "type": "timeseries",
-      "title": "Request Rate (RED: Rate) per service",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Request rate using the bounded application common tag.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "reqps" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 201,
+      "options": { "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\".+\"}[5m]))", "legendFormat": "{{application}}" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(http_server_requests_seconds_count{application=~\"$application\",environment=~\"$environment\"}[5m])) by (application)", "format": "time_series", "legendFormat": "{{application}}", "refId": "A" }
+      ],
+      "title": "Request rate (RPS)",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Error Rate (RED: Errors)",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Percentage of HTTP requests returning a 5xx response, grouped by application.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "max": 100, "min": 0, "unit": "percent" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 202,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\".+\",status=~\"5..\"}[5m]))", "legendFormat": "{{application}} 5xx" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "100 * sum(rate(http_server_requests_seconds_count{status=~\"5..\",application=~\"$application\",environment=~\"$environment\"}[5m])) by (application) / clamp_min(sum(rate(http_server_requests_seconds_count{application=~\"$application\",environment=~\"$environment\"}[5m])) by (application),1)", "format": "time_series", "legendFormat": "{{application}} 5xx", "refId": "A" }
+      ],
+      "title": "5xx percentage",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Latency p95 (RED: Duration)",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "p95 HTTP server duration from the Micrometer histogram.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "s" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 203,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\".+\"}[5m])))", "legendFormat": "{{application}} p95" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\"$application\",environment=~\"$environment\"}[5m])))", "format": "time_series", "legendFormat": "{{application}} p95", "refId": "A" }
+      ],
+      "title": "HTTP latency p95",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Latency p99 (RED: Duration)",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "p99 HTTP server duration from the Micrometer histogram.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "s" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 204,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\".+\"}[5m])))", "legendFormat": "{{application}} p99" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\"$application\",environment=~\"$environment\"}[5m])))", "format": "time_series", "legendFormat": "{{application}} p99", "refId": "A" }
+      ],
+      "title": "HTTP latency p99",
+      "type": "timeseries"
     },
     {
-      "type": "heatmap",
-      "title": "JVM Heap Usage",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Active Hikari connections. Pool names are bounded by the service configuration.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "id": 205,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "{{application}} {{id}}" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum by (application, pool) (hikaricp_connections_active{application=~\"$application\",environment=~\"$environment\"})", "format": "time_series", "legendFormat": "{{application}} {{pool}} active", "refId": "A" }
+      ],
+      "title": "Hikari active connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Configured maximum Hikari connections. Compare with active and pending connections for pool pressure.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "id": 206,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum by (application, pool) (hikaricp_connections_max{application=~\"$application\",environment=~\"$environment\"})", "format": "time_series", "legendFormat": "{{application}} {{pool}} max", "refId": "A" }
+      ],
+      "title": "Hikari maximum connections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Mean JVM garbage-collection pause time per second. JVM names and collector labels remain bounded infrastructure dimensions.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "sps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "id": 207,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum by (application) (rate(jvm_gc_pause_seconds_sum{application=~\"$application\",environment=~\"$environment\"}[5m]))", "format": "time_series", "legendFormat": "{{application}} GC pause/s", "refId": "A" }
+      ],
+      "title": "JVM GC pauses",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "seatflow-logs" },
+      "description": "Structured application error stream. Trace navigation is provided by the Loki datasource derived field.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 24 },
+      "id": 208,
+      "options": { "deduplication": { "enabled": true }, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLines": false },
+      "targets": [
+        { "datasource": { "type": "loki", "uid": "seatflow-logs" }, "expr": "{service_name=~\"$application\"} | json | level=\"ERROR\"", "legendFormat": "{{service_name}}", "queryType": "range", "refId": "A" }
+      ],
+      "title": "Application error logs",
+      "type": "logs"
     }
   ],
+  "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["seatflow", "sre", "red"],
-  "templating": { "list": [] },
+  "tags": ["seatflow", "phase-10", "sre", "red"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Application",
+        "multi": true,
+        "name": "application",
+        "options": [],
+        "query": "api-gateway,user-service,seat-map-service,event-service,reservation-service,payment-service,ticket-service,realtime-service,notification-service,eureka-server",
+        "regex": "/^(api-gateway|user-service|seat-map-service|event-service|reservation-service|payment-service|ticket-service|realtime-service|notification-service|eureka-server)$/",
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Environment",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": "local,docker,staging,prod,test",
+        "regex": "/^(local|docker|staging|prod|test)$/",
+        "type": "custom"
+      }
+    ]
+  },
   "time": { "from": "now-6h", "to": "now" },
+  "timezone": "UTC",
   "title": "SeatFlow Microservices SRE & RED Health",
-  "uid": "seatflow-sre-02",
+  "uid": "seatflow-sre-red",
   "version": 1
 }

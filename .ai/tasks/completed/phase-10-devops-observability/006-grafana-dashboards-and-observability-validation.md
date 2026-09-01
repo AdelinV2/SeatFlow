@@ -7,7 +7,7 @@
 - **Phase:** `Phase 10 - DevOps & Observability`
 - **Related Specs:** `.ai/architecture/08-observability-and-deployment.md`, Tasks `P10-002`, `P10-003`, `P10-004`, and `P10-005`
 - **Related ADRs:** `None` — dashboard categories and sources are already selected by architecture.
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `COMPLETED`
 
 ---
 

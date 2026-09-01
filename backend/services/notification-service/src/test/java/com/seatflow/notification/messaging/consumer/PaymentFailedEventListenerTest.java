@@ -33,7 +33,7 @@ class PaymentFailedEventListenerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        listener = new PaymentFailedEventListener(notificationService, objectMapper, mock());
+        listener = new PaymentFailedEventListener(notificationService, objectMapper, mock(com.seatflow.common.observability.tracing.KafkaListenerTraceScope.class));
     }
 
     @Test

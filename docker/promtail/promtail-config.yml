@@ -1,0 +1,40 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: seatflow-docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      # Keep collection scoped to this Compose project. The optional suffix
+      # supports isolated local verification projects without collecting other
+      # Docker workloads on a shared development host.
+      - source_labels:
+          - __meta_docker_container_label_com_docker_compose_project
+        regex: seatflow(-[a-z0-9]+)?
+        action: keep
+      - source_labels:
+          - __meta_docker_container_name
+        regex: /(.+)
+        target_label: container
+      - source_labels:
+          - __meta_docker_container_label_com_docker_compose_service
+        target_label: service_name
+    pipeline_stages:
+      - docker: {}
+      # Parse structured production fields for filtering without promoting
+      # trace IDs, user identifiers, or network addresses to Loki labels.
+      - json:
+          expressions:
+            level: level
+            message: message
+      - labels:
+          level:

@@ -1,58 +1,142 @@
 {
-  "annotations": { "list": [] },
-  "editable": true,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "#5794F2",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "Pending outbox above 100 for 1m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "seatflow_outbox_pending > 100",
+        "for": "1m",
+        "iconColor": "#FF9830",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "outbox"],
+        "type": "dashboard"
+      },
+      {
+        "name": "Outbox p99 above 30s for 5m",
+        "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+        "enable": true,
+        "expr": "histogram_quantile(0.99, sum by (le, service, event_type) (rate(seatflow_outbox_publish_latency_seconds_bucket[5m]))) > 30",
+        "for": "5m",
+        "iconColor": "#FF9830",
+        "runbook_url": "docker/README.md#observability-troubleshooting",
+        "tags": ["seatflow", "phase-10", "outbox"],
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "id": null,
   "panels": [
     {
-      "type": "timeseries",
-      "title": "Outbox Events Unpublished (backlog)",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Pending outbox rows exported by the services. This view is observational; it never queries or mutates PostgreSQL.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 301,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "targets": [
-        { "expr": "sum(seatflow_outbox_pending_total)", "legendFormat": "pending" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(seatflow_outbox_pending{service=~\"$application\"})", "format": "time_series", "instant": true, "legendFormat": "pending rows", "refId": "A" }
+      ],
+      "title": "Pending outbox rows",
+      "type": "stat"
     },
     {
-      "type": "timeseries",
-      "title": "Outbox Published Rate",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "p99 time from outbox creation until Kafka acknowledgement, grouped only by bounded service and event type dimensions.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "id": 302,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(seatflow_outbox_published_total[5m]))", "legendFormat": "published/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "histogram_quantile(0.99, sum by (le, service, event_type) (rate(seatflow_outbox_publish_latency_seconds_bucket{service=~\"$application\",event_type=~\"$event_type\"}[5m])))", "format": "time_series", "legendFormat": "{{service}} {{event_type}} p99", "refId": "A" }
+      ],
+      "title": "Outbox publish latency p99",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Kafka Consumer Lag",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Consumer lag from the configured Kafka exporter. Consumer group names are bounded deployment dimensions.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 303,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum by (consumer_group) (kafka_consumer_fetch_manager_records_lag)", "legendFormat": "{{consumer_group}}" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum by (consumergroup) (kafka_consumergroup_lag)", "format": "time_series", "legendFormat": "{{consumergroup}}", "refId": "A" }
+      ],
+      "title": "Kafka consumer lag",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Kafka Messages In (rate)",
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" },
+      "description": "Dead-letter rate after the bounded outbox retry ceiling is reached.",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "unit": "ops" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 304,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "expr": "sum(rate(kafka_producer_record_send_total[5m]))", "legendFormat": "records/s" }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "seatflow-prometheus" }, "expr": "sum(rate(seatflow_outbox_dead_letter_total{service=~\"$application\",event_type=~\"$event_type\"}[5m])) by (service,event_type)", "format": "time_series", "legendFormat": "{{service}} {{event_type}}", "refId": "A" }
+      ],
+      "title": "Dead-letter rate",
+      "type": "timeseries"
     },
     {
-      "type": "timeseries",
-      "title": "Outbox Publish Failures",
-      "datasource": "Prometheus",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "seatflow-logs" },
+      "description": "Structured outbox/Kafka dead-letter and delivery-failure logs. Use the derived trace link for distributed diagnosis.",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+      "id": 305,
+      "options": { "deduplication": { "enabled": true }, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLines": false },
       "targets": [
-        { "expr": "sum(rate(seatflow_outbox_publish_errors_total[5m]))", "legendFormat": "errors/s" }
-      ]
+        { "datasource": { "type": "loki", "uid": "seatflow-logs" }, "expr": "{service_name=~\"$application\"} | json | level=~\"ERROR|WARN\" | message=~\".*(dead.?letter|Outbox delivery failed|retry).*\"", "legendFormat": "{{service_name}}", "queryType": "range", "refId": "A" }
+      ],
+      "title": "Outbox dead-letter logs",
+      "type": "logs"
     }
   ],
+  "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["seatflow", "kafka", "outbox"],
-  "templating": { "list": [] },
+  "tags": ["seatflow", "phase-10", "kafka", "outbox"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Producer service",
+        "multi": true,
+        "name": "application",
+        "options": [],
+        "query": "user-service,seat-map-service,event-service,reservation-service,payment-service,ticket-service,notification-service",
+        "regex": "/^(user-service|seat-map-service|event-service|reservation-service|payment-service|ticket-service|notification-service)$/",
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": ["$__all"] },
+        "includeAll": true,
+        "label": "Event type",
+        "multi": true,
+        "name": "event_type",
+        "options": [],
+        "query": "ReservationHeldEvent,ReservationConfirmedEvent,ReservationCancelledEvent,ReservationExpiredEvent,PaymentCompleted,PaymentFailed,TicketIssued,UserRegisteredEvent",
+        "regex": "/^(ReservationHeldEvent|ReservationConfirmedEvent|ReservationCancelledEvent|ReservationExpiredEvent|PaymentCompleted|PaymentFailed|TicketIssued|UserRegisteredEvent)$/",
+        "type": "custom"
+      }
+    ]
+  },
   "time": { "from": "now-6h", "to": "now" },
+  "timezone": "UTC",
   "title": "SeatFlow Kafka & Outbox Pipeline",
-  "uid": "seatflow-kafka-03",
+  "uid": "seatflow-kafka-outbox",
   "version": 1
 }

@@ -25,6 +25,7 @@ public final class SeatFlowMetricNames {
     public static final String RESERVATIONS_HOLD_DURATION = "seatflow.reservations.hold.duration";
     public static final String RESERVATIONS_HOLD_DURATION_SECONDS = "seatflow.reservations.hold.duration.seconds";
     public static final String RESERVATIONS_EXPIRED = "seatflow.reservations.expired.total";
+    public static final String RESERVATIONS_ACTIVE_HOLDS = "seatflow.reservations.active.holds";
     /** Legacy aliases still queried by Grafana dashboards — kept for backwards compatibility. */
     public static final String RESERVATIONS_CANCELLED = "seatflow.reservations.cancelled.total";
     public static final String RESERVATIONS_CONFIRMED = "seatflow.reservations.confirmed.total";
@@ -45,6 +46,7 @@ public final class SeatFlowMetricNames {
     public static final String OUTBOX_PUBLISH_LATENCY_SECONDS = "seatflow.outbox.publish.latency.seconds";
     public static final String OUTBOX_RETRY_COUNT = "seatflow.outbox.retry.count.total";
     public static final String OUTBOX_DEAD_LETTER = "seatflow.outbox.dead.letter.total";
+    public static final String OUTBOX_PENDING = "seatflow.outbox.pending";
 
     // --- Realtime ---
     public static final String WEBSOCKET_ACTIVE_CONNECTIONS = "seatflow.websocket.active.connections";

@@ -57,12 +57,12 @@ class ReservationServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3", "4");
+                .containsExactly("1", "2", "3", "4", "5");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true);
     }
 
     @Test
@@ -84,11 +84,15 @@ class ReservationServiceApplicationTests {
                 """
                 SELECT indexname
                 FROM pg_indexes
-                WHERE indexname IN ('uq_active_seat_hold', 'idx_seat_holds_pricing_tier_id')
+                WHERE indexname IN (
+                    'uq_active_seat_hold',
+                    'idx_seat_holds_pricing_tier_id',
+                    'idx_seat_holds_held_status')
                 """, String.class);
 
         assertThat(indexNames).containsExactlyInAnyOrder(
                 "uq_active_seat_hold",
-                "idx_seat_holds_pricing_tier_id");
+                "idx_seat_holds_pricing_tier_id",
+                "idx_seat_holds_held_status");
     }
 }
