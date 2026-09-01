@@ -1,0 +1,593 @@
+# Production override for single GCP Compute Engine VM (e2-highmem-2: 2 vCPU, 16 GiB)
+# Apply with:
+# docker compose -f docker/docker-compose.yml -f docker/docker-compose.services.yml -f docker/docker-compose.monitoring.yml -f docker/docker-compose.prod.yml config
+#
+# - Uses Artifact Registry immutable images via AR_BASE + SEATFLOW_IMAGE_TAG
+# - SPRING_PROFILES_ACTIVE=prod + Docker DNS (postgres, kafka, redis, eureka-server)
+# - Only Nginx edge is publicly exposed; all other ports are private (expose)
+# - Persistent named volumes for PostgreSQL, Kafka, Prometheus, Grafana, Tempo, Loki
+# - Conservative CPU/memory limits fitting 16 GiB with host headroom
+# - Restart, log rotation, read-only where practical, no-new-privileges, health checks
+
+services:
+  postgres:
+    ports: !reset []
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      # The init script consumes this to create the application role.
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+    mem_limit: 768m
+    cpus: 0.8
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # PostgreSQL requires writable data dir; not read_only
+
+  redis:
+    ports: !reset []
+    expose:
+      - "6379"
+    command: ["redis-server", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?required}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+    mem_limit: 256m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    read_only: true
+    tmpfs:
+      - /data:size=16m
+
+  kafka:
+    ports: !reset []
+    expose:
+      - "9092"
+      - "9093"
+    mem_limit: 768m
+    cpus: 0.8
+    environment:
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  eureka-server:
+    image: ${AR_BASE}/eureka-server:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8761"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: eureka-server
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8761
+      EUREKA_HOSTNAME: eureka-server
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms128m -Xmx256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 384m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api-gateway:
+    image: ${AR_BASE}/api-gateway:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: api-gateway
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8080
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+      REDIS_SSL_ENABLED: "false"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://seatflow.app}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.6
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  user-service:
+    image: ${AR_BASE}/user-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: user-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_user
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  seat-map-service:
+    image: ${AR_BASE}/seat-map-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: seat-map-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_seatmap
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  event-service:
+    image: ${AR_BASE}/event-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: event-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8083
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_event
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 640m
+    cpus: 0.6
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  reservation-service:
+    image: ${AR_BASE}/reservation-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: reservation-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8084
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_reservation
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 640m
+    cpus: 0.6
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payment-service:
+    image: ${AR_BASE}/payment-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: payment-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8085
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_payment
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:?required}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?required}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ticket-service:
+    image: ${AR_BASE}/ticket-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: ticket-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8086
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_ticket
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  realtime-service:
+    image: ${AR_BASE}/realtime-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: realtime-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8087
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+      REDIS_SSL_ENABLED: "false"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      REALTIME_REDIS_CHANNEL: ${REALTIME_REDIS_CHANNEL:-seatflow:realtime:seat-status}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  notification-service:
+    image: ${AR_BASE}/notification-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: notification-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8088
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_notification
+      DB_USERNAME: ${DB_USERNAME:?required}
+      DB_PASSWORD: ${DB_PASSWORD:?required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms128m -Xmx256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 384m
+    cpus: 0.4
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ${AR_BASE}/frontend:${SEATFLOW_IMAGE_TAG:?required}
+    # TLS remains the responsibility of the P10-008 edge/certificate deployment.
+    # Do not publish 443 until it provides a tested listener and read-only cert mount.
+    ports: !override ["80:8080"]
+    mem_limit: 128m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  otel-collector:
+    image: ${AR_BASE}/otel-collector:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "4317"
+      - "4318"
+      - "13133"
+      - "8888"
+    mem_limit: 192m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  prometheus:
+    ports: !reset []
+    expose:
+      - "9090"
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--storage.tsdb.retention.size=2GB"
+      - "--web.enable-lifecycle"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  grafana:
+    ports: !reset []
+    expose:
+      - "3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    mem_limit: 256m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tempo:
+    image: ${AR_BASE}/tempo:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "3200"
+      - "4317"
+      - "4318"
+    mem_limit: 256m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  loki:
+    ports: !reset []
+    expose:
+      - "3100"
+    mem_limit: 256m
+    cpus: 0.3
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alloy:
+    ports: !reset []
+    mem_limit: 128m
+    cpus: 0.2
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pg_data:
+    driver: local
+  kafka_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  tempo_data:
+    driver: local
+  loki_data:
+    driver: local
+
+
+
+
+

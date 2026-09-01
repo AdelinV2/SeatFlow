@@ -1,18 +1,19 @@
-# GCP Cloud Run / GKE (Staging & Production)
+# Production Docker Compose on single VM (not Cloud Run / GKE)
+# Uses private Docker DNS and strict security.
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}}
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
 
 spring:
   data:
     redis:
-      host: ${REDIS_HOST}
+      host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}
       password: ${REDIS_PASSWORD:}
       ssl:
-        enabled: ${REDIS_SSL_ENABLED:true}
+        enabled: ${REDIS_SSL_ENABLED:false}
 
 seatflow:
   observability:
@@ -26,7 +27,7 @@ logging:
 management:
   tracing:
     sampling:
-      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.2}
   opentelemetry:
     resource-attributes:
       "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}

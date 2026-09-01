@@ -3,20 +3,28 @@
 -- and makes the application role the owner of each database and its public schema
 -- so Flyway can create tables at startup.
 --
--- The application role name/password MUST match the services' .env defaults
--- (DB_USERNAME / DB_PASSWORD -> seatflow / seatflow_dev).
+-- The application role name and password are read from DB_USERNAME/DB_PASSWORD
+-- at initialization time, never embedded in the image or manifest.
 --
 -- NOTE: uses "SELECT 1" (standard, always valid) inside the NOT EXISTS
 -- subquery, and relies on psql \gexec to execute each returned statement.
 
--- 1. Create the shared application role (idempotent).
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'seatflow') THEN
-        CREATE ROLE seatflow LOGIN PASSWORD 'seatflow_dev';
-    END IF;
-END
-$$;
+-- 1. Create the shared application role (idempotent). The official PostgreSQL
+-- image runs init scripts through psql, where \getenv exposes environment values.
+\getenv db_username DB_USERNAME
+\getenv db_password DB_PASSWORD
+\if :{?db_username}
+\if :{?db_password}
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_username', :'db_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_username')\gexec
+\else
+\echo DB_PASSWORD must be supplied to initialize the SeatFlow application role
+\quit
+\endif
+\else
+\echo DB_USERNAME must be supplied to initialize the SeatFlow application role
+\quit
+\endif
 
 -- 2. Create the per-service databases (idempotent).
 SELECT 'CREATE DATABASE seatflow_user'
@@ -43,22 +51,22 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'seatflow_notificati
 -- 3. Make the application role own each database and its public schema so that
 --    Flyway (connecting as seatflow) can create and migrate tables.
 \connect seatflow_user
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_seatmap
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_event
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_reservation
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_payment
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_ticket
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_notification
-ALTER SCHEMA public OWNER TO seatflow;
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec

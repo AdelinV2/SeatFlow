@@ -18,15 +18,15 @@ Deliver repeatable containers for the ten JVM deployables and Angular/Nginx SPA,
 The same independently containerized architecture must work locally and in production; production changes runtime profile, immutable images, resource limits, security, persistence, logging, and restart behavior rather than introducing a separate Cloud Run deployment model.
 
 ### Critical Invariants
-- [ ] Host/IDE execution uses `local`; local Compose uses `docker`; production Compose uses `prod`; automated tests use `test`.
-- [ ] `prod` uses private Docker DNS (`postgres`, `kafka`, `redis`, `eureka-server`) and is not Cloud Run-specific.
-- [ ] PostgreSQL remains authoritative business state; Redis remains non-authoritative; Kafka remains the durable asynchronous backbone.
-- [ ] Every application container is non-root, health-checked, immutable, and contains no `.env`/secret files.
-- [ ] Production exposes only the Nginx HTTPS/WSS edge; database, broker, cache, Eureka, backend and observability ports stay private.
-- [ ] PostgreSQL and Kafka data survive container recreation through named persistent volumes.
-- [ ] Every JVM has bounded memory appropriate for the `e2-highmem-2` 2-vCPU/16-GiB VM.
-- [ ] Service-to-service HTTP continues to use Eureka + Spring Cloud LoadBalancer.
-- [ ] No Kubernetes/GKE, Cloud Run, Cloud SQL, Memorystore, or managed Kafka resources are introduced by this task.
+- [x] Host/IDE execution uses `local`; local Compose uses `docker`; production Compose uses `prod`; automated tests use `test`.
+- [x] `prod` uses private Docker DNS (`postgres`, `kafka`, `redis`, `eureka-server`) and is not Cloud Run-specific.
+- [x] PostgreSQL remains authoritative business state; Redis remains non-authoritative; Kafka remains the durable asynchronous backbone.
+- [x] Every application container is non-root, health-checked, immutable, and contains no `.env`/secret files.
+- [x] Production exposes only the Nginx HTTPS/WSS edge; database, broker, cache, Eureka, backend and observability ports stay private.
+- [x] PostgreSQL and Kafka data survive container recreation through named persistent volumes.
+- [x] Every JVM has bounded memory appropriate for the `e2-highmem-2` 2-vCPU/16-GiB VM.
+- [x] Service-to-service HTTP continues to use Eureka + Spring Cloud LoadBalancer.
+- [x] No Kubernetes/GKE, Cloud Run, Cloud SQL, Memorystore, or managed Kafka resources are introduced by this task.
 
 ---
 
@@ -290,12 +290,13 @@ docker compose \
   config --quiet
 ```
 
-- [ ] All ten JVM images and frontend image build independently and non-root.
-- [ ] Local Compose stack becomes healthy.
-- [ ] Production Compose renders without Cloud Run/Cloud SQL/Memorystore/managed-Kafka dependencies.
-- [ ] Production exposes only the edge ports.
-- [ ] PostgreSQL/Kafka persistent volumes are present.
-- [ ] Production uses `SPRING_PROFILES_ACTIVE=prod` and Docker DNS.
-- [ ] Resource limits fit the target 2-vCPU/16-GiB VM with headroom.
-- [ ] No `.env`, credentials, service-account keys, or secrets are copied into images.
-- [ ] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/005-full-stack-dockerization-and-compose-orchestration.md`.
+- [x] All ten JVM images and frontend image build independently and non-root.
+- [x] Local Compose stack becomes healthy.
+- [x] Production Compose renders without Cloud Run/Cloud SQL/Memorystore/managed-Kafka dependencies.
+- [x] Production exposes only the edge ports.
+- [x] PostgreSQL/Kafka persistent volumes are present.
+- [x] Production uses `SPRING_PROFILES_ACTIVE=prod` and Docker DNS.
+- [x] Resource limits fit the target 2-vCPU/16-GiB VM with headroom.
+- [x] No `.env`, credentials, service-account keys, or secrets are copied into images.
+- [x] On completion move this file to `.ai/tasks/completed/phase-10-devops-observability/005-full-stack-dockerization-and-compose-orchestration.md`.
+

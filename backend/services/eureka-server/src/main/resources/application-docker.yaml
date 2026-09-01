@@ -5,7 +5,7 @@ eureka:
     hostname: eureka-server
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka/
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   server:
     enable-self-preservation: false
     eviction-interval-timer-in-ms: 5000

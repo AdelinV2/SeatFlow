@@ -24,12 +24,12 @@ spring:
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:authenticated}
 
 ticket-service:
-  base-url: ${TICKET_SERVICE_URL:http://ticket-service:8086}
+  base-url: ${TICKET_SERVICE_URL:http://ticket-service}
 
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_URI:http://eureka-server:8761/eureka}
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   instance:
     prefer-ip-address: true
 
