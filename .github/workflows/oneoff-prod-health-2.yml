@@ -23,7 +23,7 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Inspect non-secret container health
+      - name: Diagnose Java startup without exposing environment
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -36,21 +36,21 @@ jobs:
             --zone="${GCP_VM_ZONE}" \
             --tunnel-through-iap --quiet \
             --command='sudo bash -s' <<'REMOTE'
-          set -euo pipefail
-          printf '%-34s %-12s %-12s %-8s\n' NAME STATUS HEALTH RESTARTS
-          docker ps -a --format '{{.Names}}' | sort | while read -r name; do
-            status=$(docker inspect --format '{{.State.Status}}' "${name}")
-            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${name}")
-            restarts=$(docker inspect --format '{{.RestartCount}}' "${name}")
-            printf '%-34s %-12s %-12s %-8s\n' "${name}" "${status}" "${health}" "${restarts}"
+          set -u
+          services=(seatflow-eureka seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-notification seatflow-realtime seatflow-gateway)
+          for name in "${services[@]}"; do
+            if ! docker inspect "${name}" >/dev/null 2>&1; then
+              echo "=== ${name}: MISSING ==="
+              continue
+            fi
+            echo "=== ${name} STATE ==="
+            docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}} error={{.State.Error}}' "${name}"
+            echo "--- recent health results ---"
+            docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}{{end}}' "${name}" | tail -10
+            echo "--- filtered application errors ---"
+            docker logs --tail 220 "${name}" 2>&1 \
+              | grep -Ei 'ERROR|Exception|Caused by|FATAL|OutOfMemory|Killed|connection refused|authentication failed|permission denied|does not exist|failed to|unable to|Flyway|HikariPool' \
+              | sed -E 's#(password|token|secret|api[_-]?key)=([^[:space:]]+)#\1=[REDACTED]#Ig' \
+              | tail -45 || true
           done
-          if [[ -f /run/seatflow/prometheus-scrape-token ]]; then
-            stat -c 'PROM_TOKEN mode=%a owner=%U group=%G size=%s' /run/seatflow/prometheus-scrape-token
-          else
-            echo 'PROM_TOKEN missing'
-          fi
-          systemctl is-active seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ACTIVE=/'
-          systemctl is-enabled seatflow-prometheus-token-refresh.timer | sed 's/^/PROM_TIMER_ENABLED=/'
           REMOTE
-
-# second read-only snapshot
