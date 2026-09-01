@@ -45,6 +45,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docker/docker-compose.prod.yml infra/scripts .github/workflows/ci-pr-check.yml
+          git add docker/docker-compose.prod.yml infra/scripts
           git commit -m "fix(infra): support safe pre-DNS production rehearsal"
           git push origin HEAD:feat/p10-007-github-actions-compute-engine-cd-wif
