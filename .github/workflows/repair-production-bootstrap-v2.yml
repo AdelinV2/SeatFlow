@@ -25,7 +25,7 @@ jobs:
           from pathlib import Path
           import base64, re, subprocess
           source = Path('.github/workflows/repair-production-bootstrap.yml').read_text()
-          match = re.search(r"echo '([A-Za-z0-9+/=]+)' \\| base64 -d > /tmp/patch\\.py", source)
+          match = re.search(r"echo '([A-Za-z0-9+/=]+)' \| base64 -d > /tmp/patch\.py", source)
           if not match:
               raise SystemExit('Prepared patch payload not found')
           Path('/tmp/patch.py').write_bytes(base64.b64decode(match.group(1)))
