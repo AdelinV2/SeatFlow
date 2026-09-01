@@ -36,6 +36,8 @@ services:
     ports: !reset []
     expose:
       - "6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
     command: ["redis-server", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?required}"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
