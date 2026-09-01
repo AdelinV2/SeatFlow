@@ -216,23 +216,17 @@ It must not receive deployment/project administration rights merely for convenie
 
 Terraform creates secret **containers** and IAM bindings only. Secret values are inserted through an approved manual/rotation procedure outside Terraform state.
 
-Expected production secret/config containers may include:
+Expected production secret/config containers:
 
 ```text
 postgres-admin-password
-postgres-user-service-password
-postgres-seatmap-service-password
-postgres-event-service-password
-postgres-reservation-service-password
-postgres-payment-service-password
-postgres-ticket-service-password
-postgres-notification-service-password
+postgres-app-password
+redis-password
 stripe-api-key
 stripe-webhook-secret
-jwt-jwk-set-uri / jwt-issuer-uri or approved Supabase auth configuration
-email-provider credentials
-cors/public-origin configuration when treated as managed runtime config
-tls/certificate material only if the chosen HTTPS mechanism requires it
+resend-api-key
+grafana-admin-password
+prometheus-scrape-token
 ```
 
 Do not create meaningless per-service secrets if a value is public configuration. Apply least privilege by service/deployment identity.

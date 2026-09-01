@@ -432,6 +432,8 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      RESEND_API_KEY: ${RESEND_API_KEY:?required}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-SeatFlow <onboarding@resend.dev>}
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
       JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms128m -Xmx256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"

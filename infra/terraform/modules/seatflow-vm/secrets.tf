@@ -5,19 +5,13 @@
 locals {
   secret_names = [
     "postgres-admin-password",
-    "postgres-user-service-password",
-    "postgres-seatmap-service-password",
-    "postgres-event-service-password",
-    "postgres-reservation-service-password",
-    "postgres-payment-service-password",
-    "postgres-ticket-service-password",
-    "postgres-notification-service-password",
+    "postgres-app-password",
+    "redis-password",
     "stripe-api-key",
     "stripe-webhook-secret",
-    "jwt-issuer-uri",
-    "jwt-jwk-set-uri",
     "resend-api-key",
-    "cors-allowed-origins"
+    "grafana-admin-password",
+    "prometheus-scrape-token"
   ]
 }
 
