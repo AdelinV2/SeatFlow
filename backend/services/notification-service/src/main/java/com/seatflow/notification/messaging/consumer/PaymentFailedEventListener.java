@@ -3,12 +3,11 @@ package com.seatflow.notification.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
-import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.notification.messaging.event.PaymentFailedEvent;
 import com.seatflow.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +18,7 @@ public class PaymentFailedEventListener {
 
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
             topics = EventTopics.PAYMENT_EVENTS,
@@ -26,23 +26,14 @@ public class PaymentFailedEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handlePaymentEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
-            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
-            return;
-        }
-
-        String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
-        CorrelationContext.setCorrelationId(correlationId);
-        MDC.put("correlationId", correlationId);
-        if (envelope.eventId() != null) {
-            MDC.put("traceId", envelope.eventId());
-        }
-
-        try {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.PAYMENT_EVENTS)) {
+            if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+                log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
+                return;
+            }
             log.info("Received payment event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
-
-            if ("PaymentFailed".equals(envelope.eventType())) {
+            if ("PaymentFailed".equalsIgnoreCase(envelope.eventType()) || "PaymentFailedEvent".equalsIgnoreCase(envelope.eventType())) {
                 PaymentFailedEvent event = convertPayload(envelope.payload(), PaymentFailedEvent.class);
                 notificationService.sendPaymentFailedNotification(event);
             } else {
@@ -50,12 +41,8 @@ public class PaymentFailedEventListener {
             }
         } catch (Exception ex) {
             log.error("Failed to process payment event: type={}, eventId={}: {}",
-                    envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
+                    envelope != null ? envelope.eventType() : "null", envelope != null ? envelope.eventId() : "null", ex.getMessage(), ex);
             throw ex;
-        } finally {
-            MDC.remove("correlationId");
-            MDC.remove("traceId");
-            CorrelationContext.clear();
         }
     }
 

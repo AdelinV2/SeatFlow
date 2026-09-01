@@ -107,4 +107,17 @@ class AdminVenueControllerTest {
                 .andExpect(jsonPath("$.name").value("Orchestra"))
                 .andExpect(jsonPath("$.activeSeatCount").value(50));
     }
+
+    @Test
+    void shouldDeleteSectionForAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                                "/api/admin/venues/{venueId}/sections/{sectionId}", venueId, sectionId)
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(sectionService).deleteSection(venueId, sectionId);
+    }
 }

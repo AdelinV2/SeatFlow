@@ -1,0 +1,200 @@
+<div class="admin-users max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Top Navigation / Breadcrumbs -->
+  <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] mb-4">
+    <a routerLink="/admin" class="hover:text-[var(--color-primary)] transition-colors">Admin Portal</a>
+    <span>/</span>
+    <span class="text-[var(--color-text-primary)]">User Audit</span>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 pb-6 border-b border-[var(--color-border)]">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+        User Security & Registration Audit
+      </h1>
+      <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+        Monitor registered customer accounts, contact details, creation dates, and administrative role assignments.
+      </p>
+    </div>
+
+    <div class="px-4 py-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs self-start sm:self-auto">
+      <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Total Registered</span>
+      <span class="text-xl font-black text-indigo-600 dark:text-indigo-400">{{ totalElements() | number }}</span>
+    </div>
+  </div>
+
+  <!-- Search Filter & Page Size Selector -->
+  <div class="flex flex-col sm:flex-row gap-4 mb-6">
+    <div class="relative flex-1">
+      <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--color-text-muted)]">
+        <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" x2="16.65" y1="21" y2="16.65"/>
+        </svg>
+      </div>
+      <input
+        type="text"
+        placeholder="Filter by email, name, phone, or UUID..."
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)"
+        class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs transition-all"
+      />
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-[var(--color-text-muted)] whitespace-nowrap">Show:</span>
+      <select
+        [ngModel]="pageSize()"
+        (ngModelChange)="onPageSizeChange(+$event)"
+        class="px-3 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-bold text-[var(--color-text-primary)] shadow-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <option [value]="10">10 / page</option>
+        <option [value]="20">20 / page</option>
+        <option [value]="50">50 / page</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- User Audit Table Container -->
+  <div class="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-[var(--color-canvas)] border-b border-[var(--color-border)] text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] select-none">
+          <tr>
+            <th class="py-3.5 px-4 sm:px-6">User / Identity</th>
+            <th class="py-3.5 px-4">Role Assignment</th>
+            <th class="py-3.5 px-4 cursor-pointer hover:text-[var(--color-primary)]" (click)="onSortChange('phone')">
+              <div class="flex items-center gap-1">
+                <span>Phone</span>
+                @if (sortField() === 'phone') {
+                  <span>{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+                }
+              </div>
+            </th>
+            <th class="py-3.5 px-4 cursor-pointer hover:text-[var(--color-primary)]" (click)="onSortChange('createdAt')">
+              <div class="flex items-center gap-1">
+                <span>Registered At</span>
+                @if (sortField() === 'createdAt') {
+                  <span>{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+                }
+              </div>
+            </th>
+            <th class="py-3.5 px-4 sm:px-6 text-right">Account ID</th>
+          </tr>
+        </thead>
+
+        <tbody class="divide-y divide-[var(--color-border)] text-[var(--color-text-primary)]">
+          @if (isLoading()) {
+            @for (i of [1,2,3,4,5]; track i) {
+              <tr>
+                <td class="py-4 px-4 sm:px-6"><app-skeleton-loader height="24px" width="180px"/></td>
+                <td class="py-4 px-4"><app-skeleton-loader height="20px" width="80px"/></td>
+                <td class="py-4 px-4"><app-skeleton-loader height="20px" width="120px"/></td>
+                <td class="py-4 px-4"><app-skeleton-loader height="20px" width="140px"/></td>
+                <td class="py-4 px-4 sm:px-6 text-right"><app-skeleton-loader height="20px" width="100px"/></td>
+              </tr>
+            }
+          } @else if (filteredUsers().length === 0) {
+            <tr>
+              <td colspan="5" class="py-12 text-center text-sm text-[var(--color-text-muted)]">
+                No user registrations found.
+              </td>
+            </tr>
+          } @else {
+            @for (user of filteredUsers(); track user.id) {
+              <tr class="hover:bg-[var(--color-canvas)]/50 transition-colors">
+                <!-- User Column with Avatar and Email -->
+                <td class="py-3.5 px-4 sm:px-6">
+                  <div class="flex items-center gap-3">
+                    <div class="size-9 rounded-full bg-gradient-to-tr from-indigo-600 to-violet-500 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs">
+                      {{ getUserInitials(user.email, user.name) }}
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                      <span class="font-bold text-sm text-[var(--color-text-primary)] truncate">
+                        {{ user.name || user.email }}
+                      </span>
+                      @if (user.name && user.email !== user.name) {
+                        <span class="text-xs text-[var(--color-text-muted)] truncate">{{ user.email }}</span>
+                      }
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Role Assignment Chips -->
+                <td class="py-3.5 px-4">
+                  <div class="flex flex-wrap gap-1">
+                    @for (role of (user.roles || []); track role) {
+                      <span
+                        class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wide border"
+                        [class.bg-purple-500/10]="role.includes('ADMIN')"
+                        [class.text-purple-600]="role.includes('ADMIN')"
+                        [class.dark:text-purple-400]="role.includes('ADMIN')"
+                        [class.border-purple-500/20]="role.includes('ADMIN')"
+                        [class.bg-indigo-500/10]="role.includes('STAFF')"
+                        [class.text-indigo-600]="role.includes('STAFF')"
+                        [class.dark:text-indigo-400]="role.includes('STAFF')"
+                        [class.border-indigo-500/20]="role.includes('STAFF')"
+                        [class.bg-slate-500/10]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                        [class.text-slate-600]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                        [class.dark:text-slate-400]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                        [class.border-slate-500/20]="!role.includes('ADMIN') && !role.includes('STAFF')"
+                      >
+                        {{ role.replace('ROLE_', '') }}
+                      </span>
+                    }
+                  </div>
+                </td>
+
+                <!-- Phone -->
+                <td class="py-3.5 px-4 text-xs font-mono text-[var(--color-text-secondary)]">
+                  {{ user.phone || '—' }}
+                </td>
+
+                <!-- Registered Date -->
+                <td class="py-3.5 px-4 text-xs text-[var(--color-text-secondary)]">
+                  @if (user.createdAt) {
+                    <span>{{ user.createdAt | sfDate }}</span>
+                  } @else {
+                    <span>—</span>
+                  }
+                </td>
+
+                <!-- Account ID -->
+                <td class="py-3.5 px-4 sm:px-6 text-right font-mono text-[11px] text-[var(--color-text-muted)] truncate max-w-32" [title]="user.id">
+                  {{ user.id | slice:0:8 }}...
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-canvas)]/40 text-xs text-[var(--color-text-muted)]">
+      <div>
+        Showing page <strong>{{ currentPage() + 1 }}</strong> of <strong>{{ totalPages() }}</strong> ({{ totalElements() }} users)
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          (click)="onPageChange(currentPage() - 1)"
+          [disabled]="currentPage() === 0 || isLoading()"
+          class="btn-spring px-3 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[var(--color-text-primary)] transition-all"
+        >
+          Previous
+        </button>
+
+        <button
+          type="button"
+          (click)="onPageChange(currentPage() + 1)"
+          [disabled]="currentPage() >= totalPages() - 1 || isLoading()"
+          class="btn-spring px-3 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-[var(--color-text-primary)] transition-all"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

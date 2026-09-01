@@ -66,6 +66,20 @@ class TicketControllerTest {
     }
 
     @Test
+    void getMyTickets_withAdminRole_returns200() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(ticketService.getMyTickets(any(UUID.class), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(PagedResult.of(List.of(org.mockito.Mockito.mock(TicketResponse.class)), 0, 10, 1));
+
+        mockMvc.perform(get("/api/tickets/my-tickets")
+                        .with(jwt().jwt(j -> j.subject(userId.toString()))
+                                .authorities(new SimpleGrantedAuthority(SecurityRoles.ROLE_ADMIN))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void getMyTickets_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/tickets/my-tickets"))
                 .andExpect(status().isUnauthorized());
@@ -89,6 +103,29 @@ class TicketControllerTest {
     }
 
     @Test
+    void getGuestTicketBundle_publicAccess_returns200() throws Exception {
+        when(ticketService.getGuestTicketBundleByCode("SF-TKT-1234"))
+                .thenReturn(List.of(org.mockito.Mockito.mock(TicketDetailResponse.class)));
+
+        mockMvc.perform(get("/api/tickets/guest/SF-TKT-1234/bundle"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void downloadGuestPdf_publicAccess_returns200() throws Exception {
+        when(ticketService.generateGuestTicketPdf("SF-TKT-1234"))
+                .thenReturn(new byte[]{1, 2, 3});
+
+        mockMvc.perform(get("/api/tickets/guest/SF-TKT-1234/pdf"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(content().bytes(new byte[]{1, 2, 3}))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        org.hamcrest.Matchers.containsString("ticket-SF-TKT-1234.pdf")));
+    }
+
+    @Test
     void downloadPdf_authenticatedCustomer_returns200() throws Exception {
         UUID ticketId = UUID.randomUUID();
         when(ticketService.generateTicketPdf(any(UUID.class), nullable(UUID.class), anyBoolean()))
@@ -105,26 +142,9 @@ class TicketControllerTest {
     }
 
     @Test
-    void downloadPdf_unauthenticatedGuest_returns200() throws Exception {
+    void downloadPdf_unauthenticated_returns401() throws Exception {
         UUID ticketId = UUID.randomUUID();
-        when(ticketService.generateTicketPdf(eq(ticketId), nullable(UUID.class), anyBoolean()))
-                .thenReturn(new byte[]{1, 2, 3});
-
         mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
-                .andExpect(content().bytes(new byte[]{1, 2, 3}))
-                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
-                        org.hamcrest.Matchers.containsString("ticket-" + ticketId + ".pdf")));
-    }
-
-    @Test
-    void downloadPdf_unauthenticatedForbiddenTicket_returns403() throws Exception {
-        UUID ticketId = UUID.randomUUID();
-        when(ticketService.generateTicketPdf(eq(ticketId), nullable(UUID.class), anyBoolean()))
-                .thenThrow(new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403));
-
-        mockMvc.perform(get("/api/tickets/{ticketId}/pdf", ticketId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 }

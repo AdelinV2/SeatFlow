@@ -1,9 +1,19 @@
 package com.seatflow.payment.messaging.producer;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.seatflow.common.events.EventHeaders;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.model.entity.OutboxEvent;
 import com.seatflow.payment.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,8 +24,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -30,6 +43,8 @@ public class OutboxEventPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final MeterRegistry meterRegistry;
+    private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Value("${outbox.publisher.topic:" + EventTopics.PAYMENT_EVENTS + "}")
     private String topic = EventTopics.PAYMENT_EVENTS;
@@ -52,27 +67,37 @@ public class OutboxEventPublisher {
 
         for (OutboxEvent event : pendingEvents) {
             try {
+                String rawPayload = event.getPayload() != null ? event.getPayload().toString() : null;
+                String payloadToSend = enrichPayloadWithTraceHeaders(rawPayload);
                 CompletableFuture<SendResult<String, String>> sendFuture = kafkaTemplate.send(
                         topic,
                         event.getAggregateId().toString(),
-                        event.getPayload().toString()
+                        payloadToSend
                 );
                 sendFuture.get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-                int updated = outboxEventRepository.markPublished(event.getId(), Instant.now());
+                Instant publishedAt = Instant.now();
+                int updated = outboxEventRepository.markPublished(event.getId(), publishedAt);
                 if (updated > 0) {
-                    log.info("Payment outbox event published successfully. outboxEventId={}, aggregateId={}, eventType={}, topic={}",
+                    log.info("Payment outbox event published successfully. outboxId={}, aggregateId={}, eventType={}, topic={}",
                             event.getId(), event.getAggregateId(), event.getEventType(), topic);
+                    safeRecordOutboxLatency(event, publishedAt, "SUCCESS");
+                } else {
+                    log.warn("Payment outbox acknowledgement was not persisted; success metric suppressed. outboxId={}",
+                            event.getId());
                 }
             } catch (Exception ex) {
                 int updated = outboxEventRepository.incrementRetryCount(event.getId(), MAX_RETRY_COUNT);
                 if (updated == 0) {
-                    log.error("Payment outbox event exceeded max retry limit ({}) or was already published. outboxEventId={}, eventType={}, aggregateId={}",
-                            MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(), ex);
-                    meterRegistry.counter("seatflow.outbox.dead.letter.total", "eventType", event.getEventType()).increment();
+                    log.error("Payment outbox delivery failed; exceeded max retry limit ({}). outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            MAX_RETRY_COUNT, event.getId(), event.getEventType(), event.getAggregateId(),
+                            MAX_RETRY_COUNT, ex);
+                    safeIncrementDeadLetter(event.getEventType());
+                    safeRecordOutboxLatency(event, Instant.now(), "FAILED");
                 } else {
-                    log.warn("Failed to publish payment outbox event, retry incremented. outboxEventId={}, eventType={}, aggregateId={}",
-                            event.getId(), event.getEventType(), event.getAggregateId(), ex);
+                    log.error("Payment outbox delivery failed; retry incremented. outboxId={}, eventType={}, aggregateId={}, retryCount={}",
+                            event.getId(), event.getEventType(), event.getAggregateId(), event.getRetryCount() + 1, ex);
+                    safeIncrementRetry(event.getEventType());
                 }
             }
         }
@@ -81,5 +106,73 @@ public class OutboxEventPublisher {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<OutboxEvent> claimPendingEvents() {
         return outboxEventRepository.findUnpublishedForUpdate(MAX_RETRY_COUNT, batchSize);
+    }
+
+    private String enrichPayloadWithTraceHeaders(String originalPayload) {
+        if (originalPayload == null || originalPayload.isBlank()) {
+            return originalPayload;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(originalPayload);
+            if (!root.isObject()) {
+                return originalPayload;
+            }
+            ObjectNode objectNode = (ObjectNode) root;
+            JsonNode headersNode = objectNode.get("headers");
+            boolean hasTraceParent = headersNode != null && headersNode.has(EventHeaders.TRACEPARENT);
+            if (hasTraceParent) {
+                return originalPayload;
+            }
+            Map<String, String> tempHeaders = new HashMap<>();
+            if (w3cTraceContextPropagator != null) {
+                try {
+                    w3cTraceContextPropagator.inject(tempHeaders);
+                } catch (Exception ignored) {
+                }
+            }
+            if (tempHeaders.isEmpty()) {
+                return originalPayload;
+            }
+            ObjectNode headersObject;
+            if (headersNode != null && headersNode.isObject()) {
+                headersObject = (ObjectNode) headersNode;
+            } else {
+                headersObject = objectMapper.createObjectNode();
+                objectNode.set("headers", headersObject);
+            }
+            tempHeaders.forEach(headersObject::put);
+            return objectMapper.writeValueAsString(objectNode);
+        } catch (Exception ex) {
+            log.debug("Failed to enrich payment payload with trace headers; sending original. reason={}", ex.getClass().getSimpleName());
+            return originalPayload;
+        }
+    }
+
+    private void safeRecordOutboxLatency(OutboxEvent event, Instant publishedAt, String outcome) {
+        try {
+            Instant createdAt = event.getCreatedAt();
+            if (createdAt == null) return;
+            Duration latency = Duration.between(createdAt, publishedAt);
+            if (latency.isNegative()) latency = Duration.ZERO;
+            Tags tags = MetricTagPolicy.outboxPublish("payment-service", event.getEventType(), outcome);
+            Timer.builder(SeatFlowMetricNames.OUTBOX_PUBLISH_LATENCY).tags(tags).register(meterRegistry).record(latency);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementRetry(String eventType) {
+        try {
+            Tags tags = MetricTagPolicy.outboxRetry("payment-service", eventType);
+            Counter.builder(SeatFlowMetricNames.OUTBOX_RETRY_COUNT).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementDeadLetter(String eventType) {
+        try {
+            Tags tags = MetricTagPolicy.outboxDeadLetter("payment-service", eventType);
+            Counter.builder(SeatFlowMetricNames.OUTBOX_DEAD_LETTER).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
     }
 }

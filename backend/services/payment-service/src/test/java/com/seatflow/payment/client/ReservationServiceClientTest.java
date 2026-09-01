@@ -4,12 +4,19 @@ import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.payment.client.dto.ReservationClientResponse;
 import com.seatflow.payment.client.exception.ReservationClientUnavailableException;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
@@ -24,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ReservationServiceClientTest {
@@ -32,6 +40,7 @@ class ReservationServiceClientTest {
     private final String baseUrl = "http://reservation-service";
 
     private RestClient restClient;
+    private RestClient.Builder builder;
     private RestClient.RequestHeadersUriSpec requestSpec;
     private RestClient.RequestHeadersSpec headersSpec;
     private RestClient.ResponseSpec responseSpec;
@@ -39,10 +48,18 @@ class ReservationServiceClientTest {
 
     private final ArgumentCaptor<RestClient.ResponseSpec.ErrorHandler> errorHandlerCaptor =
             ArgumentCaptor.forClass(RestClient.ResponseSpec.ErrorHandler.class);
+    private final ArgumentCaptor<String> baseUrlCaptor = ArgumentCaptor.forClass(String.class);
+    private final ArgumentCaptor<ClientHttpRequestInterceptor> requestInterceptorCaptor =
+            ArgumentCaptor.forClass(ClientHttpRequestInterceptor.class);
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = mock(RestClient.Builder.class);
+        builder = mock(RestClient.Builder.class);
         restClient = mock(RestClient.class);
         requestSpec = mock(RestClient.RequestHeadersUriSpec.class);
         headersSpec = mock(RestClient.RequestHeadersSpec.class);
@@ -80,6 +97,47 @@ class ReservationServiceClientTest {
     }
 
     @Test
+    void localhostConfigurationStillUsesTheEurekaReservationServiceId() {
+        client = new ReservationServiceClientImpl(builder, CircuitBreakerRegistry.ofDefaults(), "http://localhost:8084");
+        client.getReservation(reservationId);
+
+        verifyBuilderBaseUrl();
+        assertThat(baseUrlCaptor.getValue()).isEqualTo("http://reservation-service");
+    }
+
+    @Test
+    void forwardsAuthenticatedCallerJwtToReservationService() throws Exception {
+        Jwt jwt = Jwt.withTokenValue("caller-jwt-token")
+                .header("alg", "none")
+                .subject("caller-user")
+                .build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
+
+        client.getReservation(reservationId);
+
+        verifyBuilderBaseUrl();
+        verify(builder).requestInterceptor(requestInterceptorCaptor.capture());
+
+        HttpHeaders headers = new HttpHeaders();
+        ClientHttpRequest request = mock(ClientHttpRequest.class);
+        when(request.getHeaders()).thenReturn(headers);
+        ClientHttpRequestExecution execution = mock(ClientHttpRequestExecution.class);
+
+        requestInterceptorCaptor.getValue().intercept(request, new byte[0], execution);
+
+        assertThat(headers.getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer caller-jwt-token");
+    }
+
+    @Test
+    void forwardsGuestEmailProofToReservationService() {
+        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
+
+        client.getReservation(reservationId, " guest@example.com ");
+
+        verify(headersSpec).header("X-Customer-Email", "guest@example.com");
+    }
+
+    @Test
     void getReservationMapsNotFoundToResourceNotFoundException() {
         assertErrorHandler(0, ResourceNotFoundException.class);
     }
@@ -114,5 +172,9 @@ class ReservationServiceClientTest {
                 throw new AssertionError("Unexpected IOException from error handler", e);
             }
         }).isInstanceOf(expectedType);
+    }
+
+    private void verifyBuilderBaseUrl() {
+        org.mockito.Mockito.verify(builder).baseUrl(baseUrlCaptor.capture());
     }
 }

@@ -7,10 +7,14 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.PricingTierClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.messaging.event.ReservationCancelledEvent;
 import com.seatflow.reservation.messaging.event.ReservationConfirmedEvent;
@@ -27,21 +31,28 @@ import com.seatflow.reservation.repository.SeatHoldRepository;
 import com.seatflow.reservation.repository.projection.ActiveSeatHoldProjection;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.EventSeatStatusResponse;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import jakarta.annotation.PostConstruct;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -71,15 +82,28 @@ public class ReservationServiceImpl implements ReservationService {
     private final EventClient eventClient;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
-    @Lazy
+    private TransactionTemplate transactionTemplate;
+
     @Autowired
-    private ReservationServiceImpl self;
+    void configureTransactionTemplate(PlatformTransactionManager transactionManager) {
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
+
+    @PostConstruct
+    void registerActiveHoldsGauge() {
+        Gauge.builder(SeatFlowMetricNames.RESERVATIONS_ACTIVE_HOLDS,
+                        seatHoldRepository,
+                        repository -> repository.countByStatus(SeatHoldStatus.HELD))
+                .description("Current reservation seat holds in HELD state")
+                .register(meterRegistry);
+    }
 
     @Override
     public ReservationResponse createReservation(CreateReservationRequest request, UUID authenticatedUserId) {
         Timer.Sample sample = Timer.start(meterRegistry);
-        Instant startTime = Instant.now();
+        String holdOutcome = "UNKNOWN";
         try {
             validateSeatLists(request);
             String customerEmail = resolveCustomerEmail(request);
@@ -91,20 +115,22 @@ public class ReservationServiceImpl implements ReservationService {
                     request.eventId(), new HashSet<>(request.seatIds()));
             validatePerSeatPricing(request, eventPricing.seatPrices());
 
-            return self.createReservationTransactional(request, authenticatedUserId, customerEmail, eventPricing);
+            ReservationResponse response = executeCreateReservationTransaction(request, authenticatedUserId, customerEmail, eventPricing);
+            holdOutcome = "SUCCESS";
+            return response;
         } catch (ConflictException ex) {
-            meterRegistry.counter("seatflow.reservations.conflicts.total",
-                    "eventId", request.eventId().toString(),
-                    "reason", ex.getErrorCode().name()).increment();
+            holdOutcome = mapConflictReason(ex.getErrorCode());
+            safeIncrementConflict(holdOutcome);
             throw ex;
         } catch (ValidationException ex) {
-            meterRegistry.counter("seatflow.reservations.validation.total",
-                    "eventId", request.eventId().toString(),
-                    "reason", ex.getErrorCode().name()).increment();
+            holdOutcome = mapValidationReason(ex.getErrorCode());
+            // LIMIT_EXCEEDED and other validation conflicts are recorded as conflicts for dashboard visibility
+            if ("LIMIT_EXCEEDED".equals(holdOutcome) || "INVALID_STATE".equals(holdOutcome)) {
+                safeIncrementConflict(holdOutcome);
+            }
             throw ex;
         } finally {
-            sample.stop(meterRegistry.timer("seatflow.reservations.hold.duration",
-                    "eventId", request.eventId().toString()));
+            safeRecordHoldDuration(sample, holdOutcome);
         }
     }
 
@@ -120,18 +146,20 @@ public class ReservationServiceImpl implements ReservationService {
                     .map(SeatHold::getSeatId)
                     .collect(Collectors.toSet());
             if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                log.info("Idempotent replay for idempotencyKey={}, reservationId={}",
-                        request.idempotencyKey(), prior.getId());
+                log.info("Idempotent reservation replay. reservationId={}", prior.getId());
                 return reservationMapper.toResponse(prior);
             }
             throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
         }
 
+        List<UUID> sortedSeatIds = new ArrayList<>(request.seatIds());
+        sortedSeatIds.sort(UUID::compareTo);
         List<SeatHold> conflicting = seatHoldRepository.findAndLockSeatsForUpdate(
-                request.eventId(), request.seatIds());
+                request.eventId(), sortedSeatIds);
         if (!conflicting.isEmpty()) {
             List<UUID> conflictingSeatIds = conflicting.stream().map(SeatHold::getSeatId).toList();
-            log.warn("Seat hold conflict eventId={}, conflictingSeats={}", request.eventId(), conflictingSeatIds);
+            log.warn("Seat hold collision detected. eventId={}, seatsCount={}",
+                    request.eventId(), conflictingSeatIds.size());
             throw new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -145,11 +173,20 @@ public class ReservationServiceImpl implements ReservationService {
 
         Map<UUID, BigDecimal> priceMap = eventPricing.seatPrices();
         for (UUID seatId : request.seatIds()) {
+            SeatPricingDetails details = eventPricing.seatDetails().get(seatId);
+            PricingTierClientDto defaultTier = details == null ? null : details.pricingTiers().stream()
+                    .filter(tier -> tier.price() != null && tier.price().compareTo(priceMap.get(seatId)) == 0)
+                    .findFirst()
+                    .orElse(null);
             SeatHold hold = SeatHold.builder()
                     .eventId(request.eventId())
                     .seatId(seatId)
                     .status(SeatHoldStatus.HELD)
                     .price(priceMap.getOrDefault(seatId, BigDecimal.ZERO))
+                    .rowLabel(details == null ? null : details.rowLabel())
+                    .seatNumber(details == null ? null : details.seatNumber())
+                    .pricingTierId(defaultTier == null ? null : defaultTier.id())
+                    .ticketType(defaultTier == null ? null : defaultTier.categoryName())
                     .build();
             reservation.addSeatHold(hold);
         }
@@ -164,13 +201,14 @@ public class ReservationServiceImpl implements ReservationService {
                         .map(SeatHold::getSeatId)
                         .collect(Collectors.toSet());
                 if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                    log.info("Idempotent replay after constraint violation. idempotencyKey={}, reservationId={}",
-                            request.idempotencyKey(), prior.get().getId());
+                    log.info("Idempotent reservation replay after constraint violation. reservationId={}",
+                            prior.get().getId());
                     return reservationMapper.toResponse(prior.get());
                 }
                 throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
             }
-            log.warn("Concurrent seat hold detected eventId={}, seats={}", request.eventId(), request.seatIds(), ex);
+            log.warn("Concurrent seat hold detected. eventId={}, seatsCount={}",
+                    request.eventId(), request.seatIds().size(), ex);
             throw new ConflictException("One or more seats were taken concurrently", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -185,12 +223,10 @@ public class ReservationServiceImpl implements ReservationService {
                 saved.getTotalAmount(),
                 now));
 
-        meterRegistry.counter("seatflow.reservations.created.total",
-                "eventId", request.eventId().toString(),
-                "status", "SUCCESS").increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementCreated);
 
-        log.info("Reservation hold created reservationId={}, eventId={}, userId={}, seatsCount={}, seatIds={}, totalAmount={}, expiresAt={}",
-                saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(), request.seatIds(),
+        log.info("Reservation hold acquired successfully. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
+                saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
                 saved.getTotalAmount(), saved.getExpiresAt());
 
         return reservationMapper.toResponse(saved);
@@ -207,6 +243,142 @@ public class ReservationServiceImpl implements ReservationService {
         }
 
         return reservationMapper.toResponse(reservation);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReservationResponse getReservationByIdInternal(UUID reservationId) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+        return reservationMapper.toResponse(reservation);
+    }
+
+    private ReservationResponse executeCreateReservationTransaction(CreateReservationRequest request,
+                                                                     UUID authenticatedUserId,
+                                                                     String customerEmail,
+                                                                     EventPricingDetails eventPricing) {
+        // The fallback keeps direct unit construction usable; Spring-managed instances always
+        // receive the transaction template through configureTransactionTemplate().
+        if (transactionTemplate == null) {
+            return createReservationTransactional(request, authenticatedUserId, customerEmail, eventPricing);
+        }
+        return transactionTemplate.execute(status ->
+                createReservationTransactional(request, authenticatedUserId, customerEmail, eventPricing));
+    }
+
+    @Override
+    public ReservationResponse updateReservationPricing(UUID reservationId,
+                                                        SeatPricingSelectionRequest request,
+                                                        UUID authenticatedUserId,
+                                                        String customerEmailProof) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+
+        if (!isOwnerOrAdmin(reservation, authenticatedUserId, customerEmailProof)) {
+            throw new ResourceNotFoundException("Reservation", reservationId);
+        }
+
+        ensureReservationPricingIsMutable(reservation);
+        Set<UUID> heldSeatIds = validatePricingSelectionShape(reservation, request);
+
+        // Resolve pricing outside the database transaction. The transactional phase below
+        // re-reads and re-validates the reservation before applying the returned prices.
+        EventPricingDetails eventPricing = eventClient.getEventSeatPricing(reservation.getEventId(), heldSeatIds);
+        return executeUpdateReservationPricingTransaction(
+                reservationId, request, authenticatedUserId, customerEmailProof, eventPricing);
+    }
+
+    @Transactional
+    ReservationResponse updateReservationPricingTransactional(UUID reservationId,
+                                                               SeatPricingSelectionRequest request,
+                                                               UUID authenticatedUserId,
+                                                               String customerEmailProof,
+                                                               EventPricingDetails eventPricing) {
+        Reservation reservation = reservationRepository.findWithSeatHoldsById(reservationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reservation", reservationId));
+
+        if (!isOwnerOrAdmin(reservation, authenticatedUserId, customerEmailProof)) {
+            throw new ResourceNotFoundException("Reservation", reservationId);
+        }
+        ensureReservationPricingIsMutable(reservation);
+
+        Map<UUID, SeatPricingSelectionRequest.SeatPricingSelection> selections =
+                pricingSelectionsBySeat(reservation, request);
+        BigDecimal total = BigDecimal.ZERO;
+        for (SeatHold hold : reservation.getSeatHolds()) {
+            if (hold.getStatus() != SeatHoldStatus.HELD) {
+                continue;
+            }
+            SeatPricingSelectionRequest.SeatPricingSelection selection = selections.get(hold.getSeatId());
+            SeatPricingDetails seatDetails = eventPricing.seatDetails().get(hold.getSeatId());
+            if (seatDetails == null) {
+                throw new ValidationException("Seat pricing is unavailable for " + hold.getSeatId(), ErrorCode.INVALID_REQUEST);
+            }
+            PricingTierClientDto tier = seatDetails.pricingTiers().stream()
+                    .filter(candidate -> candidate.id().equals(selection.pricingTierId()))
+                    .findFirst()
+                    .orElseThrow(() -> new ValidationException(
+                            "Selected ticket type is not available for seat " + hold.getSeatId(),
+                            ErrorCode.INVALID_REQUEST));
+            hold.setPrice(tier.price());
+            hold.setPricingTierId(tier.id());
+            hold.setTicketType(tier.categoryName());
+            hold.setRowLabel(seatDetails.rowLabel());
+            hold.setSeatNumber(seatDetails.seatNumber());
+            total = total.add(tier.price());
+        }
+        reservation.setTotalAmount(total);
+        Reservation saved = reservationRepository.saveAndFlush(reservation);
+        log.info("Reservation ticket types updated. reservationId={}, seatsCount={}, totalAmount={}",
+                reservationId, selections.size(), total);
+        return reservationMapper.toResponse(saved);
+    }
+
+    private ReservationResponse executeUpdateReservationPricingTransaction(UUID reservationId,
+                                                                            SeatPricingSelectionRequest request,
+                                                                            UUID authenticatedUserId,
+                                                                            String customerEmailProof,
+                                                                            EventPricingDetails eventPricing) {
+        if (transactionTemplate == null) {
+            return updateReservationPricingTransactional(
+                    reservationId, request, authenticatedUserId, customerEmailProof, eventPricing);
+        }
+        return transactionTemplate.execute(status -> updateReservationPricingTransactional(
+                reservationId, request, authenticatedUserId, customerEmailProof, eventPricing));
+    }
+
+    private void ensureReservationPricingIsMutable(Reservation reservation) {
+        if (reservation.getStatus() != ReservationStatus.PENDING) {
+            throw new ConflictException("Ticket types can only be changed while the reservation is pending", ErrorCode.CONFLICT);
+        }
+        if (reservation.getExpiresAt() == null || !reservation.getExpiresAt().isAfter(Instant.now())) {
+            throw new ValidationException("Reservation hold has expired", ErrorCode.RESERVATION_EXPIRED);
+        }
+    }
+
+    private Set<UUID> validatePricingSelectionShape(Reservation reservation,
+                                                    SeatPricingSelectionRequest request) {
+        return pricingSelectionsBySeat(reservation, request).keySet();
+    }
+
+    private Map<UUID, SeatPricingSelectionRequest.SeatPricingSelection> pricingSelectionsBySeat(
+            Reservation reservation, SeatPricingSelectionRequest request) {
+        if (request == null || request.seats() == null) {
+            throw new ValidationException("A pricing tier must be selected for every held seat", ErrorCode.INVALID_REQUEST);
+        }
+        Map<UUID, SeatPricingSelectionRequest.SeatPricingSelection> selections = request.seats().stream()
+                .collect(Collectors.toMap(
+                        SeatPricingSelectionRequest.SeatPricingSelection::seatId,
+                        selection -> selection,
+                        (first, duplicate) -> first));
+        Set<UUID> heldSeatIds = reservation.getSeatHolds().stream()
+                .filter(hold -> hold.getStatus() == SeatHoldStatus.HELD)
+                .map(SeatHold::getSeatId)
+                .collect(Collectors.toSet());
+        if (selections.size() != request.seats().size() || !selections.keySet().equals(heldSeatIds)) {
+            throw new ValidationException("A pricing tier must be selected for every held seat", ErrorCode.INVALID_REQUEST);
+        }
+        return selections;
     }
 
     @Override
@@ -251,8 +423,7 @@ public class ReservationServiceImpl implements ReservationService {
                 new ArrayList<>(seatIds),
                 now));
 
-        meterRegistry.counter("seatflow.reservations.cancelled.total",
-                "eventId", reservation.getEventId().toString()).increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementCancelled);
 
         log.info("Reservation cancelled reservationId={}, eventId={}", reservationId, reservation.getEventId());
     }
@@ -294,11 +465,9 @@ public class ReservationServiceImpl implements ReservationService {
                 paymentId,
                 Instant.now()));
 
-        meterRegistry.counter("seatflow.reservations.confirmed.total",
-                "eventId", reservation.getEventId().toString(),
-                "status", "SUCCESS").increment();
+        AfterCommitMetrics.afterCommit(this::safeIncrementConfirmed);
 
-        log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatCount={}, amount={}",
+        log.info("Reservation confirmed via PaymentCompleted. reservationId={}, paymentId={}, seatsCount={}, totalAmount={}",
                 reservationId, paymentId, reservation.getSeatHolds().size(), reservation.getTotalAmount());
     }
 
@@ -311,7 +480,8 @@ public class ReservationServiceImpl implements ReservationService {
 
         int updatedCount = reservationRepository.updateUserIdForGuestEmail(userId, normalizedEmail, Instant.now());
 
-        meterRegistry.counter("seatflow.reservations.guest.claimed.total").increment(updatedCount);
+        int committedCount = updatedCount;
+        AfterCommitMetrics.afterCommit(() -> safeIncrementGuestClaimed(committedCount));
 
         log.info("Guest reservations linked to registered user. userId={}, customerEmail={}, linkedCount={}",
                 userId, normalizedEmail, updatedCount);
@@ -353,12 +523,13 @@ public class ReservationServiceImpl implements ReservationService {
                     "HOLD_TIMEOUT_EXCEEDED",
                     now));
 
-            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatCount={}",
+            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatsCount={}",
                     reservation.getId(), reservation.getEventId(), releasedSeatIds.size());
             processed++;
         }
 
-        meterRegistry.counter("seatflow.reservations.expired.total").increment(processed);
+        int committedCount = processed;
+        AfterCommitMetrics.afterCommit(() -> safeIncrementExpired(committedCount));
         return processed;
     }
 
@@ -408,11 +579,10 @@ public class ReservationServiceImpl implements ReservationService {
         if (authenticatedUserId != null && authenticatedUserId.equals(reservation.getUserId())) {
             return true;
         }
-        if (reservation.getUserId() == null) {
-            String proof = normalizeEmail(customerEmailProof);
-            return proof != null && proof.equals(normalizeEmail(reservation.getCustomerEmail()));
-        }
-        return false;
+        String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
+        String proof = normalizeEmail(customerEmailProof);
+        return (proof != null && proof.equalsIgnoreCase(reservation.getCustomerEmail()))
+                || (callerEmail != null && callerEmail.equalsIgnoreCase(reservation.getCustomerEmail()));
     }
 
     private String normalizeEmail(String email) {
@@ -425,8 +595,17 @@ public class ReservationServiceImpl implements ReservationService {
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
         String correlationId = CorrelationContext.getCorrelationId()
                 .orElse(UUID.randomUUID().toString());
-        EventEnvelope<?> envelope = EventEnvelope.of(
+        EventEnvelope<?> baseEnvelope = EventEnvelope.of(
                 eventType, aggregateId.toString(), correlationId, (DomainEvent) payload);
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+            // best-effort tracing: never break business transaction
+        }
+        EventEnvelope<?> envelope = baseEnvelope.withHeaders(headers);
         String json;
         try {
             json = objectMapper.writeValueAsString(envelope);
@@ -440,5 +619,84 @@ public class ReservationServiceImpl implements ReservationService {
                 .retryCount(0)
                 .build();
         outboxEventRepository.save(outboxEvent);
+    }
+
+    // --- Bounded metrics helpers — never throw, never roll back business transaction ---
+
+    private void safeIncrementCreated() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CREATED)
+                    .tags(MetricTagPolicy.reservationCreated("SUCCESS"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementConflict(String reason) {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CONFLICTS)
+                    .tags(MetricTagPolicy.reservationConflict(reason))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementExpired(int count) {
+        if (count <= 0) return;
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_EXPIRED)
+                    .tags(MetricTagPolicy.reservationExpired("EXPIRED"))
+                    .register(meterRegistry).increment(count);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementCancelled() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CANCELLED)
+                    .tags(Tags.of("outcome", "CANCELLED"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementConfirmed() {
+        try {
+            Counter.builder(SeatFlowMetricNames.RESERVATIONS_CONFIRMED)
+                    .tags(Tags.of("status", "SUCCESS"))
+                    .register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementGuestClaimed(int count) {
+        if (count <= 0) return;
+        try {
+            meterRegistry.counter("seatflow.reservations.guest.claimed.total").increment(count);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeRecordHoldDuration(Timer.Sample sample, String outcome) {
+        try {
+            Tags tags = MetricTagPolicy.holdDuration(outcome);
+            sample.stop(Timer.builder(SeatFlowMetricNames.RESERVATIONS_HOLD_DURATION)
+                    .tags(tags)
+                    .register(meterRegistry));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String mapConflictReason(ErrorCode code) {
+        if (code == ErrorCode.SEAT_ALREADY_RESERVED) return "ALREADY_HELD";
+        if (code == ErrorCode.CONFLICT) return "INVALID_STATE";
+        return "INVALID_STATE";
+    }
+
+    private String mapValidationReason(ErrorCode code) {
+        if (code == ErrorCode.MAX_SEATS_EXCEEDED) return "LIMIT_EXCEEDED";
+        if (code == ErrorCode.INVALID_REQUEST) return "INVALID_STATE";
+        if (code == ErrorCode.RESERVATION_EXPIRED) return "INVALID_STATE";
+        return "INVALID_STATE";
     }
 }

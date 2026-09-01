@@ -18,6 +18,11 @@ public record IssueTicketsCommand(
         UUID seatId,
         BigDecimal price,     // Gross ticket price
         BigDecimal taxAmount, // Tax / VAT portion (ADR-004)
-        BigDecimal netAmount  // Net base price (ADR-004)
-    ) {}
+        BigDecimal netAmount, // Net base price (ADR-004)
+        String ticketType
+    ) {
+        public SeatTicketItem(UUID seatId, BigDecimal price, BigDecimal taxAmount, BigDecimal netAmount) {
+            this(seatId, price, taxAmount, netAmount, null);
+        }
+    }
 }

@@ -32,9 +32,11 @@
         <lombok.version>1.18.38</lombok.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
         <springdoc-openapi.version>3.1.0</springdoc-openapi.version>
-        <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <logstash-logback-encoder.version>8.1</logstash-logback-encoder.version>
         <micrometer-registry-prometheus.version>1.17.0</micrometer-registry-prometheus.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
+
+        <opentelemetry-agent.version>2.12.0</opentelemetry-agent.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>
@@ -105,10 +107,22 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <spring.profiles.active>test</spring.profiles.active>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>

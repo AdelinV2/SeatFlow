@@ -14,6 +14,7 @@ import com.seatflow.notification.repository.NotificationLogRepository;
 import com.seatflow.notification.service.EmailService;
 import com.seatflow.notification.service.EmailTemplateRenderer;
 import com.seatflow.notification.service.NotificationService;
+import com.seatflow.notification.service.QrCodeGeneratorService;
 import com.seatflow.notification.web.dto.common.EmailAttachmentDto;
 import com.seatflow.notification.web.dto.response.NotificationLogResponse;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -42,6 +43,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final EmailService emailService;
     private final EmailTemplateRenderer emailTemplateRenderer;
     private final TicketServiceClient ticketServiceClient;
+    private final QrCodeGeneratorService qrCodeGeneratorService;
     private final MeterRegistry meterRegistry;
 
     @Override
@@ -49,8 +51,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "ticket-issued-" + event.ticketId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate TicketIssued notification: ticketId={}, idempotencyKey={}",
-                    event.ticketId(), idempotencyKey);
+            log.info("Skipping duplicate TicketIssued notification: ticketId={}", event.ticketId());
             return;
         }
 
@@ -73,10 +74,23 @@ public class NotificationServiceImpl implements NotificationService {
                     event.ticketId(), ex.getMessage());
         }
 
+        // Generate admission QR code Base64 Data URL for email embed
+        String qrPayload = event.qrCodeData() != null && !event.qrCodeData().isBlank()
+                ? event.qrCodeData()
+                : event.ticketCode();
+        String qrCodeBase64 = null;
+        try {
+            qrCodeBase64 = qrCodeGeneratorService.generateQrCodeBase64(qrPayload, 200, 200);
+        } catch (Exception ex) {
+            log.warn("Could not generate QR code image for ticketCode={}: {}", event.ticketCode(), ex.getMessage());
+        }
+
         Map<String, Object> variables = new HashMap<>();
         variables.put("attendeeName", event.attendeeName() != null ? event.attendeeName() : "Valued Customer");
         variables.put("ticketCode", event.ticketCode());
         variables.put("ticketId", event.ticketId() != null ? event.ticketId().toString() : "");
+        variables.put("qrCodeImage", qrCodeBase64);
+        variables.put("qrCodeData", qrPayload);
         variables.put("netAmount", event.netAmount());
         variables.put("taxAmount", event.taxAmount());
         variables.put("totalAmount", event.price());
@@ -98,8 +112,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "payment-failed-" + event.paymentId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate PaymentFailed notification: paymentId={}, idempotencyKey={}",
-                    event.paymentId(), idempotencyKey);
+            log.info("Skipping duplicate PaymentFailed notification: paymentId={}", event.paymentId());
             return;
         }
 
@@ -131,8 +144,7 @@ public class NotificationServiceImpl implements NotificationService {
         String idempotencyKey = "reservation-held-" + event.reservationId();
 
         if (notificationLogRepository.existsByIdempotencyKey(idempotencyKey)) {
-            log.info("Skipping duplicate ReservationHeld notification: reservationId={}, idempotencyKey={}",
-                    event.reservationId(), idempotencyKey);
+            log.info("Skipping duplicate ReservationHeld notification: reservationId={}", event.reservationId());
             return;
         }
 
@@ -172,8 +184,8 @@ public class NotificationServiceImpl implements NotificationService {
         try {
             htmlContent = emailTemplateRenderer.renderTemplate(templateType, variables);
         } catch (Exception ex) {
-            log.error("Failed to render email template for templateType={}, idempotencyKey={}: {}",
-                    templateType, idempotencyKey, ex.getMessage(), ex);
+            log.error("Failed to render email template for templateType={}: {}",
+                    templateType, ex.getMessage(), ex);
         }
 
         NotificationLog notificationLog = NotificationLog.builder()
@@ -202,8 +214,7 @@ public class NotificationServiceImpl implements NotificationService {
                     "status", "SUCCESS"
             ).increment();
 
-            log.info("Notification successfully delivered: recipient={}, templateType={}, idempotencyKey={}",
-                    recipientEmail, templateType, idempotencyKey);
+            log.info("Notification successfully delivered: recipient={}, templateType={}", recipientEmail, templateType);
         } catch (Exception ex) {
             notificationLog.setStatus(NotificationStatus.FAILED);
             notificationLog.setErrorMessage(ex.getMessage());
@@ -214,8 +225,8 @@ public class NotificationServiceImpl implements NotificationService {
                     "reason", ex.getClass().getSimpleName()
             ).increment();
 
-            log.error("Failed to deliver notification: recipient={}, templateType={}, idempotencyKey={}: {}",
-                    recipientEmail, templateType, idempotencyKey, ex.getMessage(), ex);
+            log.error("Failed to deliver notification: recipient={}, templateType={}: {}",
+                    recipientEmail, templateType, ex.getMessage(), ex);
         }
 
         notificationLogRepository.save(notificationLog);

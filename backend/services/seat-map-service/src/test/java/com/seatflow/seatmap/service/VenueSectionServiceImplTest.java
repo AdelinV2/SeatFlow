@@ -168,14 +168,29 @@ class VenueSectionServiceImplTest {
     }
 
     @Test
-    void shouldVerifyRowLabelGeneration() {
-        // Verify the alphabetic row label algorithm
-        assertThat(VenueSectionServiceImpl.generateRowLabel(0)).isEqualTo("A");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(1)).isEqualTo("B");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(25)).isEqualTo("Z");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(26)).isEqualTo("AA");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(27)).isEqualTo("AB");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(51)).isEqualTo("AZ");
-        assertThat(VenueSectionServiceImpl.generateRowLabel(52)).isEqualTo("BA");
+    void shouldDeleteSectionSuccessfully() {
+        UUID venueId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        Venue venue = Venue.builder().id(venueId).build();
+        VenueSection section = VenueSection.builder().id(sectionId).venue(venue).name("Balcony").build();
+
+        when(venueRepository.existsById(venueId)).thenReturn(true);
+        when(sectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+        sectionService.deleteSection(venueId, sectionId);
+
+        verify(sectionRepository).delete(section);
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenDeletingMissingSection() {
+        UUID venueId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+
+        when(venueRepository.existsById(venueId)).thenReturn(true);
+        when(sectionRepository.findById(sectionId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> sectionService.deleteSection(venueId, sectionId))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

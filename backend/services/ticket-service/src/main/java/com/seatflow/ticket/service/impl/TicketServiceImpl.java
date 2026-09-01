@@ -5,6 +5,13 @@ import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.events.EventEnvelope;
+import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
+import com.seatflow.common.security.context.UserContext;
 import com.seatflow.ticket.client.EventServiceClient;
 import com.seatflow.ticket.client.SeatMapServiceClient;
 import com.seatflow.ticket.client.dto.EventSeatMapClientResponse;
@@ -28,6 +35,9 @@ import com.seatflow.ticket.web.dto.request.ValidateTicketRequest;
 import com.seatflow.ticket.web.dto.response.TicketDetailResponse;
 import com.seatflow.ticket.web.dto.response.TicketResponse;
 import com.seatflow.ticket.web.dto.response.ValidationResultResponse;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -62,6 +72,8 @@ public class TicketServiceImpl implements TicketService {
     private final EventServiceClient eventServiceClient;
     private final SeatMapServiceClient seatMapServiceClient;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
+    private final MeterRegistry meterRegistry;
 
     @Override
     @Transactional
@@ -83,6 +95,7 @@ public class TicketServiceImpl implements TicketService {
                     .price(seat.price())
                     .taxAmount(seat.taxAmount() == null ? BigDecimal.ZERO : seat.taxAmount())
                     .netAmount(seat.netAmount() == null ? BigDecimal.ZERO : seat.netAmount())
+                    .ticketType(seat.ticketType() != null && !seat.ticketType().isBlank() ? seat.ticketType() : "Standard")
                     .ticketCode(ticketCode)
                     .qrCodeData(qrPayload)
                     .status(TicketStatus.VALID)
@@ -107,15 +120,29 @@ public class TicketServiceImpl implements TicketService {
                     Instant.now()
             );
 
+            String correlationId = CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString());
+            UUID aggregateId = savedTicket.getId() != null ? savedTicket.getId() : UUID.randomUUID();
+            String aggregateIdStr = aggregateId.toString();
+            EventEnvelope<TicketIssuedEvent> baseEnvelope = EventEnvelope.of("TicketIssued", aggregateIdStr, correlationId, event);
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<TicketIssuedEvent> envelope = baseEnvelope.withHeaders(headers);
             OutboxEvent outboxEvent = OutboxEvent.builder()
-                    .aggregateId(savedTicket.getId())
+                    .aggregateId(aggregateId)
                     .eventType("TicketIssued")
-                    .payload(serialize(event))
+                    .payload(serialize(envelope))
                     .build();
             outboxRepository.save(outboxEvent);
 
-            log.info("Issued ticket ticketId={}, eventId={}, seatId={}, paymentId={}",
-                    savedTicket.getId(), command.eventId(), seat.seatId(), command.paymentId());
+            AfterCommitMetrics.afterCommit(this::safeIncrementTicketIssued);
+
+            log.info("Ticket issued successfully. ticketId={}, eventId={}, paymentId={}",
+                    savedTicket.getId(), command.eventId(), command.paymentId());
         }
 
         return ticketMapper.toResponseList(savedTickets);
@@ -152,6 +179,15 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<TicketDetailResponse> getGuestTicketBundleByCode(String ticketCode) {
+        Ticket ticket = ticketRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found for code", ticketCode));
+        List<Ticket> bundle = ticketRepository.findByReservationId(ticket.getReservationId());
+        return bundle.stream().map(ticketMapper::toDetailResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public byte[] generateTicketPdf(UUID ticketId, UUID userId, boolean isGuestOrAdmin) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
@@ -162,11 +198,33 @@ public class TicketServiceImpl implements TicketService {
             if (!isOwner && !isAdminAccess) {
                 throw new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403);
             }
+        } else {
+            // Internal UUID access to guest ticket requires admin or authenticated caller
+            if (!isGuestOrAdmin && userId == null) {
+                throw new BusinessException("Access denied to ticket PDF", ErrorCode.FORBIDDEN, 403);
+            }
         }
 
+        return generatePdfForTicket(ticket);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] generateGuestTicketPdf(String ticketCode) {
+        Ticket ticket = ticketRepository.findByTicketCode(ticketCode)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found for code", ticketCode));
+        return generatePdfForTicket(ticket);
+    }
+
+    private byte[] generatePdfForTicket(Ticket ticket) {
         EventEnrichment enrichment = enrichEvent(ticket.getEventId(), ticket.getSeatId());
 
         byte[] qrBytes = qrCodeGeneratorService.generateQrCodePng(ticket.getQrCodeData(), 200, 200);
+
+        String attendeeName = ticket.getAttendeeName();
+        if (attendeeName == null || attendeeName.isBlank() || attendeeName.equalsIgnoreCase(ticket.getCustomerEmail())) {
+            attendeeName = UserContext.getCurrentUserName().orElse(ticket.getAttendeeName());
+        }
 
         PdfTicketData data = new PdfTicketData(
                 ticket.getId(),
@@ -180,12 +238,13 @@ public class TicketServiceImpl implements TicketService {
                 enrichment.sectionName(),
                 enrichment.rowLabel(),
                 enrichment.seatNumber(),
-                ticket.getAttendeeName(),
+                attendeeName,
                 ticket.getCustomerEmail(),
                 ticket.getPrice(),
                 ticket.getTaxAmount(),
                 ticket.getNetAmount(),
                 "USD",
+                ticket.getTicketType() != null && !ticket.getTicketType().isBlank() ? ticket.getTicketType() : "Standard",
                 qrBytes
         );
 
@@ -206,7 +265,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Ticket code not recognized: " + request.ticketCode())
                     .build());
             return new ValidationResultResponse(false, null, request.ticketCode(), ValidationResult.INVALID,
-                    null, null, null, null, null, null, scanTime, "Invalid ticket: code does not exist");
+                    null, null, null, null, null, null, null, scanTime, "Invalid ticket: code does not exist");
         }
 
         Ticket ticket = ticketOpt.get();
@@ -219,7 +278,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Ticket was cancelled")
                     .build());
             return new ValidationResultResponse(false, ticket.getId(), ticket.getTicketCode(), ValidationResult.CANCELLED,
-                    null, null, ticket.getAttendeeName(), null, null, null, scanTime, "Ticket has been cancelled");
+                    null, null, ticket.getAttendeeName(), null, null, null, ticket.getTicketType(), scanTime, "Ticket has been cancelled");
         }
 
         if (ticket.getStatus() == TicketStatus.USED) {
@@ -230,7 +289,7 @@ public class TicketServiceImpl implements TicketService {
                     .details("Duplicate entry attempt")
                     .build());
             return new ValidationResultResponse(false, ticket.getId(), ticket.getTicketCode(), ValidationResult.ALREADY_USED,
-                    null, null, ticket.getAttendeeName(), null, null, null, scanTime, "Ticket has already been used for entry");
+                    null, null, ticket.getAttendeeName(), null, null, null, ticket.getTicketType(), scanTime, "Ticket has already been used for entry");
         }
 
         // Status is VALID -> grant entry, transition to USED, and audit.
@@ -246,9 +305,14 @@ public class TicketServiceImpl implements TicketService {
 
         EventEnrichment enrichment = enrichEvent(ticket.getEventId(), ticket.getSeatId());
 
+        String resolvedTicketType = ticket.getTicketType() != null && !ticket.getTicketType().isBlank()
+                ? ticket.getTicketType()
+                : "Standard";
+
         return new ValidationResultResponse(true, ticket.getId(), ticket.getTicketCode(), ValidationResult.SUCCESS,
                 enrichment.eventTitle(), enrichment.eventDate(), ticket.getAttendeeName(),
                 enrichment.sectionName(), enrichment.rowLabel(), enrichment.seatNumber(),
+                resolvedTicketType,
                 scanTime, "Entry granted successfully");
     }
 
@@ -332,6 +396,14 @@ public class TicketServiceImpl implements TicketService {
             return objectMapper.writeValueAsString(event);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize TicketIssuedEvent", e);
+        }
+    }
+
+    private void safeIncrementTicketIssued() {
+        try {
+            Tags tags = MetricTagPolicy.ticketIssued("PAYMENT_COMPLETED");
+            Counter.builder(SeatFlowMetricNames.TICKETS_ISSUED).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
         }
     }
 

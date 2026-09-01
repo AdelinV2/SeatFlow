@@ -1,0 +1,217 @@
+<div class="min-h-screen py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-8 animate-fade-in-up">
+  <!-- Page Header -->
+  <div class="border-b border-[var(--color-border)] pb-6 space-y-1">
+    <span class="text-xs font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+      Account Management
+    </span>
+    <h1 class="text-3xl font-black tracking-tight text-[var(--color-text-primary)]">
+      Settings & Preferences
+    </h1>
+    <p class="text-xs sm:text-sm text-[var(--color-text-secondary)]">
+      Manage your personal details, digital wallet options, and visual theme settings.
+    </p>
+  </div>
+
+  @if (isLoading()) {
+    <div class="space-y-6">
+      <app-glass-card elevation="raised" padding="lg">
+        <div class="space-y-4">
+          <app-skeleton-loader shape="rectangle" width="100%" height="3rem" />
+          <app-skeleton-loader shape="rectangle" width="100%" height="3rem" />
+        </div>
+      </app-glass-card>
+    </div>
+  } @else {
+    <div class="space-y-8">
+      <!-- 1. Profile Information Card -->
+      <app-glass-card elevation="elevated" padding="lg" class="space-y-6">
+        <div class="flex items-center gap-3 border-b border-[var(--color-border)] pb-4">
+          <div class="size-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-lg">
+            👤
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-[var(--color-text-primary)]">Personal Profile</h2>
+            <p class="text-xs text-[var(--color-text-muted)]">Your account contact information for digital pass delivery.</p>
+          </div>
+        </div>
+
+        <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="space-y-5">
+          <!-- Read-only Email Field -->
+          <div class="space-y-1.5">
+            <label for="profile-email-input" class="text-xs font-bold text-[var(--color-text-secondary)] flex items-center justify-between">
+              <span>Account Email Address</span>
+              <span class="text-[11px] text-[var(--color-text-muted)] font-normal flex items-center gap-1">
+                🔒 Managed by SSO Provider
+              </span>
+            </label>
+            <input
+              id="profile-email-input"
+              type="email"
+              [value]="userProfile()?.email || userContext.userEmail()"
+              readonly
+              aria-readonly="true"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-muted)] font-mono cursor-not-allowed select-all"
+            />
+          </div>
+
+          <!-- Name Field -->
+          <div class="space-y-1.5">
+            <label for="profile-name-input" class="text-xs font-bold text-[var(--color-text-secondary)]">
+              Full Name
+            </label>
+            <input
+              id="profile-name-input"
+              type="text"
+              formControlName="name"
+              placeholder="e.g. Alex Smith"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            />
+          </div>
+
+          <!-- Phone Field -->
+          <div class="space-y-1.5">
+            <label for="profile-phone-input" class="text-xs font-bold text-[var(--color-text-secondary)]">
+              Phone Number (SMS Notifications & Verification)
+            </label>
+            <input
+              id="profile-phone-input"
+              type="tel"
+              formControlName="phone"
+              aria-describedby="profile-phone-help"
+              placeholder="e.g. +1 555-0199"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            />
+            <p id="profile-phone-help" class="text-[11px] text-[var(--color-text-muted)]">
+              Optional. Used for urgent venue gate change announcements and ticket links.
+            </p>
+          </div>
+
+          <div class="pt-2 flex justify-end">
+            <app-tactile-button
+              type="submit"
+              variant="primary"
+              size="md"
+              [loading]="isSaving()"
+            >
+              Save Profile Changes
+            </app-tactile-button>
+          </div>
+        </form>
+      </app-glass-card>
+
+      <!-- 2. Appearance & Theme Selector Card -->
+      <app-glass-card elevation="raised" padding="lg" class="space-y-6">
+        <div class="flex items-center gap-3 border-b border-[var(--color-border)] pb-4">
+          <div class="size-10 rounded-2xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold text-lg">
+            🎨
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-[var(--color-text-primary)]">Interface Theme</h2>
+            <p class="text-xs text-[var(--color-text-muted)]">Select your preferred appearance mode for the SeatFlow portal.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="Interface theme selector">
+          <!-- Light Option -->
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="themeService.mode() === 'light'"
+            class="btn-spring p-4 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all"
+            [class.border-indigo-500]="themeService.mode() === 'light'"
+            [class.bg-indigo-500/10]="themeService.mode() === 'light'"
+            [class.text-indigo-600]="themeService.mode() === 'light'"
+            [class.dark:text-indigo-400]="themeService.mode() === 'light'"
+            [class.border-[var(--color-border)]]="themeService.mode() !== 'light'"
+            [class.bg-[var(--color-surface)]]="themeService.mode() !== 'light'"
+            [class.text-[var(--color-text-secondary)]]="themeService.mode() !== 'light'"
+            (click)="setThemeMode('light')"
+          >
+            <span class="text-2xl">☀️</span>
+            <div>
+              <span class="text-xs font-bold block">Light Theme</span>
+              <span class="text-[10px] text-[var(--color-text-muted)]">Clean, bright surface</span>
+            </div>
+          </button>
+
+          <!-- Dark Option -->
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="themeService.mode() === 'dark'"
+            class="btn-spring p-4 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all"
+            [class.border-indigo-500]="themeService.mode() === 'dark'"
+            [class.bg-indigo-500/10]="themeService.mode() === 'dark'"
+            [class.text-indigo-600]="themeService.mode() === 'dark'"
+            [class.dark:text-indigo-400]="themeService.mode() === 'dark'"
+            [class.border-[var(--color-border)]]="themeService.mode() !== 'dark'"
+            [class.bg-[var(--color-surface)]]="themeService.mode() !== 'dark'"
+            [class.text-[var(--color-text-secondary)]]="themeService.mode() !== 'dark'"
+            (click)="setThemeMode('dark')"
+          >
+            <span class="text-2xl">🌙</span>
+            <div>
+              <span class="text-xs font-bold block">Dark Theme</span>
+              <span class="text-[10px] text-[var(--color-text-muted)]">OLED high-contrast</span>
+            </div>
+          </button>
+
+          <!-- System Option -->
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="themeService.mode() === 'system'"
+            class="btn-spring p-4 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all"
+            [class.border-indigo-500]="themeService.mode() === 'system'"
+            [class.bg-indigo-500/10]="themeService.mode() === 'system'"
+            [class.text-indigo-600]="themeService.mode() === 'system'"
+            [class.dark:text-indigo-400]="themeService.mode() === 'system'"
+            [class.border-[var(--color-border)]]="themeService.mode() !== 'system'"
+            [class.bg-[var(--color-surface)]]="themeService.mode() !== 'system'"
+            [class.text-[var(--color-text-secondary)]]="themeService.mode() !== 'system'"
+            (click)="setThemeMode('system')"
+          >
+            <span class="text-2xl">💻</span>
+            <div>
+              <span class="text-xs font-bold block">System Default</span>
+              <span class="text-[10px] text-[var(--color-text-muted)]">Syncs with device OS</span>
+            </div>
+          </button>
+        </div>
+      </app-glass-card>
+
+      <!-- 3. Digital Wallet & Security Overview Card -->
+      <app-glass-card elevation="flat" padding="lg" class="space-y-4">
+        <div class="flex items-center gap-3 border-b border-[var(--color-border)] pb-4">
+          <div class="size-10 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg">
+            🛡️
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-[var(--color-text-primary)]">Digital Wallet & Continuity</h2>
+            <p class="text-xs text-[var(--color-text-muted)]">Security guarantees and automatic ticket linking (ADR-001).</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div class="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-1.5">
+            <span class="font-bold text-[var(--color-text-primary)] block">🎟️ Auto-Claimed Guest Tickets</span>
+            <p class="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
+              Any tickets previously purchased as a guest using your email are automatically associated with this account.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-1.5">
+            <span class="font-bold text-[var(--color-text-primary)] block">🔐 Assigned Roles</span>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              @for (role of (userProfile()?.roles || userContext.roles()); track role) {
+                <span class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-bold">
+                  {{ role }}
+                </span>
+              }
+            </div>
+          </div>
+        </div>
+      </app-glass-card>
+    </div>
+  }
+</div>

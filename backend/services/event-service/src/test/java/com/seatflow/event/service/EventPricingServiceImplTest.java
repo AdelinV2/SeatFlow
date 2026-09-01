@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -103,7 +104,7 @@ class EventPricingServiceImplTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).price()).isEqualByComparingTo("30.00");
         assertThat(result.get(1).price()).isEqualByComparingTo("50.00");
-        verify(pricingTierRepository).flush();
+        verify(pricingTierRepository, times(2)).flush();
     }
 
     @Test

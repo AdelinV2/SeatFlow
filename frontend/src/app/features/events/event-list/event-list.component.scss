@@ -1,0 +1,16 @@
+:host {
+  display: block;
+}
+
+.hero-section {
+  transition: background-color 250ms ease;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

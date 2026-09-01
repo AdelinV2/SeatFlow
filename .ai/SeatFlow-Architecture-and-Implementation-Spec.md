@@ -7,7 +7,7 @@
 **Architecture:** Microservices, service discovery with Eureka, event-driven, REST + WebSocket  
 **Deployment target:** Google Cloud for production; Docker Compose for local development  
 **Service discovery:** Netflix Eureka Server + Spring Cloud Eureka Clients (Spring Cloud 2025.1.x — Oakwood)  
-**Authentication:** Microsoft Entra External ID with OIDC, Google federation, email/password  
+**Authentication:** Supabase Auth (OIDC / JWT, Google federation, email/password - ADR-006)  
 **AI:** Optional Phase 2 using Spring AI + MCP/tool calling  
 
 ---
@@ -1364,20 +1364,20 @@ Every Redis usage must answer the question: “What problem does Redis solve her
 
 ## 15.1 Identity provider
 
-Use **Microsoft Entra External ID** for customer identity.
+Use **Supabase Auth** (OIDC / JWT) for customer identity per ADR-006.
 
 Primary login options:
 
 1. Email + password.
-2. Google account sign-in.
+2. Google account sign-in / Social OAuth.
 
-The authentication system is delegated to Entra. SeatFlow does not manage raw user passwords.
+The authentication system is delegated to Supabase Auth. SeatFlow does not manage raw user passwords.
 
 ## 15.2 Angular
 
-Use the Microsoft-supported MSAL Angular/OIDC approach.
+Use `@supabase/supabase-js` or standard OIDC client approach.
 
-Use Authorization Code + PKCE for the SPA.
+Use Authorization Code + PKCE / Supabase token management for the SPA.
 
 ## 15.3 Backend
 
@@ -1442,98 +1442,137 @@ No complex profile-management feature is required.
 
 ---
 
-# 17. Frontend UX
+# 17. Frontend Architecture & Sensory UI/UX Specification
 
-Angular is intentionally lightweight.
+The SeatFlow frontend is an **Angular 22** single-page application built with modern Signal-based reactivity, Standalone components, TailwindCSS v4, and Angular Material 22.
 
-## Main pages
+---
 
-### 17.1 Home
+## 17.1 Design System: Sensory UI, Nuanced Color Palettes & Micro-Interactions
 
-- Hero / short introduction.
-- Upcoming events carousel.
-- Featured event cards.
-- Login state.
+The design system provides a luxurious, modern, and tactile user experience, completely avoiding harsh/flat pure `#000000` or `#FFFFFF` contrasts:
 
-### 17.2 Events
-
-- Event grid/list.
-- Basic filtering only if needed.
-
-### 17.3 Event Details
-
-- Event title.
-- Date and time.
-- Venue.
-- Description.
-- Pricing summary.
-- “Choose seats” CTA.
-
-### 17.4 Seat Selection
-
-Core visual feature.
+### 17.1.1 Theme & Color Palette Specification
 
 ```text
-                STAGE
-
-     [A1] [A2] [A3] [A4] [A5]
-
- [B1] [B2] [B3] [B4] [B5] [B6]
-
-      [C1] [C2] [C3] [C4]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🌙 DARK THEME — "Obsidian & Midnight Slate" (Zero pure #000000)             │
+│ • Background Canvas:   #0B0F19 (Deep rich slate with subtle sapphire hue)   │
+│ • Card Surface:        #111827 (Layered matte surface)                      │
+│ • Elevated / Modals:   #1E293B (Elevated dialogs & popovers)                │
+│ • Subtle Borders:      rgba(255, 255, 255, 0.08)                            │
+│ • Ambient Glows:       rgba(99, 102, 241, 0.15) (Soft Indigo/Violet blooms) │
+│ • Primary Accents:     Electric Indigo (#6366F1), Vivid Violet (#8B5CF6)    │
+│ • Semantic Accents:    Emerald (#10B981), Amber (#F59E0B), Rose (#F43F5E)   │
+│ • Text Hierarchy:      #F8FAFC (Headings), #94A3B8 (Body), #64748B (Muted)  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                               ▲
+                 [ Smooth Theme Switcher Engine ]
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ☀️ LIGHT THEME — "Warm Alabaster & Pearl Slate" (Zero pure flat #FFFFFF)    │
+│ • Background Canvas:   #F8FAFC to #F1F5F9 (Warm pearl slate background)     │
+│ • Card Surface:        #FFFFFF (Clean floating cards with soft borders)     │
+│ • Subtle Borders:      #E2E8F0 (Crisp, soft division lines)                 │
+│ • Layered Shadows:     0 10px 25px -5px rgba(15, 23, 42, 0.05) (Soft depth) │
+│ • Primary Accents:     Royal Indigo (#4F46E5), Deep Violet (#7C3AED)        │
+│ • Semantic Accents:    Forest Emerald (#059669), Warm Amber (#D97706)       │
+│ • Text Hierarchy:      #0F172A (Headings), #334155 (Body), #64748B (Muted)  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Colors/status examples:
+### 17.1.2 Tactile Buttons & Sensory Micro-Interactions
+- **Tactile Button Press Physics:** Primary and secondary buttons implement physical spring damping (`active:scale-[0.97] transition-all duration-150 ease-out`).
+- **Sheen Sweep & Glow Effect:** Primary CTA buttons feature a continuous subtle sheen sweep gradient on hover and an ambient radial glow.
+- **Seat Spring Animation:** Selecting/deselecting seats on the interactive map triggers an elastic spring keyframe bounce (`scale-125` -> `scale-100`) and glowing focus halo.
+- **15-Min Hold Pulse Ring:** Hold countdown timer uses dynamic circular progress indicators that pulse vigorously in amber and rose when remaining time drops below 120 seconds.
+- **Skeleton Shimmer Loaders:** Fluid animated gradient shimmer waves for all loading states.
+
+---
+
+## 17.2 Feature Domains & 14 Complete Application Pages
 
 ```text
-Available       -> selectable
-Held by me      -> selected/held
-Held by another -> unavailable
-Sold            -> unavailable
+/                                    --> EventListComponent (Featured hero carousel, category pills, date picker, search)
+/events/:id                         --> EventDetailComponent (Hero banner, details, pricing tiers, Leaflet interactive map, CTA)
+/events/:id/seats                   --> SeatSelectionComponent (Interactive SVG seat map, live WS updates, hold dock)
+/checkout/:reservationId            --> CheckoutComponent (15-min countdown, guest email/name form, Stripe Elements, tax breakdown)
+/order-confirmation/:paymentId      --> OrderConfirmationComponent (Celebration confetti, order recap, digital pass cards, PDF download)
+/tickets/guest/:ticketCode          --> GuestTicketComponent (Multi-ticket switcher "Bilet 1 din N", QR viewer, PDF download, link account)
+/profile/tickets                    --> MyTicketsComponent (Active & past digital tickets with Apple Wallet-style QR pass modal)
+/profile/settings                   --> UserSettingsComponent (JWT name/email, phone update, theme selector, notifications display)
+/auth/callback                      --> AuthCallbackComponent (OIDC redirect handler)
+/auth/login                         --> LoginComponent (Entra ID redirect / Sign-in landing)
+/auth/logout                        --> LogoutComponent (Session clearance and redirect)
+/scanner                            --> StaffScannerComponent (Live camera QR reader with 3-color status feedback: Green/Yellow/Red, ADR-005)
+/admin/events                       --> AdminEventListComponent (Event CRUD table, publication lifecycle, filters, quick actions)
+/admin/events/new | :id/edit        --> AdminEventEditorComponent (Event form, 16:9 live banner preview & preset gallery, pricing tier manager)
+/admin/venues | :id/designer        --> AdminVenueDesignerComponent (2D seat grid generator, section builder, seat toggle, Nominatim address map)
+/admin/users                        --> AdminUserListComponent (User audit table, registered users, role assignments)
 ```
 
-The actual visual design can be inspired by real theatre seat layouts, but the MVP does not require a pixel-perfect clone of another website.
+---
 
-### Layout spacing requirement
+## 17.3 Core Features Specification
 
-The MVP must support meaningful visual spacing between rows, columns and sections. Do not render the seat map as a dense uniform grid. Layout coordinates and/or row/column spacing values should allow configurations such as:
+### 17.3.1 Free Interactive Map Integration (Leaflet.js + OpenStreetMap & CartoDB)
+- **Library:** Leaflet.js (`leaflet`) without expensive Google Maps API keys.
+- **Theme-Adaptive Tiles:**
+  - *Dark Mode:* `CartoDB Dark Matter` (`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png`).
+  - *Light Mode:* `CartoDB Positron` (`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png`).
+- **Event Details Page (`/events/:id`):** Renders venue pin with animated pulsing ripple, popup with venue name, address, and direct external navigation links (*Open in Google Maps / Apple Maps / Waze*).
+- **Admin Venue Editor (`/admin/venues/new`):** Uses **Nominatim OpenStreetMap Geocoding** for real-time address autocomplete and draggable pin placement.
 
-```text
-                STAGE
+### 17.3.2 Banner Management with Live Preview & Preset High-Res Gallery (Option 1)
+- **Live Preview Window:** Aspect ratio 16:9 / 21:9 preview with subtle rounded glass borders and ambient blurred backdrop.
+- **Preset Banner Gallery:** 1-click selection from curated high-resolution categories (Concert, Symphony/Theatre, Electronic/Club, Sports Arena, Festival, Comedy/Stand-up).
+- **Custom Image URL:** Direct URL input supporting any HTTPS image source (Unsplash, Cloudinary, AWS S3, GCP Cloud Storage, CDN).
 
- [A1] [A2] [A3]          [A4] [A5]
+### 17.3.3 Multi-Ticket Support for Guest Checkout (`/tickets/guest/:ticketCode`)
+- When a guest completes a purchase of multiple seats in a single reservation:
+  - **Multi-Ticket Switcher Bar:** Displays tabbed pagination (*"Biletul 1: Rând A, Loc 12"*, *"Biletul 2: Rând A, Loc 13"*).
+  - **Individual QR & Details:** Shows high-density QR code for the currently selected ticket with attendee name and seat location.
+  - **Download Actions:** Buttons for *"Download Ticket PDF"* and *"Download All Tickets (PDF Bundle)"*.
+  - **Account Linking Prompt:** Prominent aesthetic banner inviting the guest to sign up/sign in with the same email to automatically organize all their tickets in their personal wallet.
 
- [B1] [B2] [B3] [B4] [B5] [B6]
+### 17.3.4 Staff Gate Scanner with 3-Color Feedback System (ADR-005)
+- **Camera Integration:** Continuous camera stream using HTML5-QRCode / ZXing with viewfinder overlay.
+- **3-Color Visual & Acoustic Feedback Matrix:**
+  1. 🟢 **SUCCESS (Emerald `#10B981`):** *Entry Granted*. Pleasant confirmation chime + short haptic vibration. Displays attendee name, section, row, seat.
+  2. 🟡 **ALREADY_USED (Amber `#F59E0B`):** *Ticket Already Scanned*. Double warning beep + pulsing amber border. Displays timestamp of initial scan and gate device ID.
+  3. 🔴 **INVALID / CANCELLED (Rose `#F43F5E`):** *Invalid / Revoked Ticket*. Low error buzz + alert vibration. Displays rejection reason.
+- **Manual Input Fallback:** Alphanumeric ticket code entry field for damaged or unreadable screens.
 
-        [C1] [C2]      [C3] [C4]
-```
+### 17.3.5 Interactive SVG Seat Map Component (`SeatMapComponent`)
+- **Layout Engine:** Scalable SVG / CSS Grid seat matrix supporting pan, pinch-to-zoom, and section isolation.
+- **Visual Spacing Requirement:** Supports meaningful visual spacing between rows, columns, and sections (offsets and section gaps) to reflect real theatre layouts.
+- **Seat Status Visual Encoding:**
+  - `AVAILABLE` — Subtle slate pill with price tag on hover.
+  - `SELECTING` (Local user) — Electric Indigo with checkmark, spring bounce keyframe animation.
+  - `HELD` (Other users) — Muted Amber with lock badge.
+  - `SOLD / RESERVED` — Slate-300 / dark grayed-out with cross (disabled).
+- **Selection Engine:**
+  - Strictly enforces client-side maximum limit of **10 seats**.
+  - Recalculates total price instantly via `computed()`.
+  - Connects to `WebSocketService` on initialization for live updates on `/topic/events/{eventId}/seats`.
 
-Use `positionX` / `positionY`, row/column offsets, section gaps or equivalent normalized layout data. The goal is to make the seat map visually resemble a real theatre, while keeping the editor implementation intentionally simple.
+### 17.3.6 Real-Time STOMP WebSocket Integration & Reconnection Reconciliation
+- Subscribes to `/topic/events/{eventId}/seats`.
+- When a `SeatStatusUpdated` message is received:
+  1. Updates the reactive `seats` Signal store.
+  2. If a seat currently selected by the local user is held/booked by another user, deselects it and displays a warning notification via `MatSnackBar`.
+- **Reconnection & State Reconciliation:** On reconnect (`onConnect`), automatically re-fetches authoritative seat availability from `GET /api/reservations/events/{eventId}/availability` to guarantee zero state drift.
 
-### 17.5 Reservation / Checkout
+### 17.3.7 15-Minute Hold Countdown Timer (`HoldCountdownComponent`)
+- Displays remaining hold time formatted as `MM:SS` with a dynamic circular progress ring.
+- Visual alert state (pulsing rose text and border) when remaining time falls below **120 seconds**.
+- Emits `(expired)` event at `00:00`, triggering a modal and redirecting back to the event catalog.
 
-- Selected seats.
-- Price breakdown.
-- 15-minute countdown.
-- Stripe payment element / test payment flow.
-- Confirm payment.
-
-### 17.6 My Tickets
-
-- Upcoming tickets.
-- Past tickets.
-- Event details.
-- Seat information.
-- QR code.
-
-### 17.7 Admin
-
-Minimal admin UI:
-
-- Event creation.
-- Event editing.
-- Price/category configuration.
-- Basic reservations view.
+### 17.3.8 Stripe Test Mode Hybrid Checkout (`CheckoutComponent`)
+- Embeds Stripe Elements (`PaymentElement` + `AddressElement`).
+- **Tax-Inclusive Display (ADR-004):** Displays total gross price alongside real-time Stripe Tax breakdown.
+- **Hybrid Checkout (ADR-001):** Auto-fills for authenticated users, renders email/name fields for guest checkout.
+- Manages 3D Secure simulation and redirects to `/order-confirmation/:paymentId`.
 
 ---
 

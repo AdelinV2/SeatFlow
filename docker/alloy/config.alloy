@@ -1,0 +1,43 @@
+logging {
+  level = "warn"
+}
+
+discovery.docker "seatflow" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "seatflow" {
+  targets = discovery.docker.seatflow.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    // `seatflow` is production; the suffix admits isolated local verification
+    // projects without ever scraping unrelated Docker workloads.
+    regex         = "seatflow(-[a-z0-9]+)?"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "seatflow" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.seatflow.output
+  labels     = {"job" = "docker"}
+  forward_to = [loki.write.seatflow.receiver]
+}
+
+loki.write "seatflow" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

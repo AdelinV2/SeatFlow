@@ -1,0 +1,406 @@
+services:
+  user-service:
+    build:
+      context: ../backend
+      dockerfile: services/user-service/Dockerfile
+    image: seatflow/user-service:local
+    container_name: seatflow-user
+    restart: unless-stopped
+    ports:
+      - "${USER_SERVICE_PORT:-8081}:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8081
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_user
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  seat-map-service:
+    build:
+      context: ../backend
+      dockerfile: services/seat-map-service/Dockerfile
+    image: seatflow/seat-map-service:local
+    container_name: seatflow-seatmap
+    restart: unless-stopped
+    ports:
+      - "${SEAT_MAP_SERVICE_PORT:-8082}:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_seatmap
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  event-service:
+    build:
+      context: ../backend
+      dockerfile: services/event-service/Dockerfile
+    image: seatflow/event-service:local
+    container_name: seatflow-event
+    restart: unless-stopped
+    ports:
+      - "${EVENT_SERVICE_PORT:-8083}:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8083
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_event
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx512m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8083/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  reservation-service:
+    build:
+      context: ../backend
+      dockerfile: services/reservation-service/Dockerfile
+    image: seatflow/reservation-service:local
+    container_name: seatflow-reservation
+    restart: unless-stopped
+    ports:
+      - "${RESERVATION_SERVICE_PORT:-8084}:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8084
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_reservation
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms256m -Xmx512m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8084/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payment-service:
+    build:
+      context: ../backend
+      dockerfile: services/payment-service/Dockerfile
+    image: seatflow/payment-service:local
+    container_name: seatflow-payment
+    restart: unless-stopped
+    ports:
+      - "${PAYMENT_SERVICE_PORT:-8085}:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8085
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_payment
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_dummy}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_dummy}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8085/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ticket-service:
+    build:
+      context: ../backend
+      dockerfile: services/ticket-service/Dockerfile
+    image: seatflow/ticket-service:local
+    container_name: seatflow-ticket
+    restart: unless-stopped
+    ports:
+      - "${TICKET_SERVICE_PORT:-8086}:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8086
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_ticket
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8086/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  realtime-service:
+    build:
+      context: ../backend
+      dockerfile: services/realtime-service/Dockerfile
+    image: seatflow/realtime-service:local
+    container_name: seatflow-realtime
+    restart: unless-stopped
+    ports:
+      - "${REALTIME_SERVICE_PORT:-8087}:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8087
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SSL_ENABLED: "false"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      REALTIME_REDIS_CHANNEL: ${REALTIME_REDIS_CHANNEL:-seatflow:realtime:seat-status}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms192m -Xmx384m"
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8087/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  notification-service:
+    build:
+      context: ../backend
+      dockerfile: services/notification-service/Dockerfile
+    image: seatflow/notification-service:local
+    container_name: seatflow-notification
+    restart: unless-stopped
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT:-8088}:8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SEATFLOW_DEPLOYMENT_ENV: docker
+      SERVER_PORT: 8088
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: seatflow_notification
+      DB_USERNAME: ${DB_USERNAME:-seatflow}
+      DB_PASSWORD: ${DB_PASSWORD:-seatflow_dev}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_dummy_test_key}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-SeatFlow <onboarding@resend.dev>}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms128m -Xmx256m"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8088/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: seatflow/frontend:local
+    container_name: seatflow-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-4200}:8080"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - seatflow-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  seatflow-net:
+    driver: bridge
+

@@ -1,0 +1,44 @@
+<div
+  class="hold-countdown inline-flex items-center gap-3 rounded-xl border px-3.5 py-2 font-mono backdrop-blur-md transition-all duration-300"
+  [class.hold-countdown--urgent]="isUrgent()"
+  [ngClass]="
+    isUrgent()
+      ? 'border-rose-500/40 bg-rose-500/10 text-rose-500'
+      : 'border-amber-500/25 bg-amber-500/10 text-amber-500'
+  "
+  role="timer"
+  aria-live="polite"
+  [attr.aria-label]="'Seat hold expires in ' + formattedTime()"
+>
+  <div class="relative flex size-9 items-center justify-center">
+    <svg class="size-9 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
+      <circle
+        cx="20"
+        cy="20"
+        r="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-opacity="0.18"
+        stroke-width="3"
+      />
+      <circle
+        class="countdown-progress transition-all duration-1000 ease-linear"
+        cx="20"
+        cy="20"
+        r="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="3"
+        [attr.stroke-dasharray]="circleCircumference"
+        [attr.stroke-dashoffset]="strokeDashoffset()"
+      />
+    </svg>
+    <span class="absolute text-[10px] font-bold" aria-hidden="true">⏱</span>
+  </div>
+
+  <div class="flex flex-col">
+    <span class="text-[10px] uppercase tracking-wider opacity-70">Hold expires in</span>
+    <span class="text-sm font-bold tracking-tight">{{ formattedTime() }}</span>
+  </div>
+</div>

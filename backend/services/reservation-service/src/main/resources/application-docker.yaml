@@ -1,12 +1,12 @@
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/${DB_NAME:seatflow_reservation}
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:seatflow_reservation}
     username: ${DB_USERNAME:seatflow}
     password: ${DB_PASSWORD:seatflow_dev}
     hikari:
       maximum-pool-size: 10
   kafka:
-    bootstrap-servers: kafka:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -16,7 +16,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI}
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:api://seatflow-backend}
 
 event-service:
@@ -25,10 +26,23 @@ event-service:
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   instance:
     prefer-ip-address: true
 
 logging:
   level:
     com.seatflow: INFO
+management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:docker}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://otel-collector:4318/v1/traces}

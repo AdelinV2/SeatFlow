@@ -18,6 +18,8 @@ import java.util.UUID;
 @Repository
 public interface SeatHoldRepository extends JpaRepository<SeatHold, UUID> {
 
+    long countByStatus(SeatHoldStatus status);
+
     long countByEventIdAndSeatIdAndStatusIn(UUID eventId, UUID seatId, Collection<SeatHoldStatus> statuses);
 
     @Query("""

@@ -1,0 +1,26 @@
+:host {
+  display: block;
+}
+
+.compact-apply-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.75rem;
+  min-height: 2rem !important;
+  height: 2rem !important;
+  padding: 0 0.625rem !important;
+  line-height: 1;
+}
+
+.centered-remove-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem !important;
+  min-width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-height: 2.25rem !important;
+  padding: 0 !important;
+  line-height: 1;
+}

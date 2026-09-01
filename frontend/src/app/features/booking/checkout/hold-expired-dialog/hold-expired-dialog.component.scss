@@ -1,0 +1,44 @@
+:host {
+  display: block;
+}
+
+.expired-dialog {
+  border: 1px solid color-mix(in srgb, var(--color-accent-rose) 18%, var(--color-border));
+  box-shadow: 0 2rem 6rem -2rem rgba(15, 23, 42, 0.5);
+}
+
+.expired-glow {
+  background:
+    radial-gradient(
+      circle at 50% -20%,
+      color-mix(in srgb, var(--color-accent-rose) 25%, transparent),
+      transparent 68%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-accent-rose) 7%, transparent),
+      transparent
+    );
+}
+
+.expired-ring {
+  animation: expired-ring 1.8s ease-out infinite;
+}
+
+@keyframes expired-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expired-ring {
+    animation: none;
+  }
+}

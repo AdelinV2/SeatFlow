@@ -1,0 +1,7 @@
+:host {
+  display: block;
+}
+
+.wallet-pass-card {
+  transition: transform 250ms var(--motion-spring), box-shadow 250ms ease-out;
+}

@@ -1,0 +1,7 @@
+:host {
+  display: block;
+}
+
+.event-detail-page {
+  animation: fade-in-up 400ms var(--motion-reveal, cubic-bezier(0.16, 1, 0.3, 1));
+}

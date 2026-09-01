@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration scan="true" scanPeriod="30 seconds">
+<configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <springProfile name="!prod">
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="seatflow-service"/>
+    <springProperty scope="context" name="SEATFLOW_SERVICE_NAME" source="seatflow.observability.service-name" defaultValue="${APP_NAME}"/>
+
+    <conversionRule conversionWord="mask" class="com.seatflow.common.observability.logging.SensitiveDataMaskingConverter"/>
+
+    <springProfile name="dev,local,default,docker">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
-                <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr([${PID:- }]){magenta} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx</pattern>
+                <pattern>%mask(%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%blue(%X{correlation.id:-N/A})] [%cyan(%t)] %yellow(%logger{36}) : %msg%n%throwable)</pattern>
                 <charset>UTF-8</charset>
             </encoder>
         </appender>
@@ -15,18 +20,36 @@
     </springProfile>
 
     <springProfile name="prod">
-        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <customFields>{"service":"realtime-service"}</customFields>
-                <includeMdcKeyName>correlationId</includeMdcKeyName>
-                <includeMdcKeyName>traceId</includeMdcKeyName>
-                <includeMdcKeyName>spanId</includeMdcKeyName>
-                <includeMdcKeyName>userId</includeMdcKeyName>
-                <includeMdcKeyName>eventId</includeMdcKeyName>
+                <customFields>{"service.name":"${SEATFLOW_SERVICE_NAME}","service.environment":"${SPRING_PROFILES_ACTIVE:prod}"}</customFields>
+                <includeMdcKeyName>trace.id</includeMdcKeyName>
+                <includeMdcKeyName>span.id</includeMdcKeyName>
+                <includeMdcKeyName>correlation.id</includeMdcKeyName>
+                <includeMdcKeyName>user.id</includeMdcKeyName>
+                <includeMdcKeyName>http.method</includeMdcKeyName>
+                <includeMdcKeyName>http.uri</includeMdcKeyName>
+                <includeMdcKeyName>http.client_ip</includeMdcKeyName>
+                <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                    <valueMasker class="com.seatflow.common.observability.logging.LogstashSensitiveValueMasker"/>
+                </jsonGeneratorDecorator>
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerThrowable>20</maxDepthPerThrowable>
+                    <maxLength>4096</maxLength>
+                    <rootCauseFirst>true</rootCauseFirst>
+                    <exclude>sun\.reflect\..*</exclude>
+                </throwableConverter>
             </encoder>
         </appender>
         <root level="INFO">
-            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="test">
+        <appender name="TEST_SILENT" class="ch.qos.logback.core.helpers.NOPAppender"/>
+        <root level="OFF">
+            <appender-ref ref="TEST_SILENT"/>
         </root>
     </springProfile>
 </configuration>

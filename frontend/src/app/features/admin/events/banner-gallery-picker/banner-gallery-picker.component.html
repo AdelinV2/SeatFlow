@@ -1,0 +1,95 @@
+<div class="space-y-4">
+  <!-- Live 16:9 Preview Window -->
+  <div class="relative w-full aspect-video rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl flex items-center justify-center">
+    @if (currentBannerUrl()) {
+      <img
+        [src]="currentBannerUrl()"
+        alt="Banner Preview"
+        class="w-full h-full object-cover transition-all duration-300"
+      />
+      <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none"></div>
+      <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+        <span class="px-2.5 py-1 text-[11px] font-mono font-bold bg-black/60 backdrop-blur-md text-white rounded-lg border border-white/10 shadow-sm">
+          16:9 LIVE PREVIEW
+        </span>
+        <button
+          type="button"
+          (click)="clearBanner()"
+          class="pointer-events-auto px-2 py-1 text-[11px] font-semibold bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg backdrop-blur-md transition-colors cursor-pointer"
+          title="Remove Banner"
+        >
+          Remove
+        </button>
+      </div>
+    } @else {
+      <div class="text-center p-6 space-y-2">
+        <div class="size-12 rounded-2xl bg-indigo-500/10 text-indigo-500 mx-auto flex items-center justify-center text-2xl">
+          🖼️
+        </div>
+        <p class="text-xs font-semibold text-[var(--color-text-secondary)]">
+          No banner selected yet
+        </p>
+        <p class="text-[11px] text-[var(--color-text-muted)]">
+          Choose a curated preset below or enter a custom HTTPS image URL
+        </p>
+      </div>
+    }
+  </div>
+
+  <!-- Curated High-Res Preset Gallery -->
+  <div>
+    <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+      Curated High-Res Presets (1-Click Select)
+    </label>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+      @for (preset of presets; track preset.id) {
+        <button
+          type="button"
+          (click)="selectPreset(preset.url)"
+          class="group relative aspect-video rounded-xl overflow-hidden border transition-all cursor-pointer select-none text-left"
+          [ngClass]="currentBannerUrl() === preset.url ? 'border-indigo-500 ring-2 ring-indigo-500/50 scale-[1.02]' : 'border-[var(--color-border)] hover:border-indigo-400/50'"
+        >
+          <img
+            [src]="preset.url"
+            [alt]="preset.title"
+            class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+            loading="lazy"
+          />
+          <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors"></div>
+          <span class="absolute bottom-1 left-1.5 right-1.5 text-[9px] font-bold text-white truncate drop-shadow">
+            {{ preset.category }}
+          </span>
+          @if (currentBannerUrl() === preset.url) {
+            <span class="absolute top-1 right-1 size-4 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[9px]">
+              ✓
+            </span>
+          }
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Custom HTTPS URL Input -->
+  <div>
+    <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+      Custom Image URL
+    </label>
+    <div class="flex items-center gap-2">
+      <input
+        type="url"
+        [ngModel]="customUrl()"
+        (ngModelChange)="customUrl.set($event)"
+        (keyup.enter)="applyCustomUrl()"
+        placeholder="Enter HTTPS image URL (Cloudinary, S3, Unsplash)..."
+        class="flex-1 px-3.5 py-2 text-xs bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-indigo-500 transition-colors"
+      />
+      <button
+        type="button"
+        (click)="applyCustomUrl()"
+        class="px-4 py-2 text-xs font-semibold bg-[var(--color-surface-elevated)] hover:bg-indigo-500/10 hover:text-indigo-600 border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] transition-all cursor-pointer"
+      >
+        Apply URL
+      </button>
+    </div>
+  </div>
+</div>

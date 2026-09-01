@@ -12,6 +12,10 @@ public record SeatHoldResponse(
         UUID id,
         UUID seatId,
         SeatHoldStatus status,
-        BigDecimal price
+        BigDecimal price,
+        String rowNumber,
+        Integer seatNumber,
+        UUID pricingTierId,
+        String ticketType
 ) {
 }

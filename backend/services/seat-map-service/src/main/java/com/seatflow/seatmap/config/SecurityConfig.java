@@ -4,6 +4,7 @@ import com.seatflow.common.security.converter.JwtRoleConverter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -33,15 +34,17 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Swagger / OpenAPI / Actuator — publicly accessible
+                // Swagger / OpenAPI — publicly accessible
                 .requestMatchers(
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
-                    "/swagger-ui.html",
-                    "/actuator/**"
+                    "/swagger-ui.html"
                 ).permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").hasAuthority("SCOPE_metrics.read")
+                .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 // Public venue browsing — NO authentication required
-                .requestMatchers("/api/venues/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/venues", "/api/venues/**").permitAll()
                 // Admin endpoints — ROLE_ADMIN required
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // All other endpoints require authentication

@@ -2,8 +2,18 @@
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://localhost:8761/eureka/}}
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
 
 seatflow:
   cors:
-    allowed-origins: http://localhost:4200
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200}

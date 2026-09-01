@@ -1,0 +1,15 @@
+<section
+  class="glass-card overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur-md transition-all duration-300"
+  [ngClass]="[
+    elevation() === 'flat' ? 'shadow-none' : '',
+    elevation() === 'raised' ? 'shadow-[var(--shadow-diffuse)]' : '',
+    elevation() === 'elevated' ? 'glass-card--elevated' : '',
+    interactive() ? 'glass-card--interactive' : '',
+    padding() === 'none' ? 'p-0' : '',
+    padding() === 'sm' ? 'p-3' : '',
+    padding() === 'md' ? 'p-5' : '',
+    padding() === 'lg' ? 'p-6 md:p-8' : '',
+  ]"
+>
+  <ng-content />
+</section>

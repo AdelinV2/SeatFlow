@@ -8,18 +8,21 @@ import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.client.exception.EventClientUnavailableException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -42,6 +47,7 @@ public class EventClientImpl implements EventClient {
     private final RestClient.Builder loadBalancedBuilder;
     private final CircuitBreaker circuitBreaker;
     private final String serviceId;
+    private final ExecutorService httpExecutor;
     private volatile RestClient restClient;
 
     public EventClientImpl(
@@ -51,6 +57,12 @@ public class EventClientImpl implements EventClient {
         this.loadBalancedBuilder = loadBalancedBuilder;
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
         this.serviceId = serviceId;
+        this.httpExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    @PreDestroy
+    void shutdownHttpExecutor() {
+        httpExecutor.shutdownNow();
     }
 
     private RestClient client() {
@@ -67,8 +79,11 @@ public class EventClientImpl implements EventClient {
     }
 
     private RestClient buildClient() {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .executor(httpExecutor)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(READ_TIMEOUT);
         return loadBalancedBuilder
                 .baseUrl("http://" + serviceId)
@@ -118,15 +133,39 @@ public class EventClientImpl implements EventClient {
             throw new ValidationException("Event is in the past or too close to start time", ErrorCode.INVALID_REQUEST);
         }
 
-        SeatMapSectionClientDto seatMap = response.seatMap();
-        if (seatMap == null || seatMap.seats() == null) {
+        List<SeatMapSectionClientDto> sections = response.sections();
+        if (sections == null || sections.isEmpty()) {
             throw new EventClientUnavailableException("Seat map unavailable for eventId=" + eventId);
         }
 
         Map<UUID, BigDecimal> seatPrices = new HashMap<>();
-        for (SeatMapSeatClientDto seat : seatMap.seats()) {
-            if (seat.seatId() != null && seat.price() != null) {
-                seatPrices.put(seat.seatId(), seat.price());
+        Map<UUID, SeatPricingDetails> seatDetails = new HashMap<>();
+        for (SeatMapSectionClientDto section : sections) {
+            var pricingTiers = section.pricingTiers() == null
+                    ? List.<com.seatflow.reservation.client.dto.PricingTierClientDto>of()
+                    : section.pricingTiers().stream()
+                            .filter(tier -> tier.id() != null && tier.price() != null && tier.price().signum() > 0)
+                            .toList();
+            BigDecimal sectionPrice = pricingTiers.isEmpty()
+                    ? BigDecimal.ZERO
+                    : pricingTiers.getFirst().price();
+            if (section.seats() != null) {
+                for (SeatMapSeatClientDto seat : section.seats()) {
+                    // The event service returns the complete seat map. Only requested seats
+                    // belong to this reservation; including the rest inflates the reservation
+                    // total by the price of every seat in the venue.
+                    if (seat.seatId() != null
+                            && requestedSeatIds.contains(seat.seatId())
+                            && Boolean.TRUE.equals(seat.isActive())) {
+                        seatPrices.put(seat.seatId(), sectionPrice);
+                        seatDetails.put(seat.seatId(), new SeatPricingDetails(
+                                section.sectionId(),
+                                section.name(),
+                                seat.rowLabel(),
+                                seat.seatNumber(),
+                                pricingTiers));
+                    }
+                }
             }
         }
 
@@ -137,6 +176,12 @@ public class EventClientImpl implements EventClient {
             throw new ValidationException("Requested seats not found in event seat map: " + missing, ErrorCode.INVALID_REQUEST);
         }
 
-        return new EventPricingDetails(eventId, response.status(), eventDate, new ArrayList<>(requestedSeatIds), seatPrices);
+        return new EventPricingDetails(
+                eventId,
+                response.status(),
+                eventDate,
+                new ArrayList<>(requestedSeatIds),
+                seatPrices,
+                seatDetails);
     }
 }

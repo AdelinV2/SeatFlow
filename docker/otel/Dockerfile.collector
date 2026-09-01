@@ -1,0 +1,11 @@
+FROM otel/opentelemetry-collector-contrib:0.128.0@sha256:1ab0baba0ee3695d823c46653d8a6e8894896e668ce8bd7ebe002e948d827bc7 AS collector
+
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+RUN addgroup -S -g 10001 seatflow \
+    && adduser -S -D -H -u 10001 -G seatflow seatflow \
+    && apk add --no-cache ca-certificates \
+    && mkdir -p /etc/otelcol \
+    && chown -R seatflow:seatflow /etc/otelcol
+COPY --from=collector --chown=seatflow:seatflow /otelcol-contrib /otelcol-contrib
+USER seatflow:seatflow
+ENTRYPOINT ["/otelcol-contrib"]

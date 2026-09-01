@@ -4,50 +4,34 @@ server:
 spring:
   application:
     name: api-gateway
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+          audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:authenticated}
   cloud:
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      routes:
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/users/**, /api/admin/users/**
-        - id: seat-map-service
-          uri: lb://seat-map-service
-          predicates:
-            - Path=/api/venues/**, /api/admin/venues/**
-        - id: event-service
-          uri: lb://event-service
-          predicates:
-            - Path=/api/events/**, /api/admin/events/**
-        - id: reservation-service
-          uri: lb://reservation-service
-          predicates:
-            - Path=/api/reservations/**, /api/admin/reservations/**
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/payments/**
-        - id: ticket-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/tickets/**, /api/scanner/tickets/**, /api/admin/tickets/**
-        - id: realtime-service
-          uri: lb://realtime-service
-          predicates:
-            - Path=/ws/**
-        - id: notification-service
-          uri: lb://notification-service
-          predicates:
-            - Path=/api/notifications/**, /api/admin/notifications/**
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Headers Access-Control-Allow-Methods, RETAIN_FIRST
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+          filter:
+            request-rate-limiter:
+              deny-empty-key: true
+              empty-key-status-code: FORBIDDEN
 
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_URI:${EUREKA_SERVER_URL:http://localhost:8761/eureka/}}
     register-with-eureka: true
     fetch-registry: true
   instance:
@@ -56,12 +40,46 @@ eureka:
 seatflow:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200}
+  rate-limit:
+    replenish-rate: ${RATE_LIMIT_REPLENISH_RATE:20}
+    burst-capacity: ${RATE_LIMIT_BURST_CAPACITY:40}
+    requested-tokens: ${RATE_LIMIT_REQUESTED_TOKENS:1}
+    trusted-proxy-cidrs: ${RATE_LIMIT_TRUSTED_PROXY_CIDRS:[]}
 
 management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:local}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
+        include: health,info,metrics,prometheus
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${SEATFLOW_DEPLOYMENT_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        seatflow.reservations.hold.duration: true
+        seatflow.outbox.publish.latency: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+      minimum-expected-value:
+        http.server.requests: 1ms
+      maximum-expected-value:
+        http.server.requests: 10s

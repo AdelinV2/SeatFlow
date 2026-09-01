@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   application:
     name: seat-map-service
   jackson:
@@ -20,13 +22,42 @@ server:
   port: 8082
 
 management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:local}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${SEATFLOW_DEPLOYMENT_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        seatflow.reservations.hold.duration: true
+        seatflow.outbox.publish.latency: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+      minimum-expected-value:
+        http.server.requests: 1ms
+      maximum-expected-value:
+        http.server.requests: 10s
 
 springdoc:
   api-docs:

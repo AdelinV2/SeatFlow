@@ -3,6 +3,7 @@ package com.seatflow.ticket.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.ticket.client.ReservationServiceClient;
 import com.seatflow.ticket.client.dto.ReservationClientResponse;
 import com.seatflow.ticket.messaging.event.PaymentCompletedEvent;
@@ -30,6 +31,7 @@ public class PaymentCompletedEventListener {
     private final TicketService ticketService;
     private final ReservationServiceClient reservationServiceClient;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
         topics = EventTopics.PAYMENT_EVENTS,
@@ -37,6 +39,12 @@ public class PaymentCompletedEventListener {
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void onPaymentCompleted(EventEnvelope<Object> envelope) {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.PAYMENT_EVENTS)) {
+            handlePaymentCompletedInternal(envelope);
+        }
+    }
+
+    private void handlePaymentCompletedInternal(EventEnvelope<Object> envelope) {
         if (!"PaymentCompleted".equals(envelope.eventType())) {
             log.debug("Ignoring irrelevant payment event type: {}", envelope.eventType());
             return;
@@ -55,7 +63,7 @@ public class PaymentCompletedEventListener {
         }
 
         // 2. Fetch reservation details from reservation-service
-        ReservationClientResponse reservation = reservationServiceClient.getReservationById(payload.reservationId())
+        ReservationClientResponse reservation = reservationServiceClient.getReservationById(payload.reservationId(), payload.customerEmail())
                 .orElseThrow(() -> new IllegalStateException("Reservation not found for payment: " + payload.reservationId()));
 
         List<ReservationClientResponse.HeldSeatClientDto> seats = reservation.seats();
@@ -64,12 +72,21 @@ public class PaymentCompletedEventListener {
         }
 
         int seatCount = seats.size();
-        BigDecimal totalAmount = payload.amount();
+        BigDecimal totalAmount = payload.amount() != null ? payload.amount() : BigDecimal.ZERO;
         BigDecimal totalTax = payload.taxAmount() != null ? payload.taxAmount() : BigDecimal.ZERO;
         BigDecimal totalNet = payload.netAmount() != null ? payload.netAmount() : totalAmount.subtract(totalTax);
 
-        BigDecimal baseSeatTax = totalTax.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR);
-        BigDecimal baseSeatNet = totalNet.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR);
+        // Reconcile fiscal amounts: totalNet + totalTax must equal totalAmount
+        if (totalNet.add(totalTax).compareTo(totalAmount) != 0) {
+            if (totalTax.signum() == 0 && totalNet.compareTo(totalAmount) < 0) {
+                totalTax = totalAmount.subtract(totalNet);
+            } else {
+                totalNet = totalAmount.subtract(totalTax);
+            }
+        }
+
+        BigDecimal baseSeatTax = seatCount > 0 ? totalTax.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR) : BigDecimal.ZERO;
+        BigDecimal baseSeatNet = seatCount > 0 ? totalNet.divide(BigDecimal.valueOf(seatCount), 2, RoundingMode.FLOOR) : BigDecimal.ZERO;
         BigDecimal taxRemainder = totalTax.subtract(baseSeatTax.multiply(BigDecimal.valueOf(seatCount)));
         BigDecimal netRemainder = totalNet.subtract(baseSeatNet.multiply(BigDecimal.valueOf(seatCount)));
 
@@ -84,7 +101,8 @@ public class PaymentCompletedEventListener {
                     seat.seatId(),
                     seat.price(),
                     seatTax,
-                    seatNet
+                    seatNet,
+                    seat.ticketType() != null && !seat.ticketType().isBlank() ? seat.ticketType() : "Standard"
             ));
         }
 

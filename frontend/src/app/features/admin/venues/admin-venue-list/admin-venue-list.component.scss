@@ -1,0 +1,8 @@
+.admin-venues {
+  min-height: calc(100vh - 12rem);
+}
+
+.venue-card {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

@@ -10,6 +10,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.seatmap.mapper.SeatMapper;
 import com.seatflow.seatmap.mapper.VenueSectionMapper;
 import com.seatflow.seatmap.messaging.event.VenueSectionCreatedEvent;
@@ -48,6 +49,7 @@ public class VenueSectionServiceImpl implements VenueSectionService {
     private final SeatMapper seatMapper;
     private final VenueSectionMapper venueSectionMapper;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -131,6 +133,26 @@ public class VenueSectionServiceImpl implements VenueSectionService {
         return seatMapper.toResponse(seat);
     }
 
+    @Override
+    @Transactional
+    public void deleteSection(UUID venueId, UUID sectionId) {
+        // 1. Validate venue exists
+        if (!venueRepository.existsById(venueId)) {
+            throw new ResourceNotFoundException("Venue not found: " + venueId);
+        }
+
+        // 2. Validate section exists and belongs to venue
+        VenueSection section = sectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Section not found: " + sectionId));
+        if (!section.getVenue().getId().equals(venueId)) {
+            throw new ResourceNotFoundException("Section %s does not belong to venue %s".formatted(sectionId, venueId));
+        }
+
+        // 3. Delete section (cascades to seats)
+        sectionRepository.delete(section);
+        log.info("Section deleted. venueId={}, sectionId={}, name={}", venueId, sectionId, section.getName());
+    }
+
     // ---- Private Helpers ----
 
     /**
@@ -176,7 +198,15 @@ public class VenueSectionServiceImpl implements VenueSectionService {
 
     private <T extends DomainEvent> void writeOutboxEvent(UUID aggregateId, String eventType, T eventPayload) {
         String correlationId = CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString());
-        EventEnvelope<T> envelope = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, eventPayload);
+        EventEnvelope<T> base = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, eventPayload);
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+        }
+        EventEnvelope<T> envelope = base.withHeaders(headers);
 
         String payloadJson;
         try {
@@ -192,7 +222,7 @@ public class VenueSectionServiceImpl implements VenueSectionService {
                 .payload(payloadJson)
                 .build();
         outboxEvent = outboxEventRepository.save(outboxEvent);
-        log.info("Outbox event written. aggregateId={}, eventType={}, outboxEventId={}",
+        log.debug("Outbox event written. aggregateId={}, eventType={}, outboxId={}",
                 aggregateId, eventType, outboxEvent.getId());
     }
 }

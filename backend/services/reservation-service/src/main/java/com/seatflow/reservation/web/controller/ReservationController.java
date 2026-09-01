@@ -4,6 +4,7 @@ import com.seatflow.common.domain.dto.ApiErrorResponse;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -68,6 +70,42 @@ public class ReservationController {
             @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
         UUID authenticatedUserId = UserContext.getCurrentUserId().map(UUID::fromString).orElse(null);
         ReservationResponse response = reservationService.getReservationById(reservationId, authenticatedUserId, customerEmailProof);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{reservationId}/internal")
+    @Operation(
+        summary = "Internal inter-service retrieval of reservation details",
+        description = "Internal endpoint for downstream microservices (ticket-service, payment-service) to retrieve held seats without requiring user JWT context."
+    )
+    @ApiResponse(responseCode = "200", description = "Reservation found",
+        content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Reservation not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<ReservationResponse> getReservationInternal(@PathVariable UUID reservationId) {
+        ReservationResponse response = reservationService.getReservationByIdInternal(reservationId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{reservationId}/pricing")
+    @Operation(
+        summary = "Set ticket types for held seats",
+        description = "Updates the pricing tier for every seat while the reservation hold is active. " +
+                "Prices are resolved and validated against the event service."
+    )
+    @ApiResponse(responseCode = "200", description = "Ticket types updated",
+        content = @Content(schema = @Schema(implementation = ReservationResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid ticket type or expired reservation",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Reservation not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<ReservationResponse> updateReservationPricing(
+            @PathVariable UUID reservationId,
+            @Valid @RequestBody SeatPricingSelectionRequest request,
+            @RequestHeader(value = "X-Customer-Email", required = false) String customerEmailProof) {
+        UUID authenticatedUserId = UserContext.getCurrentUserId().map(UUID::fromString).orElse(null);
+        ReservationResponse response = reservationService.updateReservationPricing(
+                reservationId, request, authenticatedUserId, customerEmailProof);
         return ResponseEntity.ok(response);
     }
 

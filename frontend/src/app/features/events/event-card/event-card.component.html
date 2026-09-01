@@ -1,0 +1,85 @@
+<article
+  class="event-card group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:border-indigo-500/40"
+>
+  <!-- 16:9 Banner Container -->
+  <a [routerLink]="['/events', event().id]" class="relative block aspect-video w-full overflow-hidden bg-slate-900" [attr.aria-label]="event().title">
+    <img
+      [src]="displayBannerUrl()"
+      [alt]="event().title"
+      (error)="onImageError()"
+      class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+      loading="lazy"
+    />
+    <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+
+    <!-- Category Pill (Top Left) -->
+    <div class="absolute left-3 top-3">
+      <span
+        class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur-md"
+        [ngClass]="categoryBadgeClass()"
+      >
+        {{ event().category }}
+      </span>
+    </div>
+
+    <!-- Price Pill (Bottom Right) -->
+    <div class="absolute bottom-3 right-3">
+      <div class="rounded-xl border border-white/20 bg-black/60 px-2.5 py-1 text-xs font-extrabold text-white backdrop-blur-md">
+        @if (event().minPrice === event().maxPrice) {
+          <span>{{ event().minPrice | sfCurrency: (event().currency || 'USD') }}</span>
+        } @else {
+          <span class="text-[10px] font-normal text-slate-300">from </span>
+          <span>{{ event().minPrice | sfCurrency: (event().currency || 'USD') }}</span>
+        }
+      </div>
+    </div>
+  </a>
+
+  <!-- Card Body -->
+  <div class="flex flex-1 flex-col justify-between p-4 sm:p-5">
+    <div>
+      <!-- Date & Time Row -->
+      <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span>{{ event().eventDate | sfDate: 'full' }}</span>
+      </div>
+
+      <!-- Title -->
+      <h3 class="mb-2 text-base font-bold leading-snug text-[var(--color-text-primary)] transition-colors group-hover:text-indigo-500 sm:text-lg">
+        <a [routerLink]="['/events', event().id]" class="line-clamp-2 focus:outline-none">
+          {{ event().title }}
+        </a>
+      </h3>
+
+      <!-- Venue / Location (if available) -->
+      @if (event().venueName) {
+        <div class="mb-3 flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+          <svg viewBox="0 0 24 24" class="size-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+            <circle cx="12" cy="9" r="2.5" />
+          </svg>
+          <span class="truncate">{{ event().venueName }}</span>
+        </div>
+      }
+    </div>
+
+    <!-- Card Footer / Action Button -->
+    <div class="mt-4 pt-3 border-t border-[var(--color-border-subtle)] flex items-center justify-between">
+      <span class="text-xs font-medium text-[var(--color-text-secondary)]">Available seats</span>
+      <a
+        [routerLink]="['/events', event().id]"
+        class="btn-spring inline-flex items-center gap-1 text-xs font-bold text-indigo-500 hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform"
+      >
+        <span>Details & Tickets</span>
+        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</article>

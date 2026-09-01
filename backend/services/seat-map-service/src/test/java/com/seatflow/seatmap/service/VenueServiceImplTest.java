@@ -69,7 +69,8 @@ class VenueServiceImplTest {
     @Test
     void shouldCreateVenueAndWriteOutboxEvent() {
         // Given
-        CreateVenueRequest request = new CreateVenueRequest("Grand Theatre", "123 Main St", "New York", "USA", 500);
+        CreateVenueRequest request = new CreateVenueRequest("Grand Theatre", "123 Main St", "New York", "USA", 500,
+                40.7128, -74.0060);
         UUID venueId = UUID.randomUUID();
         Venue savedVenue = Venue.builder().id(venueId).name("Grand Theatre").address("123 Main St")
                 .city("New York").country("USA").capacity(500).createdAt(Instant.now()).updatedAt(Instant.now()).build();
@@ -86,7 +87,10 @@ class VenueServiceImplTest {
 
         // Then
         assertThat(result).isEqualTo(expectedResponse);
-        verify(venueRepository).save(any(Venue.class));
+        ArgumentCaptor<Venue> venueCaptor = ArgumentCaptor.forClass(Venue.class);
+        verify(venueRepository).save(venueCaptor.capture());
+        assertThat(venueCaptor.getValue().getLatitude()).isEqualTo(40.7128);
+        assertThat(venueCaptor.getValue().getLongitude()).isEqualTo(-74.0060);
 
         ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxEventRepository).save(outboxCaptor.capture());

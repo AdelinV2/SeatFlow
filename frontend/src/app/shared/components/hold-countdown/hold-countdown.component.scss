@@ -1,0 +1,29 @@
+:host {
+  display: inline-flex;
+}
+
+.countdown-progress {
+  transform-origin: center;
+}
+
+.hold-countdown--urgent {
+  animation: urgent-hold-pulse 700ms ease-in-out infinite alternate;
+}
+
+@keyframes urgent-hold-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-rose) 10%, transparent);
+    transform: scale(1);
+  }
+
+  to {
+    box-shadow: 0 0 0 0.4rem color-mix(in srgb, var(--color-accent-rose) 20%, transparent);
+    transform: scale(1.015);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hold-countdown--urgent {
+    animation: none;
+  }
+}

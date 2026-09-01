@@ -36,20 +36,21 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public Actuator and Swagger documentation
-                .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").hasAuthority("SCOPE_metrics.read")
+                .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
                 // Guest ticket delivery (ADR-001) and public PDF download
                 .requestMatchers(HttpMethod.GET, "/api/tickets/guest/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").permitAll()
 
                 // Gate scanner verification (ADR-005: operational staff and admins)
                 .requestMatchers("/api/scanner/tickets/**").hasAnyAuthority(SecurityRoles.ROLE_STAFF, SecurityRoles.ROLE_ADMIN)
                 .requestMatchers("/api/admin/tickets/**").hasAuthority(SecurityRoles.ROLE_ADMIN)
 
-                // Customer authenticated endpoints
-                .requestMatchers(HttpMethod.GET, "/api/tickets/my-tickets").hasAuthority(SecurityRoles.ROLE_CUSTOMER)
+                // Authenticated user tickets
+                .requestMatchers(HttpMethod.GET, "/api/tickets/my-tickets").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/tickets/*/pdf").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/tickets/*").authenticated()
 
                 .anyRequest().authenticated()

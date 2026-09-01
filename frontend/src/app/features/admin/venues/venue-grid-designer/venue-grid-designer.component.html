@@ -1,0 +1,489 @@
+<div class="venue-designer max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Top Navigation / Breadcrumbs -->
+  <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] mb-4">
+    <a routerLink="/admin" class="hover:text-[var(--color-primary)] transition-colors">Admin Portal</a>
+    <span>/</span>
+    <a routerLink="/admin/venues" class="hover:text-[var(--color-primary)] transition-colors">Venues</a>
+    <span>/</span>
+    <span class="text-[var(--color-text-primary)]">2D Seat Matrix Designer</span>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6 pb-6 border-b border-[var(--color-border)]">
+    <div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+          {{ venue()?.name || 'Venue Seat Layout Designer' }}
+        </h1>
+        <span class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+          2D Matrix Engine
+        </span>
+      </div>
+      <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+        Interactive 2D seat grid builder. Click any seat to toggle its active status for aisles, corridors, and sound booths.
+      </p>
+    </div>
+
+    <!-- Venue-Wide Capacity Stats -->
+    <div class="flex items-center gap-3 self-start lg:self-auto">
+      <div class="px-4 py-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs">
+        <span class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Configured Seats</span>
+        <span class="text-lg font-black text-indigo-600 dark:text-indigo-400">
+          {{ totalConfiguredActiveSeats() | number }}
+          <span class="text-xs font-normal text-[var(--color-text-muted)]">/ {{ venue()?.capacity || 0 }} max</span>
+        </span>
+      </div>
+
+      <button
+        type="button"
+        (click)="openAddSectionModal()"
+        class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/20 transition-all"
+      >
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>Add Section</span>
+      </button>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="p-8 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] space-y-6">
+      <app-skeleton-loader height="40px" width="50%"/>
+      <app-skeleton-loader height="320px" width="100%"/>
+    </div>
+  } @else if (sections().length === 0) {
+    <!-- Empty State: No sections yet -->
+    <div class="text-center py-20 border border-dashed border-[var(--color-border)] rounded-3xl bg-[var(--color-surface)]/60">
+      <div class="size-16 rounded-2xl bg-indigo-500/10 text-indigo-600 mx-auto flex items-center justify-center mb-4">
+        <svg class="size-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect width="18" height="18" x="3" y="3" rx="2"/>
+          <path d="M3 9h18M9 21V9"/>
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold text-[var(--color-text-primary)]">No Sections Configured Yet</h3>
+      <p class="text-sm text-[var(--color-text-muted)] mt-1 mb-6 max-w-md mx-auto">
+        Create sections (such as Orchestra, Loge VIP, or Balcony) with custom row and column counts to generate your 2D seat matrix.
+      </p>
+      <button
+        type="button"
+        (click)="openAddSectionModal()"
+        class="btn-spring inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white shadow-md hover:bg-indigo-500"
+      >
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        <span>Create First Section</span>
+      </button>
+    </div>
+  } @else {
+    <!-- Section Switcher Tabs -->
+    <div class="flex items-center justify-between gap-3 overflow-x-auto pb-3 mb-6 border-b border-[var(--color-border)]">
+      <div class="flex items-center gap-2">
+        @for (sec of sections(); track sec.sectionId) {
+          <button
+            type="button"
+            (click)="selectSection(sec.sectionId)"
+            [class.bg-indigo-600]="selectedSectionId() === sec.sectionId"
+            [class.text-white]="selectedSectionId() === sec.sectionId"
+            [class.border-indigo-600]="selectedSectionId() === sec.sectionId"
+            [class.shadow-md]="selectedSectionId() === sec.sectionId"
+            class="btn-spring px-4 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)] whitespace-nowrap transition-all flex items-center gap-2"
+          >
+            <span>{{ sec.name }}</span>
+            <span
+              [class.bg-white]="selectedSectionId() === sec.sectionId"
+              [class.text-indigo-600]="selectedSectionId() === sec.sectionId"
+              [class.bg-indigo-500/15]="selectedSectionId() !== sec.sectionId"
+              [class.text-indigo-600]="selectedSectionId() !== sec.sectionId"
+              class="px-1.5 py-0.2 rounded-md text-[10px] font-extrabold"
+            >
+              {{ sec.rowCount }}×{{ sec.colCount }}
+            </span>
+          </button>
+        }
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        @if (currentSection()) {
+          <button
+            type="button"
+            (click)="openDeleteSectionConfirm()"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-rose-500/30 text-rose-600 dark:text-rose-400 bg-rose-500/5 hover:bg-rose-500/15 flex items-center gap-1.5 transition-colors"
+            title="Delete current section"
+          >
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+            <span>Delete "{{ currentSection()?.name }}"</span>
+          </button>
+        }
+
+        <button
+          type="button"
+          (click)="openAddSectionModal()"
+          class="btn-spring shrink-0 px-3 py-2 rounded-xl text-xs font-bold border border-dashed border-indigo-400/50 text-indigo-600 hover:bg-indigo-500/10 flex items-center gap-1.5"
+        >
+          <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span>Add Section</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Designer Control Bar (Bulk Actions, Zoom, Stats) -->
+    <div class="p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <!-- Section Metrics -->
+      <div class="flex items-center gap-4 text-xs">
+        <div>
+          <span class="text-[var(--color-text-muted)]">Active Seats: </span>
+          <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ currentSectionActiveCount() }}</span>
+        </div>
+        <div class="h-4 w-px bg-[var(--color-border)]"></div>
+        <div>
+          <span class="text-[var(--color-text-muted)]">Aisles / Walkways: </span>
+          <span class="font-bold text-amber-600 dark:text-amber-400">{{ currentSectionInactiveCount() }}</span>
+        </div>
+        <div class="h-4 w-px bg-[var(--color-border)]"></div>
+        <div>
+          <span class="text-[var(--color-text-muted)]">Total Slots: </span>
+          <span class="font-bold text-[var(--color-text-primary)]">{{ currentSectionTotalCount() }}</span>
+        </div>
+      </div>
+
+      <!-- Bulk Actions Toolbar -->
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <!-- Row Bulk Toggle -->
+        <div class="flex items-center gap-1">
+          <select
+            [ngModel]="selectedBulkRow()"
+            (ngModelChange)="selectedBulkRow.set(+$event)"
+            class="px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-primary)] text-xs font-semibold"
+          >
+            @for (row of gridMatrix(); track row.rowIndex) {
+              <option [value]="row.rowIndex">Row {{ row.rowLabel }}</option>
+            }
+          </select>
+          <button
+            type="button"
+            (click)="bulkToggleRow(selectedBulkRow(), false)"
+            class="btn-spring px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas-subtle)] hover:bg-rose-500/10 hover:text-rose-600 text-[var(--color-text-secondary)] font-semibold transition-colors"
+            title="Make entire row an aisle"
+          >
+            Aisle Row
+          </button>
+          <button
+            type="button"
+            (click)="bulkToggleRow(selectedBulkRow(), true)"
+            class="btn-spring px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas-subtle)] hover:bg-emerald-500/10 hover:text-emerald-600 text-[var(--color-text-secondary)] font-semibold transition-colors"
+            title="Activate all seats in row"
+          >
+            Active Row
+          </button>
+        </div>
+
+        <div class="h-4 w-px bg-[var(--color-border)] hidden sm:block"></div>
+
+        <!-- Col Bulk Toggle -->
+        <div class="flex items-center gap-1">
+          <select
+            [ngModel]="selectedBulkCol()"
+            (ngModelChange)="selectedBulkCol.set(+$event)"
+            class="px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-primary)] text-xs font-semibold"
+          >
+            @for (col of columnHeaders(); track col) {
+              <option [value]="col - 1">Col {{ col }}</option>
+            }
+          </select>
+          <button
+            type="button"
+            (click)="bulkToggleColumn(selectedBulkCol(), false)"
+            class="btn-spring px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas-subtle)] hover:bg-rose-500/10 hover:text-rose-600 text-[var(--color-text-secondary)] font-semibold transition-colors"
+            title="Make vertical column a walkway"
+          >
+            Aisle Col
+          </button>
+          <button
+            type="button"
+            (click)="bulkToggleColumn(selectedBulkCol(), true)"
+            class="btn-spring px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas-subtle)] hover:bg-emerald-500/10 hover:text-emerald-600 text-[var(--color-text-secondary)] font-semibold transition-colors"
+            title="Activate all seats in column"
+          >
+            Active Col
+          </button>
+        </div>
+
+        <div class="h-4 w-px bg-[var(--color-border)] hidden sm:block"></div>
+
+        <!-- Zoom Controls -->
+        <div class="flex items-center gap-1 rounded-xl border border-[var(--color-border)] p-0.5 bg-[var(--color-canvas)]">
+          <button
+            type="button"
+            (click)="setZoom(zoomLevel() - 15)"
+            class="p-1 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+            title="Zoom Out"
+          >
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
+          <span class="text-[11px] font-bold px-1.5 text-[var(--color-text-muted)] min-w-10 text-center">
+            {{ zoomLevel() }}%
+          </span>
+          <button
+            type="button"
+            (click)="setZoom(zoomLevel() + 15)"
+            class="p-1 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+            title="Zoom In"
+          >
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="11" y1="8" x2="11" y2="14"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visual Matrix Grid Canvas -->
+    <div class="matrix-canvas-container rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-md overflow-hidden">
+      <!-- Stage Direction Header -->
+      <div class="stage-banner max-w-xl mx-auto mb-10 py-2.5 px-6 rounded-full bg-gradient-to-r from-indigo-500/10 via-indigo-500/20 to-violet-500/10 border border-indigo-500/30 text-center">
+        <span class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-2">
+          <span>▲</span>
+          STAGE / SCREEN DIRECTION
+          <span>▲</span>
+        </span>
+      </div>
+
+      <!-- Interactive Grid Matrix Viewport -->
+      <div class="matrix-scroll-wrapper overflow-auto pb-6">
+        <div
+          class="matrix-viewport inline-block min-w-full p-4 transition-transform duration-150 origin-top"
+          [style.transform]="'scale(' + zoomLevel() / 100 + ')'"
+        >
+          <!-- Column Numbers Row -->
+          <div class="flex items-center mb-2.5 pl-12 pr-12 gap-1.5 justify-center">
+            @for (col of columnHeaders(); track col) {
+              <div class="seat-col-header text-center font-mono text-[11px] font-bold text-[var(--color-text-muted)]">
+                {{ col }}
+              </div>
+            }
+          </div>
+
+          <!-- Rows Container -->
+          <div class="space-y-2">
+            @for (row of gridMatrix(); track row.rowIndex) {
+              <div class="flex items-center gap-1.5 justify-center">
+                <!-- Left Row Label -->
+                <div class="seat-row-label font-bold text-xs text-[var(--color-text-primary)] w-9 text-right pr-2 select-none">
+                  {{ row.rowLabel }}
+                </div>
+
+                <!-- Seats in Row -->
+                @for (seat of row.seats; track $index) {
+                  @if (seat) {
+                    <button
+                      type="button"
+                      (click)="toggleSeat(seat)"
+                      [class.seat-active]="seat.isActive"
+                      [class.seat-inactive]="!seat.isActive"
+                      [attr.aria-label]="'Row ' + row.rowLabel + ' Seat ' + seat.seatNumber + (seat.isActive ? ' (Active Seat)' : ' (Walkway/Aisle)')"
+                      [title]="'Row ' + row.rowLabel + ', Seat ' + seat.seatNumber + ' — Click to toggle ' + (seat.isActive ? 'Aisle' : 'Active Seat')"
+                      class="seat-cell btn-spring relative rounded-lg flex items-center justify-center font-mono text-[10px] font-bold transition-all duration-150"
+                    >
+                      @if (seat.isActive) {
+                        <span>{{ seat.seatNumber }}</span>
+                      } @else {
+                        <span class="opacity-30 text-[9px]">✕</span>
+                      }
+                    </button>
+                  } @else {
+                    <div class="seat-cell seat-empty rounded-lg opacity-20"></div>
+                  }
+                }
+
+                <!-- Right Row Label -->
+                <div class="seat-row-label font-bold text-xs text-[var(--color-text-primary)] w-9 text-left pl-2 select-none">
+                  {{ row.rowLabel }}
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend Footer -->
+      <div class="mt-8 pt-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-center gap-6 text-xs text-[var(--color-text-secondary)]">
+        <div class="flex items-center gap-2">
+          <div class="size-6 rounded-lg bg-indigo-600 text-white font-mono text-[10px] font-bold flex items-center justify-center shadow-xs">
+            1
+          </div>
+          <span>Active Bookable Seat</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="size-6 rounded-lg border-2 border-dashed border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-muted)] font-mono text-[9px] flex items-center justify-center">
+            ✕
+          </div>
+          <span>Aisle / Walkway / Disabled</span>
+        </div>
+
+        <div class="text-[11px] text-[var(--color-text-muted)]">
+          💡 Click any seat or use bulk actions above to toggle status.
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Add Section Modal Dialog -->
+  @if (showAddSectionModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in-up">
+      <div class="relative w-full max-w-md rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl space-y-5">
+        <div class="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+          <h3 class="text-lg font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+            <svg class="size-5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="18" height="18" x="3" y="3" rx="2"/>
+              <path d="M3 9h18M9 21V9"/>
+            </svg>
+            Add New Section
+          </h3>
+          <button
+            type="button"
+            (click)="closeAddSectionModal()"
+            class="btn-spring p-1 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+          >
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <form [formGroup]="sectionForm" (ngSubmit)="createSection()" class="space-y-4">
+          <!-- Section Name -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1" for="sectionName">
+              Section Name *
+            </label>
+            <input
+              id="sectionName"
+              type="text"
+              formControlName="name"
+              placeholder="e.g. Orchestra, Balcony Level 1, VIP Loge"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            @if (sectionForm.get('name')?.touched && sectionForm.get('name')?.errors) {
+              <p class="text-xs text-rose-500 mt-1">Section name is required (2-50 chars).</p>
+            }
+          </div>
+
+          <!-- Rows & Columns Grid -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1" for="rowCount">
+                Rows (1-50) *
+              </label>
+              <input
+                id="rowCount"
+                type="number"
+                formControlName="rowCount"
+                class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1" for="colCount">
+                Columns (1-50) *
+              </label>
+              <input
+                id="colCount"
+                type="number"
+                formControlName="colCount"
+                class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-600 dark:text-indigo-400">
+            Auto-generates <strong>{{ (sectionForm.value.rowCount || 0) * (sectionForm.value.colCount || 0) }} seats</strong> (Rows A to {{ getRowLabel((sectionForm.value.rowCount || 1) - 1) }}).
+          </div>
+
+          <!-- Dialog Actions -->
+          <div class="flex items-center gap-3 pt-3">
+            <button
+              type="submit"
+              [disabled]="isCreatingSection() || sectionForm.invalid"
+              class="btn-spring flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md disabled:opacity-50"
+            >
+              @if (isCreatingSection()) {
+                <span>Generating Grid...</span>
+              } @else {
+                <span>Create Section Matrix</span>
+              }
+            </button>
+
+            <button
+              type="button"
+              (click)="closeAddSectionModal()"
+              class="btn-spring px-4 py-2.5 rounded-xl font-bold text-sm border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- Delete Section Confirmation Modal -->
+  @if (showDeleteSectionConfirm()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in-up">
+      <div class="w-full max-w-md rounded-3xl border border-rose-500/30 bg-[var(--color-surface)] p-6 shadow-2xl space-y-5">
+        <div class="flex items-center gap-3">
+          <div class="size-10 rounded-xl bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-[var(--color-text-primary)]">Delete Section</h3>
+            <p class="text-xs text-[var(--color-text-muted)]">This action will remove all seats in this section.</p>
+          </div>
+        </div>
+
+        <p class="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+          Are you sure you want to delete <strong class="text-[var(--color-text-primary)]">"{{ currentSection()?.name }}"</strong> ({{ currentSectionTotalCount() }} seats)? This action cannot be undone.
+        </p>
+
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <button
+            type="button"
+            (click)="closeDeleteSectionConfirm()"
+            [disabled]="isDeletingSection()"
+            class="btn-spring px-4 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            (click)="confirmDeleteSection()"
+            [disabled]="isDeletingSection()"
+            class="btn-spring px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white shadow-md hover:bg-rose-500 disabled:opacity-50 flex items-center gap-1.5"
+          >
+            @if (isDeletingSection()) {
+              <span>Deleting...</span>
+            } @else {
+              <span>Delete Section</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

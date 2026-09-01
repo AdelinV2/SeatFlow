@@ -1,0 +1,10 @@
+FROM grafana/tempo:2.4.1@sha256:5b9c08f6d8fb43b3b72dfd1252ba4f198b11a245257bf76ee2ca13e243bac565 AS tempo
+
+# Tempo's published image is intentionally minimal and has no HTTP client. This
+# tiny, pinned wrapper preserves the official binary while supplying BusyBox
+# wget, allowing Docker to probe Tempo's real /ready endpoint.
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+RUN apk add --no-cache ca-certificates \
+    && mkdir -p /var/tempo/wal /var/tempo/blocks
+COPY --from=tempo /tempo /tempo
+ENTRYPOINT ["/tempo"]

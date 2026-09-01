@@ -54,14 +54,18 @@ class SeatMapLayoutServiceImplTest {
                 .createdAt(Instant.now()).updatedAt(Instant.now()).build();
         VenueSection section = VenueSection.builder().id(sectionId).venue(venue)
                 .name("Orchestra").rowCount(2).colCount(3).createdAt(Instant.now()).updatedAt(Instant.now()).build();
-        Seat seat = Seat.builder().id(UUID.randomUUID()).section(section)
+        Seat seat1 = Seat.builder().id(UUID.randomUUID()).section(section)
                 .rowLabel("A").seatNumber(1).gridX(0).gridY(0).isActive(true).createdAt(Instant.now()).build();
+        Seat seat2 = Seat.builder().id(UUID.randomUUID()).section(section)
+                .rowLabel("A").seatNumber(2).gridX(1).gridY(0).isActive(false).createdAt(Instant.now()).build();
 
         when(venueRepository.findById(venueId)).thenReturn(Optional.of(venue));
         when(sectionRepository.findByVenueIdOrderByNameAsc(venueId)).thenReturn(List.of(section));
-        when(seatRepository.findActiveSeatsBySectionId(sectionId)).thenReturn(List.of(seat));
-        when(seatMapper.toResponse(any(Seat.class))).thenReturn(
-                new SeatResponse(seat.getId(), "A", 1, 0, 0, true));
+        when(seatRepository.findBySectionIdOrderByGridYAscGridXAsc(sectionId)).thenReturn(List.of(seat1, seat2));
+        when(seatMapper.toResponse(seat1)).thenReturn(
+                new SeatResponse(seat1.getId(), "A", 1, 0, 0, true));
+        when(seatMapper.toResponse(seat2)).thenReturn(
+                new SeatResponse(seat2.getId(), "A", 2, 1, 0, false));
 
         // When
         VenueSeatMapLayoutResponse result = layoutService.getVenueLayout(venueId);
@@ -70,7 +74,8 @@ class SeatMapLayoutServiceImplTest {
         assertThat(result.venueId()).isEqualTo(venueId);
         assertThat(result.name()).isEqualTo("Test Venue");
         assertThat(result.sections()).hasSize(1);
-        assertThat(result.sections().getFirst().seats()).hasSize(1);
+        assertThat(result.sections().getFirst().seats()).hasSize(2);
+        assertThat(result.totalConfiguredSeats()).isEqualTo(1); // Only 1 active seat
     }
 
     @Test

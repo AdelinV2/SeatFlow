@@ -4,22 +4,31 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.client.ReservationServiceClient;
 import com.seatflow.payment.client.dto.ReservationClientResponse;
+import com.seatflow.payment.client.dto.SeatHoldClientDto;
 import com.seatflow.payment.gateway.StripePaymentGateway;
 import com.seatflow.payment.gateway.dto.StripeIntentResult;
+import com.seatflow.payment.gateway.dto.StripeTaxResult;
+import com.seatflow.payment.gateway.dto.TaxAddress;
 import com.seatflow.payment.mapper.PaymentMapper;
 import com.seatflow.payment.model.entity.Payment;
 import com.seatflow.payment.model.enums.PaymentStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.payment.repository.OutboxEventRepository;
 import com.seatflow.payment.repository.PaymentRepository;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -47,6 +56,11 @@ class PaymentServiceImplTest {
     private PaymentRepository paymentRepository;
 
     @Mock
+    private OutboxEventRepository outboxEventRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Mock
     private ReservationServiceClient reservationServiceClient;
 
     @Mock
@@ -67,7 +81,8 @@ class PaymentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new PaymentServiceImpl(paymentRepository, reservationServiceClient, stripePaymentGateway, paymentMapper, meterRegistry);
+        service = new PaymentServiceImpl(paymentRepository, outboxEventRepository, objectMapper, reservationServiceClient,
+                stripePaymentGateway, paymentMapper, meterRegistry, org.mockito.Mockito.mock(W3cTraceContextPropagator.class));
         when(paymentRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(paymentRepository.findByReservationId(any())).thenReturn(Optional.empty());
         when(stripePaymentGateway.createPaymentIntent(any(), any(), any(), any(), any()))
@@ -77,7 +92,7 @@ class PaymentServiceImplTest {
         when(paymentMapper.toResponse(any(Payment.class)))
                 .thenReturn(new com.seatflow.payment.web.dto.response.PaymentResponse(
                         UUID.randomUUID(), reservationId, reservationUserId, "cust@example.com",
-                        reservationEventId, "pi_123", amount, "USD", PaymentStatus.INITIATED, null,
+                        reservationEventId, "pi_123", amount, BigDecimal.ZERO, amount, "USD", PaymentStatus.INITIATED, null,
                         Instant.now(), Instant.now()));
     }
 
@@ -111,6 +126,55 @@ class PaymentServiceImplTest {
         assertThat(response.clientSecret()).isEqualTo("pi_123_secret");
         verify(stripePaymentGateway, times(1)).createPaymentIntent(any(), any(), any(), any(), any());
         verify(paymentRepository, times(1)).saveAndFlush(any(Payment.class));
+    }
+
+    @Test
+    void createPaymentIntentUsesHeldSeatPricesWhenStoredReservationTotalIsInflated() {
+        UUID seatId = UUID.randomUUID();
+        ReservationClientResponse legacyReservation = new ReservationClientResponse(
+                reservationId, reservationEventId, reservationUserId, "cust@example.com",
+                "PENDING", Instant.now().plusSeconds(900), new BigDecimal("4040.00"), 1,
+                List.of(new SeatHoldClientDto(UUID.randomUUID(), seatId, "HELD", new BigDecimal("20.00"))),
+                Instant.now());
+        when(reservationServiceClient.getReservation(reservationId)).thenReturn(legacyReservation);
+        Payment saved = paymentWith(UUID.randomUUID(), PaymentStatus.INITIATED);
+        when(paymentRepository.saveAndFlush(any(Payment.class))).thenReturn(saved);
+
+        service.createPaymentIntent(request(), reservationUserId);
+
+        ArgumentCaptor<BigDecimal> amountCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(stripePaymentGateway).createPaymentIntent(
+                amountCaptor.capture(), any(), any(), any(), any());
+        assertThat(amountCaptor.getValue()).isEqualByComparingTo("20.00");
+
+        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentRepository).saveAndFlush(paymentCaptor.capture());
+        assertThat(paymentCaptor.getValue().getAmount()).isEqualByComparingTo("20.00");
+    }
+
+    @Test
+    void calculateTaxPreviewUsesThePaymentAmountAndBillingAddress() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = paymentWith(paymentId, PaymentStatus.INITIATED);
+        payment.setUserId(reservationUserId);
+        payment.setAmount(new BigDecimal("100.00"));
+        payment.setCurrency("USD");
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+        when(stripePaymentGateway.calculateInclusiveTax(
+                eq(new BigDecimal("100.00")), eq("USD"), eq(paymentId.toString()), any(TaxAddress.class)))
+                .thenReturn(new StripeTaxResult(new BigDecimal("19.00"), new BigDecimal("23.46"), "USD"));
+
+        TaxPreviewResponse response = service.calculateTaxPreview(
+                paymentId,
+                new TaxPreviewRequest("1 Test Avenue", null, "Bucharest", null, "010101", "RO"),
+                reservationUserId,
+                false);
+
+        assertThat(response.taxAmount()).isEqualByComparingTo("19.00");
+        assertThat(response.effectiveRate()).isEqualByComparingTo("23.46");
+        assertThat(response.currency()).isEqualTo("USD");
+        verify(stripePaymentGateway).calculateInclusiveTax(
+                eq(new BigDecimal("100.00")), eq("USD"), eq(paymentId.toString()), any(TaxAddress.class));
     }
 
     @Test
@@ -162,6 +226,39 @@ class PaymentServiceImplTest {
     }
 
     @Test
+    void idempotentReplayRefreshesStripeIntentWhenTicketPricingChanged() {
+        UUID paymentId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        Payment existing = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .stripePaymentIntentId("pi_existing")
+                .clientSecret("pi_existing_secret")
+                .amount(new BigDecimal("120.00"))
+                .currency("USD")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        ReservationClientResponse repricedReservation = new ReservationClientResponse(
+                reservationId, reservationEventId, reservationUserId, "cust@example.com",
+                "PENDING", Instant.now().plusSeconds(900), new BigDecimal("100.00"), 1,
+                List.of(new SeatHoldClientDto(UUID.randomUUID(), seatId, "HELD", new BigDecimal("100.00"))),
+                Instant.now());
+        when(paymentRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.of(existing));
+        when(reservationServiceClient.getReservation(reservationId)).thenReturn(repricedReservation);
+        when(stripePaymentGateway.updatePaymentIntent(
+                eq("pi_existing"), eq(new BigDecimal("100.00")), eq("USD"), any(), eq("cust@example.com")))
+                .thenReturn(new StripeIntentResult("pi_existing", "pi_updated_secret", "requires_payment_method"));
+
+        service.createPaymentIntent(request(), reservationUserId);
+
+        assertThat(existing.getAmount()).isEqualByComparingTo("100.00");
+        verify(stripePaymentGateway).updatePaymentIntent(
+                eq("pi_existing"), eq(new BigDecimal("100.00")), eq("USD"), any(), eq("cust@example.com"));
+        verify(paymentRepository).saveAndFlush(existing);
+        verify(paymentMapper).toIntentResponse(existing, "pi_updated_secret");
+    }
+
+    @Test
     void createPaymentIntentRejectsIdempotencyKeyReusedWithDifferentReservation() {
         Payment existing = Payment.builder()
                 .id(UUID.randomUUID())
@@ -208,6 +305,50 @@ class PaymentServiceImplTest {
                 .isInstanceOf(ResourceNotFoundException.class);
 
         assertThat(service.getPaymentByReservationId(reservationId, reservationUserId, false)).isNotNull();
+    }
+
+    @Test
+    void guestPaymentRejectsAnonymousCallerWithoutEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.getPaymentById(paymentId, null, false, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void guestPaymentAcceptsAnonymousCallerWithMatchingEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThat(service.getPaymentById(paymentId, null, false, " Guest@Example.com ")).isNotNull();
+    }
+
+    @Test
+    void guestPaymentRejectsAnonymousCallerWithWrongEmailProof() {
+        UUID paymentId = UUID.randomUUID();
+        Payment payment = Payment.builder()
+                .id(paymentId)
+                .reservationId(reservationId)
+                .customerEmail("guest@example.com")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findById(paymentId)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.getPaymentById(paymentId, null, false, "attacker@example.com"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

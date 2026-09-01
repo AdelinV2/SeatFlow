@@ -12,5 +12,11 @@ public record VenueResponse(
     @Schema(description = "City") String city,
     @Schema(description = "Country") String country,
     @Schema(description = "Total capacity") Integer capacity,
+    @Schema(description = "Geographic latitude") Double latitude,
+    @Schema(description = "Geographic longitude") Double longitude,
     @Schema(description = "Creation timestamp") Instant createdAt
-) {}
+) {
+    public VenueResponse(UUID id, String name, String address, String city, String country, Integer capacity, Instant createdAt) {
+        this(id, name, address, city, country, capacity, null, null, createdAt);
+    }
+}

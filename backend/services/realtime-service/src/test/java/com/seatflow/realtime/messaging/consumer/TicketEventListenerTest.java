@@ -6,7 +6,8 @@ import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ class TicketEventListenerTest {
     record DummyEvent(String message) implements DomainEvent {}
 
     @Mock
-    private SeatStatusBroadcaster seatStatusBroadcaster;
+    private RealtimeFanOutPublisher realtimeFanOutPublisher;
 
     private ObjectMapper objectMapper;
     private TicketEventListener listener;
@@ -35,7 +36,7 @@ class TicketEventListenerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        listener = new TicketEventListener(seatStatusBroadcaster, objectMapper);
+        listener = new TicketEventListener(realtimeFanOutPublisher, objectMapper, mock());
     }
 
     @Test
@@ -70,7 +71,7 @@ class TicketEventListenerTest {
 
         listener.handleTicketEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatId, SeatStatus.SOLD);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -85,7 +86,7 @@ class TicketEventListenerTest {
 
         listener.handleTicketEvent(envelope);
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 
     @Test
@@ -94,6 +95,6 @@ class TicketEventListenerTest {
         listener.handleTicketEvent(null);
         listener.handleTicketEvent(EventEnvelope.of(null, "id", "corr", null));
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 }

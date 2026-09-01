@@ -6,6 +6,7 @@ import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.ticket.client.EventServiceClient;
 import com.seatflow.ticket.client.SeatMapServiceClient;
 import com.seatflow.ticket.client.dto.EventSeatMapClientResponse;
@@ -83,7 +84,8 @@ class TicketServiceImplTest {
     void setUp() {
         ticketService = new TicketServiceImpl(ticketRepository, validationRepository, outboxRepository,
                 ticketMapper, qrCodeGeneratorService, pdfTicketGeneratorService, eventServiceClient,
-                seatMapServiceClient, new ObjectMapper().registerModule(new JavaTimeModule()));
+                seatMapServiceClient, new ObjectMapper().registerModule(new JavaTimeModule()),
+                mock(W3cTraceContextPropagator.class), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
 
         when(ticketRepository.save(any(Ticket.class))).thenAnswer(a -> a.getArgument(0));
         when(outboxRepository.save(any(OutboxEvent.class))).thenAnswer(a -> a.getArgument(0));
@@ -104,6 +106,7 @@ class TicketServiceImplTest {
                 .userId(ownerId)
                 .customerEmail("buyer@example.com")
                 .attendeeName("Jane Doe")
+                .ticketType("VIP")
                 .eventId(eventId)
                 .seatId(seatId)
                 .price(new BigDecimal("100.00"))
@@ -211,14 +214,41 @@ class TicketServiceImplTest {
     }
 
     @Test
-    void shouldGeneratePdfTicketForGuestUserWithoutUserId() {
+    void shouldGetGuestTicketBundleByCode() {
+        Ticket guestTicket1 = sampleTicket(TicketStatus.VALID, null);
+        Ticket guestTicket2 = sampleTicket(TicketStatus.VALID, null);
+        when(ticketRepository.findByTicketCode("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(guestTicket1));
+        when(ticketRepository.findByReservationId(reservationId)).thenReturn(List.of(guestTicket1, guestTicket2));
+        when(ticketMapper.toDetailResponse(any(Ticket.class))).thenReturn(mock(TicketDetailResponse.class));
+
+        List<TicketDetailResponse> bundle = ticketService.getGuestTicketBundleByCode("SF-TKT-ABCDEFGHIJKL");
+
+        assertThat(bundle).hasSize(2);
+        verify(ticketRepository).findByReservationId(reservationId);
+    }
+
+    @Test
+    void shouldGenerateGuestTicketPdfByTicketCode() {
+        Ticket guestTicket = sampleTicket(TicketStatus.VALID, null);
+        when(ticketRepository.findByTicketCode("SF-TKT-ABCDEFGHIJKL")).thenReturn(Optional.of(guestTicket));
+        when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.empty());
+        when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
+                new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Festival", "FESTIVAL", Instant.now(), "ACTIVE", "http://banner")));
+
+        byte[] pdf = ticketService.generateGuestTicketPdf("SF-TKT-ABCDEFGHIJKL");
+
+        assertThat(pdf).isNotNull().isNotEmpty();
+    }
+
+    @Test
+    void shouldGeneratePdfTicketForAdminWhenGuestTicket() {
         Ticket guestTicket = sampleTicket(TicketStatus.VALID, null);
         when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(guestTicket));
         when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.empty());
         when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
                 new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Festival", "FESTIVAL", Instant.now(), "ACTIVE", "http://banner")));
 
-        byte[] pdf = ticketService.generateTicketPdf(ticketId, null, false);
+        byte[] pdf = ticketService.generateTicketPdf(ticketId, userId, true);
 
         assertThat(pdf).isNotNull().isNotEmpty();
     }
@@ -246,6 +276,7 @@ class TicketServiceImplTest {
         assertThat(result.valid()).isTrue();
         assertThat(result.result()).isEqualTo(ValidationResult.SUCCESS);
         assertThat(result.ticketId()).isEqualTo(ticketId);
+        assertThat(result.ticketType()).isEqualTo("VIP");
         verify(ticketRepository).save(any(Ticket.class));
         ArgumentCaptor<TicketValidation> captor = ArgumentCaptor.forClass(TicketValidation.class);
         verify(validationRepository).save(captor.capture());

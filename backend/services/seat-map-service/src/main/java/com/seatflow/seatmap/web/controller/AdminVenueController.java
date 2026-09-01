@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -26,6 +27,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/venues")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Venues (Admin)", description = "Admin-only venue and section management APIs")
 public class AdminVenueController {
 
@@ -120,5 +122,24 @@ public class AdminVenueController {
             @Valid @RequestBody UpdateSeatStatusRequest request) {
         SeatResponse response = sectionService.updateSeatStatus(venueId, sectionId, seatId, request);
         return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{venueId}/sections/{sectionId}")
+    @Operation(
+        summary = "Delete a venue section",
+        description = "Deletes a section and all its associated seats from the venue."
+    )
+    @ApiResponse(responseCode = "204", description = "Section deleted successfully")
+    @ApiResponse(responseCode = "404", description = "Venue or section not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Admin role required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<Void> deleteSection(
+            @PathVariable UUID venueId,
+            @PathVariable UUID sectionId) {
+        sectionService.deleteSection(venueId, sectionId);
+        return ResponseEntity.noContent().build();
     }
 }

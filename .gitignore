@@ -1,4 +1,4 @@
-﻿# Compiled class file
+# Compiled class file
 *.class
 
 # Log files
@@ -64,8 +64,31 @@ out/
 .env
 .env.*
 !.env.example
+gha-creds-*.json
 *.pem
 *.key
+docker/prometheus/prometheus-scrape-token
+
+# Terraform
+**/.terraform/*
+**/tfplan
+**/tfplan.*
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+backend.tf
+!backend.tf.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
 
 # OS Generated
 Thumbs.db
@@ -74,3 +97,5 @@ Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
 ._*
+
+

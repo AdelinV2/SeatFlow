@@ -11,6 +11,14 @@ public record EventPricingDetails(
         String eventStatus,
         Instant eventDate,
         List<UUID> seatIds,
-        Map<UUID, BigDecimal> seatPrices
+        Map<UUID, BigDecimal> seatPrices,
+        Map<UUID, SeatPricingDetails> seatDetails
 ) {
+    public EventPricingDetails(UUID eventId,
+                               String eventStatus,
+                               Instant eventDate,
+                               List<UUID> seatIds,
+                               Map<UUID, BigDecimal> seatPrices) {
+        this(eventId, eventStatus, eventDate, seatIds, seatPrices, Map.of());
+    }
 }

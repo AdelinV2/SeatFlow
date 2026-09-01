@@ -8,17 +8,35 @@ import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.context.UserContext;
 import com.seatflow.payment.client.ReservationServiceClient;
 import com.seatflow.payment.client.dto.ReservationClientResponse;
+import com.seatflow.payment.client.dto.SeatHoldClientDto;
 import com.seatflow.payment.gateway.StripePaymentGateway;
 import com.seatflow.payment.gateway.dto.StripeIntentResult;
+import com.seatflow.payment.gateway.dto.StripeTaxResult;
+import com.seatflow.payment.gateway.dto.TaxAddress;
 import com.seatflow.payment.mapper.PaymentMapper;
 import com.seatflow.payment.model.entity.Payment;
 import com.seatflow.payment.model.enums.PaymentStatus;
 import com.seatflow.payment.repository.PaymentRepository;
 import com.seatflow.payment.service.PaymentService;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.events.EventEnvelope;
+import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
+import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
+import com.seatflow.payment.model.entity.OutboxEvent;
+import com.seatflow.payment.repository.OutboxEventRepository;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +45,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,25 +58,36 @@ import java.util.UUID;
 public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
     private final ReservationServiceClient reservationServiceClient;
     private final StripePaymentGateway stripePaymentGateway;
     private final PaymentMapper paymentMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
-    @Transactional
     public PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, UUID authenticatedUserId) {
+        return createPaymentIntent(request, authenticatedUserId, null);
+    }
+
+    @Override
+    public PaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request,
+                                                     UUID authenticatedUserId,
+                                                     String customerEmailProof) {
         Timer.Sample timer = Timer.start(meterRegistry);
         try {
-            log.info("Processing PaymentIntent creation. reservationId={}, authenticatedUserId={}, idempotencyKey={}",
-                    request.reservationId(), authenticatedUserId, request.idempotencyKey());
+            log.info("Processing PaymentIntent creation. reservationId={}, authenticatedUserId={}",
+                    request.reservationId(), authenticatedUserId);
 
             // 1. Check idempotency on client idempotency key
             Optional<Payment> existingIdempotentPayment = paymentRepository.findByIdempotencyKey(request.idempotencyKey());
             if (existingIdempotentPayment.isPresent()) {
                 Payment existing = existingIdempotentPayment.get();
                 if (existing.getReservationId().equals(request.reservationId())) {
-                    log.info("Idempotent replay for paymentId={}, idempotencyKey={}", existing.getId(), request.idempotencyKey());
+                    refreshExistingPaymentIfReservationTotalChanged(existing, authenticatedUserId, customerEmailProof);
+                    log.info("Idempotent payment replay. paymentId={}, reservationId={}",
+                            existing.getId(), existing.getReservationId());
                     return paymentMapper.toIntentResponse(existing, existing.getClientSecret());
                 } else {
                     throw new ConflictException("Idempotency key reused with different parameters", ErrorCode.CONFLICT);
@@ -73,7 +104,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
 
             // 3. Fetch and validate reservation from reservation-service
-            ReservationClientResponse reservation = reservationServiceClient.getReservation(request.reservationId());
+            ReservationClientResponse reservation = getReservation(request.reservationId(), customerEmailProof);
 
             if (!"PENDING".equalsIgnoreCase(reservation.status())) {
                 throw new ValidationException("Cannot process payment for reservation with status: " + reservation.status(),
@@ -92,6 +123,11 @@ public class PaymentServiceImpl implements PaymentService {
                 }
             }
 
+            // Seat prices are the line-item source of truth. Recalculate the amount from the
+            // held seats so legacy reservations created before the seat-map filtering fix cannot
+            // charge the price of every seat in the venue.
+            BigDecimal chargeAmount = resolveChargeAmount(reservation);
+
             // 5. Create Stripe PaymentIntent via Gateway
             Map<String, String> metadata = new HashMap<>();
             metadata.put("reservationId", reservation.id().toString());
@@ -102,7 +138,7 @@ public class PaymentServiceImpl implements PaymentService {
             }
 
             StripeIntentResult stripeResult = stripePaymentGateway.createPaymentIntent(
-                    reservation.totalAmount(),
+                    chargeAmount,
                     "USD",
                     request.idempotencyKey(),
                     metadata,
@@ -118,14 +154,14 @@ public class PaymentServiceImpl implements PaymentService {
                     .stripePaymentIntentId(stripeResult.paymentIntentId())
                     .clientSecret(stripeResult.clientSecret())
                     .idempotencyKey(request.idempotencyKey())
-                    .amount(reservation.totalAmount())
+                    .amount(chargeAmount)
                     .currency("USD")
                     .status(PaymentStatus.INITIATED)
                     .build();
 
-            Payment savedPayment = paymentRepository.saveAndFlush(payment);
+            Payment savedPayment = persistPayment(payment);
 
-            meterRegistry.counter("seatflow.payments.intent.created.total", "status", "INITIATED").increment();
+            safeIncrementPaymentIntentCreated();
             log.info("Payment entity persisted in INITIATED status. paymentId={}, stripePaymentIntentId={}, amount={}",
                     savedPayment.getId(), savedPayment.getStripePaymentIntentId(), savedPayment.getAmount());
 
@@ -133,34 +169,252 @@ public class PaymentServiceImpl implements PaymentService {
 
         } catch (DataIntegrityViolationException dive) {
             log.warn("Database integrity violation during payment intent creation. reservationId={}", request.reservationId(), dive);
-            meterRegistry.counter("seatflow.payments.conflicts.total", "reason", "DB_UNIQUE_VIOLATION").increment();
+            safeIncrementPaymentConflict("DB_UNIQUE_VIOLATION");
             throw new ConflictException("Payment pipeline already initiated for this reservation", ErrorCode.CONFLICT);
         } finally {
-            timer.stop(meterRegistry.timer("seatflow.payments.intent.duration"));
+            safeRecordIntentDuration(timer);
         }
+    }
+
+    @Transactional
+    private Payment persistPayment(Payment payment) {
+        return paymentRepository.saveAndFlush(payment);
+    }
+
+    private void refreshExistingPaymentIfReservationTotalChanged(Payment payment,
+                                                                  UUID authenticatedUserId,
+                                                                  String customerEmailProof) {
+        // Older persisted test fixtures may not have Stripe identifiers. Keep their
+        // idempotent replay behavior intact; real payment rows always have both values.
+        if (payment.getStripePaymentIntentId() == null || payment.getAmount() == null) {
+            return;
+        }
+        if (payment.getStatus() == PaymentStatus.SUCCESS) {
+            return;
+        }
+
+        ReservationClientResponse reservation = getReservation(payment.getReservationId(), customerEmailProof);
+        if (!"PENDING".equalsIgnoreCase(reservation.status())) {
+            throw new ValidationException("Cannot refresh payment for reservation with status: " + reservation.status(),
+                    ErrorCode.INVALID_REQUEST);
+        }
+        if (reservation.expiresAt() == null || reservation.expiresAt().isBefore(Instant.now())) {
+            throw new ValidationException("Reservation hold has expired", ErrorCode.RESERVATION_EXPIRED);
+        }
+        if (reservation.userId() != null
+                && (authenticatedUserId == null || !reservation.userId().equals(authenticatedUserId))
+                && !UserContext.hasRole(SecurityRoles.ROLE_ADMIN)) {
+            throw new ResourceNotFoundException("Reservation", payment.getReservationId());
+        }
+
+        BigDecimal chargeAmount = resolveChargeAmount(reservation);
+        if (payment.getAmount().compareTo(chargeAmount) == 0) {
+            return;
+        }
+
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("reservationId", reservation.id().toString());
+        metadata.put("eventId", reservation.eventId().toString());
+        metadata.put("customerEmail", reservation.customerEmail());
+        if (reservation.userId() != null) {
+            metadata.put("userId", reservation.userId().toString());
+        }
+
+        StripeIntentResult stripeResult = stripePaymentGateway.updatePaymentIntent(
+                payment.getStripePaymentIntentId(),
+                chargeAmount,
+                payment.getCurrency(),
+                metadata,
+                reservation.customerEmail());
+        payment.setAmount(chargeAmount);
+        if (stripeResult.clientSecret() != null && !stripeResult.clientSecret().isBlank()) {
+            payment.setClientSecret(stripeResult.clientSecret());
+        }
+        persistPayment(payment);
+        log.info("Payment amount refreshed after reservation pricing update. paymentId={}, amount={}",
+                payment.getId(), chargeAmount);
+    }
+
+    private BigDecimal resolveChargeAmount(ReservationClientResponse reservation) {
+        List<SeatHoldClientDto> seats = reservation.seats();
+        if (seats != null && !seats.isEmpty()) {
+            BigDecimal seatTotal = seats.stream()
+                    .map(SeatHoldClientDto::price)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (seatTotal.signum() <= 0) {
+                throw new ValidationException("Reservation does not contain valid seat prices", ErrorCode.INVALID_REQUEST);
+            }
+            if (reservation.totalAmount() == null || reservation.totalAmount().compareTo(seatTotal) != 0) {
+                log.warn("Correcting reservation total from seat line items. reservationId={}, storedTotal={}, seatTotal={}",
+                        reservation.id(), reservation.totalAmount(), seatTotal);
+            }
+            return seatTotal;
+        }
+
+        if (reservation.totalAmount() == null || reservation.totalAmount().signum() <= 0) {
+            throw new ValidationException("Reservation total must be positive", ErrorCode.INVALID_REQUEST);
+        }
+        return reservation.totalAmount();
+    }
+
+    private ReservationClientResponse getReservation(UUID reservationId, String customerEmailProof) {
+        if (customerEmailProof == null || customerEmailProof.isBlank()) {
+            return reservationServiceClient.getReservation(reservationId);
+        }
+        return reservationServiceClient.getReservation(reservationId, customerEmailProof.trim());
     }
 
     @Override
     @Transactional(readOnly = true)
     public PaymentResponse getPaymentById(UUID paymentId, UUID authenticatedUserId, boolean isAdmin) {
+        return getPaymentById(paymentId, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentResponse getPaymentById(UUID paymentId,
+                                          UUID authenticatedUserId,
+                                          boolean isAdmin,
+                                          String customerEmailProof) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
 
-        assertAuthorized(payment, authenticatedUserId, isAdmin);
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        payment = syncPaymentStatusIfSucceeded(payment);
         return paymentMapper.toResponse(payment);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                                   TaxPreviewRequest request,
+                                                   UUID authenticatedUserId,
+                                                   boolean isAdmin) {
+        return calculateTaxPreview(paymentId, request, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    public TaxPreviewResponse calculateTaxPreview(UUID paymentId,
+                                                   TaxPreviewRequest request,
+                                                   UUID authenticatedUserId,
+                                                   boolean isAdmin,
+                                                   String customerEmailProof) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        StripeTaxResult result = stripePaymentGateway.calculateInclusiveTax(
+                payment.getAmount(),
+                payment.getCurrency(),
+                paymentId.toString(),
+                new TaxAddress(request.line1(), request.line2(), request.city(), request.state(),
+                        request.postalCode(), request.country()));
+
+        if (result != null && result.taxAmount() != null) {
+            payment.setTaxAmount(result.taxAmount());
+            payment.setNetAmount(payment.getAmount().subtract(result.taxAmount()));
+            paymentRepository.save(payment);
+        }
+
+        return new TaxPreviewResponse(result.taxAmount(), result.effectiveRate(), result.currency());
+    }
+
+    @Override
+    @Transactional
     public PaymentResponse getPaymentByReservationId(UUID reservationId, UUID authenticatedUserId, boolean isAdmin) {
+        return getPaymentByReservationId(reservationId, authenticatedUserId, isAdmin, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentResponse getPaymentByReservationId(UUID reservationId,
+                                                     UUID authenticatedUserId,
+                                                     boolean isAdmin,
+                                                     String customerEmailProof) {
         Payment payment = paymentRepository.findByReservationId(reservationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment for reservation", reservationId));
 
-        assertAuthorized(payment, authenticatedUserId, isAdmin);
+        assertAuthorized(payment, authenticatedUserId, isAdmin, customerEmailProof);
+        payment = syncPaymentStatusIfSucceeded(payment);
         return paymentMapper.toResponse(payment);
     }
 
-    private void assertAuthorized(Payment payment, UUID authenticatedUserId, boolean isAdmin) {
+    private Payment syncPaymentStatusIfSucceeded(Payment payment) {
+        if (payment.getStatus() == PaymentStatus.INITIATED && payment.getStripePaymentIntentId() != null) {
+            try {
+                com.stripe.model.PaymentIntent intent = stripePaymentGateway.retrievePaymentIntent(payment.getStripePaymentIntentId());
+                if (intent != null && "succeeded".equalsIgnoreCase(intent.getStatus())) {
+                    log.info("Synchronizing succeeded payment from Stripe gateway. paymentId={}, stripePaymentIntentId={}",
+                            payment.getId(), payment.getStripePaymentIntentId());
+
+                    BigDecimal taxAmount = payment.getTaxAmount() != null ? payment.getTaxAmount() : BigDecimal.ZERO;
+                    BigDecimal netAmount = payment.getAmount().subtract(taxAmount);
+
+                    payment.setStatus(PaymentStatus.SUCCESS);
+                    payment.setTaxAmount(taxAmount);
+                    payment.setNetAmount(netAmount);
+                    payment.setUpdatedAt(Instant.now());
+                    payment = paymentRepository.saveAndFlush(payment);
+
+                    PaymentCompletedEvent completedEvent = new PaymentCompletedEvent(
+                            payment.getId(),
+                            payment.getReservationId(),
+                            payment.getUserId(),
+                            payment.getCustomerEmail(),
+                            payment.getEventId(),
+                            payment.getAmount(),
+                            taxAmount,
+                            netAmount,
+                            payment.getCurrency(),
+                            payment.getStripePaymentIntentId(),
+                            Instant.now()
+                    );
+
+                    saveOutboxRecord("PaymentCompleted", payment.getId(), completedEvent);
+                    String committedCurrency = payment.getCurrency();
+                    AfterCommitMetrics.afterCommit(() -> {
+                        safeRecordPaymentProcessed("SUCCESS", committedCurrency, "CARD");
+                        safeIncrementLegacyCompleted();
+                    });
+                }
+            } catch (Exception ex) {
+                log.warn("Unable to sync payment status with Stripe for paymentId={}: {}", payment.getId(), ex.getMessage());
+            }
+        }
+        return payment;
+    }
+
+    private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
+        try {
+            EventEnvelope<?> base = EventEnvelope.of(
+                    eventType,
+                    aggregateId.toString(),
+                    CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
+                    (com.seatflow.common.events.DomainEvent) payload
+            );
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<?> envelope = base.withHeaders(headers);
+            JsonNode payloadNode = objectMapper.valueToTree(envelope);
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateId(aggregateId)
+                    .eventType(eventType)
+                    .payload(payloadNode)
+                    .build();
+            outboxEventRepository.save(outboxEvent);
+        } catch (Exception ex) {
+            log.error("Failed to save outbox event for eventType={}, aggregateId={}", eventType, aggregateId, ex);
+        }
+    }
+
+    private void assertAuthorized(Payment payment,
+                                  UUID authenticatedUserId,
+                                  boolean isAdmin,
+                                  String customerEmailProof) {
         if (isAdmin) {
             return;
         }
@@ -171,13 +425,14 @@ public class PaymentServiceImpl implements PaymentService {
             }
             return;
         }
-        // Guest payment (userId == null): accessible anonymously (guest checkout flow, ADR-001)
-        // or by an authenticated caller whose verified email matches the payment's customer email.
-        // This prevents an authenticated user from enumerating another guest's payment.
+        // Guest payment: require proof of the email used during checkout. An authenticated
+        // caller whose verified JWT email matches the payment also qualifies (ADR-001).
         String callerEmail = UserContext.getCurrentUserEmail().orElse(null);
-        boolean anonymous = authenticatedUserId == null && callerEmail == null;
-        boolean emailMatches = callerEmail != null && callerEmail.equalsIgnoreCase(payment.getCustomerEmail());
-        if (!anonymous && !emailMatches) {
+        boolean jwtEmailMatches = callerEmail != null
+                && callerEmail.equalsIgnoreCase(payment.getCustomerEmail());
+        boolean proofMatches = customerEmailProof != null
+                && customerEmailProof.trim().equalsIgnoreCase(payment.getCustomerEmail());
+        if (!jwtEmailMatches && !proofMatches) {
             throw new ResourceNotFoundException("Payment", payment.getId());
         }
     }
@@ -193,5 +448,43 @@ public class PaymentServiceImpl implements PaymentService {
         int updatedCount = paymentRepository.updateUserIdForCustomerEmail(userId, customerEmail, Instant.now());
         log.info("Claimed historical guest payments. userId={}, email={}, count={}", userId, customerEmail, updatedCount);
         return updatedCount;
+    }
+
+    // --- Bounded metrics helpers — never throw ---
+
+    private void safeRecordPaymentProcessed(String status, String currency, String paymentMethod) {
+        try {
+            Tags tags = MetricTagPolicy.paymentProcessed(status, currency, paymentMethod);
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_PROCESSED).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementLegacyCompleted() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_COMPLETED).tag("status", "SUCCESS").register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementPaymentIntentCreated() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_INTENT_CREATED).tag("status", "INITIATED").register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementPaymentConflict(String reason) {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_CONFLICTS).tag("reason", reason).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeRecordIntentDuration(Timer.Sample sample) {
+        try {
+            sample.stop(Timer.builder(SeatFlowMetricNames.PAYMENTS_INTENT_DURATION).register(meterRegistry));
+        } catch (Exception ignored) {
+        }
     }
 }

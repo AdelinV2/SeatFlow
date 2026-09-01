@@ -1,0 +1,49 @@
+@if (count() > 0) {
+  <aside class="selection-dock" aria-label="Selected seats summary" aria-live="polite">
+    <div class="selection-content">
+      <div class="seat-list">
+        <div class="count-badge-wrapper">
+          <span class="count-badge">
+            <span class="badge-dot"></span>
+            {{ count() }} / {{ maxSeats() }} Seats
+          </span>
+        </div>
+        <div class="seat-pills-container" aria-label="Selected seats">
+          <div class="seat-pills">
+            @for (seat of selectedSeats(); track seat.id) {
+              <div class="seat-pill">
+                <span class="pill-code">{{ seat.rowLabel }}-{{ seat.seatNumber }}</span>
+                <button
+                  type="button"
+                  class="pill-remove-btn"
+                  (click)="seatRemoved.emit(seat)"
+                  [attr.aria-label]="'Remove row ' + seat.rowLabel + ', seat ' + seat.seatNumber"
+                >
+                  <svg viewBox="0 0 24 24" class="remove-icon" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="checkout-summary">
+        <div class="total">
+          <span>Total amount</span>
+          <strong>{{ totalPrice() | sfCurrency: currencyCode() }}</strong>
+        </div>
+        <app-tactile-button
+          variant="primary"
+          size="md"
+          [loading]="isCreatingHold()"
+          [disabled]="count() === 0 || isCreatingHold()"
+          (clicked)="checkoutTriggered.emit()"
+        >
+          Hold Seats &amp; Proceed →
+        </app-tactile-button>
+      </div>
+    </div>
+  </aside>
+}

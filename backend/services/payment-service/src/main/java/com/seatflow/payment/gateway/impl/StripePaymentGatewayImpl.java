@@ -5,10 +5,16 @@ import com.seatflow.common.domain.exception.BusinessException;
 import com.seatflow.payment.config.StripeConfig;
 import com.seatflow.payment.gateway.StripePaymentGateway;
 import com.seatflow.payment.gateway.dto.StripeIntentResult;
+import com.seatflow.payment.gateway.dto.StripeTaxResult;
+import com.seatflow.payment.gateway.dto.TaxAddress;
+import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.tax.Calculation;
 import com.stripe.net.RequestOptions;
+import com.stripe.param.tax.CalculationCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.PaymentIntentUpdateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,6 +29,7 @@ import java.util.Map;
 public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
     private final StripeConfig stripeConfig;
+    private final StripeClient stripeClient;
 
     @Override
     public StripeIntentResult createPaymentIntent(
@@ -32,6 +39,8 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
             Map<String, String> metadata,
             String customerEmail) {
 
+        validateStripeTestConfiguration();
+
         try {
             long amountInCents = amount.multiply(BigDecimal.valueOf(100))
                     .setScale(0, RoundingMode.HALF_UP)
@@ -39,25 +48,23 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
 
             PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
                     .setAmount(amountInCents)
-                    .setCurrency(currency.toLowerCase())
+                    .setCurrency(currency.toLowerCase(java.util.Locale.ROOT))
                     .putAllMetadata(metadata)
                     .setAutomaticPaymentMethods(
                             PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                     .setEnabled(true)
                                     .build()
-                    )
-                    .putExtraParam("automatic_tax", Map.of("enabled", true)); // Stripe Tax calculation (ADR-004)
+                    );
 
             if (customerEmail != null && !customerEmail.isBlank()) {
                 paramsBuilder.setReceiptEmail(customerEmail);
             }
 
             RequestOptions requestOptions = RequestOptions.builder()
-                    .setApiKey(stripeConfig.getApiKey())
                     .setIdempotencyKey(idempotencyKey)
                     .build();
 
-            PaymentIntent paymentIntent = PaymentIntent.create(paramsBuilder.build(), requestOptions);
+            PaymentIntent paymentIntent = stripeClient.paymentIntents().create(paramsBuilder.build(), requestOptions);
             log.info("Stripe PaymentIntent created. paymentIntentId={}, status={}",
                     paymentIntent.getId(), paymentIntent.getStatus());
 
@@ -68,9 +75,128 @@ public class StripePaymentGatewayImpl implements StripePaymentGateway {
             );
 
         } catch (StripeException ex) {
-            log.error("Stripe API exception while creating PaymentIntent. idempotencyKey={}", idempotencyKey, ex);
+            log.error("Stripe API exception while creating PaymentIntent.", ex);
             String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
             throw new BusinessException("Payment gateway failure: " + message, ErrorCode.PAYMENT_FAILED, 502);
+        }
+    }
+
+    @Override
+    public StripeIntentResult updatePaymentIntent(
+            String paymentIntentId,
+            BigDecimal amount,
+            String currency,
+            Map<String, String> metadata,
+            String customerEmail) {
+
+        validateStripeTestConfiguration();
+
+        try {
+            long amountInCents = amount.multiply(BigDecimal.valueOf(100))
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .longValue();
+            PaymentIntent paymentIntent = stripeClient.paymentIntents().retrieve(paymentIntentId);
+            PaymentIntentUpdateParams.Builder paramsBuilder = PaymentIntentUpdateParams.builder()
+                    .setAmount(amountInCents)
+                    .setCurrency(currency.toLowerCase(java.util.Locale.ROOT))
+                    .putAllMetadata(metadata);
+            if (customerEmail != null && !customerEmail.isBlank()) {
+                paramsBuilder.setReceiptEmail(customerEmail);
+            }
+            PaymentIntent updated = stripeClient.paymentIntents().update(paymentIntent.getId(), paramsBuilder.build());
+            log.info("Stripe PaymentIntent updated. paymentIntentId={}, amount={}, status={}",
+                    updated.getId(), amount, updated.getStatus());
+            return new StripeIntentResult(updated.getId(), updated.getClientSecret(), updated.getStatus());
+        } catch (StripeException ex) {
+            log.error("Stripe API exception while updating PaymentIntent. paymentIntentId={}", paymentIntentId, ex);
+            String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
+            throw new BusinessException("Payment gateway failure: " + message, ErrorCode.PAYMENT_FAILED, 502);
+        }
+    }
+
+    @Override
+    public StripeTaxResult calculateInclusiveTax(BigDecimal amount,
+                                                 String currency,
+                                                 String reference,
+                                                 TaxAddress address) {
+        validateStripeTestConfiguration();
+        try {
+            long amountInCents = amount.multiply(BigDecimal.valueOf(100))
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .longValue();
+            CalculationCreateParams.CustomerDetails.Address stripeAddress =
+                    CalculationCreateParams.CustomerDetails.Address.builder()
+                            .setLine1(address.line1())
+                            .setLine2(address.line2())
+                            .setCity(address.city())
+                            .setState(address.state())
+                            .setPostalCode(address.postalCode())
+                            .setCountry(address.country().toUpperCase(java.util.Locale.ROOT))
+                            .build();
+            CalculationCreateParams params = CalculationCreateParams.builder()
+                    .setCurrency(currency.toLowerCase(java.util.Locale.ROOT))
+                    .setCustomerDetails(CalculationCreateParams.CustomerDetails.builder()
+                            .setAddress(stripeAddress)
+                            .setAddressSource(CalculationCreateParams.CustomerDetails.AddressSource.BILLING)
+                            .build())
+                    .addLineItem(CalculationCreateParams.LineItem.builder()
+                            .setAmount(amountInCents)
+                            .setQuantity(1L)
+                            .setReference(reference)
+                            .setTaxBehavior(CalculationCreateParams.LineItem.TaxBehavior.INCLUSIVE)
+                            .build())
+                    .build();
+            Calculation calculation = stripeClient.tax().calculations().create(params);
+            long taxCents = calculation.getTaxAmountInclusive() == null ? 0L : calculation.getTaxAmountInclusive();
+            BigDecimal taxAmount = BigDecimal.valueOf(taxCents, 2);
+            BigDecimal netAmount = amount.subtract(taxAmount);
+            BigDecimal effectiveRate = netAmount.signum() > 0
+                    ? taxAmount.multiply(BigDecimal.valueOf(100)).divide(netAmount, 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            return new StripeTaxResult(taxAmount, effectiveRate, currency.toUpperCase(java.util.Locale.ROOT));
+        } catch (StripeException ex) {
+            log.warn("Stripe Tax preview failed. reference={}", reference, ex);
+            String message = ex.getUserMessage() != null ? ex.getUserMessage() : ex.getMessage();
+            throw new BusinessException("Stripe Tax preview failed: " + message, ErrorCode.PAYMENT_FAILED, 502);
+        }
+    }
+
+    @Override
+    public PaymentIntent retrievePaymentIntent(String paymentIntentId) {
+        validateStripeTestConfiguration();
+        try {
+            return stripeClient.paymentIntents().retrieve(paymentIntentId);
+        } catch (StripeException ex) {
+            log.warn("Stripe retrieve PaymentIntent failed for id={}: {}", paymentIntentId, ex.getMessage());
+            return null;
+        }
+    }
+
+    private void validateStripeTestConfiguration() {
+        if (stripeClient == null) {
+            throw new BusinessException(
+                    "Stripe client is not initialized. Check payment-service Stripe configuration.",
+                    ErrorCode.PAYMENT_FAILED,
+                    502);
+        }
+        String apiKey = stripeConfig.getApiKey();
+        String normalized = apiKey == null ? "" : apiKey.trim();
+        String lowerCase = normalized.toLowerCase(java.util.Locale.ROOT);
+        boolean placeholder = lowerCase.contains("dummy")
+                || lowerCase.contains("mock")
+                || lowerCase.contains("replace")
+                || lowerCase.contains("your_");
+        if (normalized.startsWith("pk_test_")) {
+            throw new BusinessException(
+                    "Stripe backend is configured with a publishable key (pk_test_...). Set STRIPE_API_KEY to the Stripe secret key (sk_test_...) in payment-service/.env and restart the service.",
+                    ErrorCode.PAYMENT_FAILED,
+                    502);
+        }
+        if (!normalized.startsWith("sk_test_") || placeholder) {
+            throw new BusinessException(
+                    "Stripe test mode is not configured. Set STRIPE_API_KEY to a valid sk_test_ key in payment-service/.env and restart the service.",
+                    ErrorCode.PAYMENT_FAILED,
+                    502);
         }
     }
 }

@@ -1,0 +1,385 @@
+<div class="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+  <div
+    class="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl backdrop-blur-xl lg:grid-cols-2 animate-fade-in-up"
+  >
+    <!-- Left Branding Pane (Desktop Only) -->
+    <div
+      class="hidden lg:flex flex-col justify-between p-10 bg-gradient-to-br from-indigo-950 via-slate-900 to-violet-950 text-white relative overflow-hidden"
+    >
+      <!-- Ambient Glowing Blobs -->
+      <div
+        class="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"
+        aria-hidden="true"
+      ></div>
+      <div
+        class="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none"
+        aria-hidden="true"
+      ></div>
+
+      <!-- Top Branding -->
+      <div class="relative z-10">
+        <div class="flex items-center gap-3">
+          <span
+            class="flex size-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-400 text-lg font-black text-white shadow-lg shadow-indigo-500/30"
+            aria-hidden="true"
+          >
+            S
+          </span>
+          <span class="text-2xl font-bold tracking-tight text-white">SeatFlow</span>
+        </div>
+        <div class="mt-4 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
+          <span class="size-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+          Join the SeatFlow Community
+        </div>
+      </div>
+
+      <!-- Middle Quote & Features -->
+      <div class="relative z-10 my-8">
+        <h2 class="text-2xl font-bold leading-snug tracking-tight sm:text-3xl text-white">
+          Book your favorite seats.<br />
+          <span class="bg-gradient-to-r from-indigo-300 to-violet-300 bg-clip-text text-transparent">
+            Simple, fast, and 100% secure.
+          </span>
+        </h2>
+
+        <ul class="mt-8 space-y-4 text-sm text-slate-300">
+          <li class="flex items-center gap-3">
+            <div class="flex size-6 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300">
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <span>Integrated digital wallet with instant ticket access</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <div class="flex size-6 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300">
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <span>Real-time notifications for concerts and events</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <div class="flex size-6 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300">
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <span>Seamless ticket transfers to friends and family</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Footer / Trust badge -->
+      <div class="relative z-10 text-xs text-slate-400 flex items-center justify-between border-t border-white/10 pt-4">
+        <span>© 2026 SeatFlow Inc.</span>
+        <span>GDPR Compliant & AES-256 Encryption</span>
+      </div>
+    </div>
+
+    <!-- Right Form Pane -->
+    <div class="flex flex-col justify-center p-6 sm:p-10 md:p-12">
+      <!-- Mobile Logo Header -->
+      <div class="mb-6 flex items-center gap-2.5 lg:hidden">
+        <span
+          class="flex size-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-base font-black text-white shadow-md shadow-indigo-600/20"
+        >
+          S
+        </span>
+        <span class="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">SeatFlow</span>
+      </div>
+
+      @if (isSuccess()) {
+        <!-- Celebratory Success State -->
+        <div class="text-center py-6 animate-scale-in">
+          <div class="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+            <svg class="size-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold text-[var(--color-text-primary)]">Account created successfully!</h2>
+          <p class="mt-2 text-sm text-[var(--color-text-secondary)]">
+            Check your email to activate your account or sign in directly to start booking seats.
+          </p>
+          <div class="mt-8">
+            <a
+              routerLink="/auth/login"
+              [queryParams]="route.snapshot.queryParams"
+              class="animate-sheen btn-spring touch-target inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--color-primary)] px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-[var(--color-primary-hover)]"
+            >
+              <span>Proceed to Sign In</span>
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      } @else {
+        <!-- Heading -->
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] sm:text-3xl">
+            Create an Account
+          </h1>
+          <p class="mt-1.5 text-sm text-[var(--color-text-secondary)]">
+            Fill in your details to get started with booking events.
+          </p>
+        </div>
+
+        <!-- Error Alert -->
+        @if (errorMessage()) {
+          <div
+            class="mb-5 flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-400 animate-scale-in"
+            role="alert"
+          >
+            <svg class="size-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <div class="flex-1 font-medium">{{ errorMessage() }}</div>
+          </div>
+        }
+
+        <!-- Google OAuth CTA -->
+        <button
+          type="button"
+          class="btn-spring touch-target flex w-full items-center justify-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm font-semibold text-[var(--color-text-primary)] shadow-sm hover:bg-[var(--color-canvas-subtle)] focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          [disabled]="isGoogleLoading() || isLoading()"
+          (click)="signInWithGoogle()"
+        >
+          @if (isGoogleLoading()) {
+            <svg class="size-5 animate-spin text-[var(--color-primary)]" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8H4z"></path>
+            </svg>
+            <span>Connecting with Google...</span>
+          } @else {
+            <svg class="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            <span>Sign up quickly with Google</span>
+          }
+        </button>
+
+        <!-- Divider -->
+        <div class="relative my-5 flex items-center justify-center">
+          <div class="w-full border-t border-[var(--color-border)]"></div>
+          <span class="absolute bg-[var(--color-surface)] px-3 text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+            or fill out the form
+          </span>
+        </div>
+
+        <!-- Form -->
+        <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="space-y-4" novalidate>
+          <!-- Full Name Field -->
+          <div>
+            <label for="name" class="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
+              Full Name
+            </label>
+            <input
+              id="name"
+              type="text"
+              formControlName="name"
+              placeholder="e.g. Alex Morgan"
+              autocomplete="name"
+              class="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] transition-all focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+              [class.border-rose-500]="registerForm.controls.name.invalid && registerForm.controls.name.touched"
+            />
+            @if (registerForm.controls.name.invalid && registerForm.controls.name.touched) {
+              <p class="mt-1.5 text-xs text-rose-500">
+                @if (registerForm.controls.name.errors?.['required']) {
+                  Full name is required.
+                } @else if (registerForm.controls.name.errors?.['minlength']) {
+                  Full name must be at least 2 characters.
+                }
+              </p>
+            }
+          </div>
+
+          <!-- Email Field -->
+          <div>
+            <label for="email" class="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
+              Email Address
+            </label>
+            <input
+              id="email"
+              type="email"
+              formControlName="email"
+              placeholder="name@seatflow.com"
+              autocomplete="email"
+              class="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] transition-all focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+              [class.border-rose-500]="registerForm.controls.email.invalid && registerForm.controls.email.touched"
+            />
+            @if (registerForm.controls.email.invalid && registerForm.controls.email.touched) {
+              <p class="mt-1.5 text-xs text-rose-500">
+                @if (registerForm.controls.email.errors?.['required']) {
+                  Email address is required.
+                } @else if (registerForm.controls.email.errors?.['email']) {
+                  Please enter a valid email address.
+                }
+              </p>
+            }
+          </div>
+
+          <!-- Password Field -->
+          <div>
+            <label for="password" class="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
+              Password (min 8 characters)
+            </label>
+            <div class="relative">
+              <input
+                id="password"
+                [type]="showPassword() ? 'text' : 'password'"
+                formControlName="password"
+                placeholder="••••••••"
+                autocomplete="new-password"
+                class="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 pr-12 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] transition-all focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+                [class.border-rose-500]="registerForm.controls.password.invalid && registerForm.controls.password.touched"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex items-center px-3.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] focus:outline-none"
+                [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+                (click)="togglePasswordVisibility()"
+              >
+                @if (showPassword()) {
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                } @else {
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                }
+              </button>
+            </div>
+            @if (registerForm.controls.password.invalid && registerForm.controls.password.touched) {
+              <p class="mt-1.5 text-xs text-rose-500">
+                @if (registerForm.controls.password.errors?.['required']) {
+                  Password is required.
+                } @else if (registerForm.controls.password.errors?.['minlength']) {
+                  Password must be at least 8 characters.
+                }
+              </p>
+            }
+          </div>
+
+          <!-- Confirm Password Field -->
+          <div>
+            <label for="confirmPassword" class="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
+              Confirm Password
+            </label>
+            <div class="relative">
+              <input
+                id="confirmPassword"
+                [type]="showConfirmPassword() ? 'text' : 'password'"
+                formControlName="confirmPassword"
+                placeholder="••••••••"
+                autocomplete="new-password"
+                class="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 pr-12 text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] transition-all focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+                [class.border-rose-500]="registerForm.controls.confirmPassword.invalid && registerForm.controls.confirmPassword.touched"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex items-center px-3.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] focus:outline-none"
+                [attr.aria-label]="showConfirmPassword() ? 'Hide confirm password' : 'Show confirm password'"
+                (click)="toggleConfirmPasswordVisibility()"
+              >
+                @if (showConfirmPassword()) {
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                } @else {
+                  <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                }
+              </button>
+            </div>
+            @if (registerForm.controls.confirmPassword.invalid && registerForm.controls.confirmPassword.touched) {
+              <p class="mt-1.5 text-xs text-rose-500">
+                @if (registerForm.controls.confirmPassword.errors?.['required']) {
+                  Confirming your password is required.
+                } @else if (registerForm.controls.confirmPassword.errors?.['passwordMismatch']) {
+                  Passwords do not match.
+                }
+              </p>
+            }
+          </div>
+
+          <!-- Terms and Privacy Checkbox -->
+          <div class="pt-1">
+            <label class="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                formControlName="agreeTerms"
+                class="mt-1 size-4.5 rounded-lg border-[var(--color-border)] text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                I agree to SeatFlow's <a routerLink="/" class="text-[var(--color-primary)] font-medium hover:underline">Terms &amp; Conditions</a> and <a routerLink="/" class="text-[var(--color-primary)] font-medium hover:underline">Privacy Policy</a>.
+              </span>
+            </label>
+            @if (registerForm.controls.agreeTerms.invalid && registerForm.controls.agreeTerms.touched) {
+              <p class="mt-1.5 text-xs text-rose-500">
+                You must accept the terms and conditions to proceed.
+              </p>
+            }
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-3">
+            <button
+              type="submit"
+              class="animate-sheen btn-spring touch-target flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-primary)] px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-[var(--color-primary-hover)] focus:outline-none focus:ring-4 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+              [disabled]="isLoading() || isGoogleLoading()"
+            >
+              @if (isLoading()) {
+                <svg class="size-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v8H4z"></path>
+                </svg>
+                <span>Creating account...</span>
+              } @else {
+                <span>Create Account</span>
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              }
+            </button>
+          </div>
+        </form>
+
+        <!-- Bottom Switch to Login -->
+        <p class="mt-6 text-center text-sm text-[var(--color-text-secondary)]">
+          Already have an account?
+          <a
+            routerLink="/auth/login"
+            [queryParams]="route.snapshot.queryParams"
+            class="font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            Sign in
+          </a>
+        </p>
+      }
+    </div>
+  </div>
+</div>

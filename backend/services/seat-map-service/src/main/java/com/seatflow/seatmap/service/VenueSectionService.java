@@ -23,4 +23,10 @@ public interface VenueSectionService {
      * Throws ResourceNotFoundException if seat or section does not exist.
      */
     SeatResponse updateSeatStatus(UUID venueId, UUID sectionId, UUID seatId, UpdateSeatStatusRequest request);
+
+    /**
+     * Delete a section and all its associated seats from a venue.
+     * Throws ResourceNotFoundException if venue or section does not exist.
+     */
+    void deleteSection(UUID venueId, UUID sectionId);
 }

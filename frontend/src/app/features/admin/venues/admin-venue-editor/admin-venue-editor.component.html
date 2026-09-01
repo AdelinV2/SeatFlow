@@ -1,0 +1,252 @@
+<div class="admin-venue-editor max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Breadcrumb Navigation -->
+  <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)] mb-4">
+    <a routerLink="/admin" class="hover:text-[var(--color-primary)] transition-colors">Admin Portal</a>
+    <span>/</span>
+    <a routerLink="/admin/venues" class="hover:text-[var(--color-primary)] transition-colors">Venues</a>
+    <span>/</span>
+    <span class="text-[var(--color-text-primary)]">
+      {{ isEditMode() ? 'Edit Venue' : 'New Venue' }}
+    </span>
+  </div>
+
+  <!-- Header Banner -->
+  <div class="mb-8 pb-6 border-b border-[var(--color-border)]">
+    <h1 class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+      {{ isEditMode() ? 'Edit Venue Details' : 'Create New Venue' }}
+    </h1>
+    <p class="mt-1 text-sm text-[var(--color-text-muted)]">
+      Configure venue identification, building capacity limits, and geographic coordinates via free OpenStreetMap Nominatim.
+    </p>
+  </div>
+
+  <!-- Error Alert Banner -->
+  @if (errorMessage()) {
+    <div class="mb-6 p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-sm flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>{{ errorMessage() }}</span>
+      </div>
+      <button (click)="errorMessage.set(null)" class="text-xs font-bold hover:underline">Dismiss</button>
+    </div>
+  }
+
+  <!-- Venue Form & Map Grid -->
+  <form [formGroup]="venueForm" (ngSubmit)="onSubmit()" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <!-- Left Column: Form Fields (7 cols) -->
+    <div class="lg:col-span-7 space-y-6">
+      <div class="p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs space-y-5">
+        <h2 class="text-base font-bold text-[var(--color-text-primary)] flex items-center gap-2 border-b border-[var(--color-border)] pb-3">
+          <svg class="size-4.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          </svg>
+          General Venue Information
+        </h2>
+
+        <!-- Venue Name -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5" for="name">
+            Venue Name *
+          </label>
+          <input
+            id="name"
+            type="text"
+            formControlName="name"
+            placeholder="e.g. Grand Theatre, National Arena"
+            class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          />
+          @if (venueForm.get('name')?.touched && venueForm.get('name')?.errors) {
+            <p class="text-xs text-rose-500 mt-1">Venue name is required (min 2 characters).</p>
+          }
+        </div>
+
+        <!-- Total Building Capacity -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5" for="capacity">
+            Max Building / Legal Capacity *
+          </label>
+          <input
+            id="capacity"
+            type="number"
+            formControlName="capacity"
+            placeholder="e.g. 4000"
+            class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          />
+          <p class="text-[11px] text-[var(--color-text-muted)] mt-1">
+            Total legal maximum audience capacity allowed in this venue.
+          </p>
+        </div>
+
+        <!-- City & Country -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5" for="city">
+              City *
+            </label>
+            <input
+              id="city"
+              type="text"
+              formControlName="city"
+              (blur)="autoGeocodeCurrentVenue()"
+              placeholder="e.g. London, New York, Paris"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5" for="country">
+              Country *
+            </label>
+            <input
+              id="country"
+              type="text"
+              formControlName="country"
+              (blur)="autoGeocodeCurrentVenue()"
+              placeholder="e.g. United Kingdom, United States"
+              class="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+            />
+          </div>
+        </div>
+
+        <!-- Address Search Autocomplete (OpenStreetMap Nominatim) -->
+        <div class="relative">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]" for="address">
+              Street Address *
+              <span class="text-[10px] font-normal text-indigo-500 normal-case ml-1">(Live OpenStreetMap Geocoding)</span>
+            </label>
+            <button
+              type="button"
+              (click)="autoGeocodeCurrentVenue()"
+              class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+            >
+              <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+              <span>Locate on Map</span>
+            </button>
+          </div>
+
+          <div class="relative">
+            <input
+              id="address"
+              type="text"
+              formControlName="address"
+              (input)="onAddressInput($event)"
+              (blur)="onAddressBlur(); autoGeocodeCurrentVenue()"
+              placeholder="Start typing street address or venue name..."
+              autocomplete="off"
+              class="w-full pl-4 pr-10 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+            />
+            @if (isSearchingAddress()) {
+              <div class="absolute right-3 top-3 text-indigo-500 animate-spin">
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                  <path d="M12 2a10 10 0 0 1 10 10"/>
+                </svg>
+              </div>
+            }
+          </div>
+
+          <!-- Nominatim Autocomplete Suggestions Dropdown -->
+          @if (searchSuggestions().length > 0) {
+            <div class="absolute left-0 right-0 top-full mt-1 z-30 max-h-56 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl p-1">
+              @for (item of searchSuggestions(); track item.placeId) {
+                <button
+                  type="button"
+                  (mousedown)="selectAddressSuggestion(item)"
+                  class="w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-primary)] transition-colors flex items-start gap-2"
+                >
+                  <svg class="size-4 text-indigo-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <span class="truncate">{{ item.displayName }}</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Coordinates Display -->
+        <div class="grid grid-cols-2 gap-4 pt-2 border-t border-[var(--color-border)] text-xs text-[var(--color-text-muted)]">
+          <div>
+            <span class="font-bold">Latitude:</span> {{ venueForm.value.latitude }}
+          </div>
+          <div>
+            <span class="font-bold">Longitude:</span> {{ venueForm.value.longitude }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-3">
+        <button
+          type="submit"
+          [disabled]="isSaving() || venueForm.invalid"
+          class="btn-spring flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white shadow-md shadow-indigo-600/25 transition-all"
+        >
+          @if (isSaving()) {
+            <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+            <span>Saving Venue...</span>
+          } @else {
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            <span>{{ isEditMode() ? 'Save Changes' : 'Create & Proceed to Seat Designer' }}</span>
+          }
+        </button>
+
+        <a
+          routerLink="/admin/venues"
+          class="btn-spring px-5 py-3 rounded-xl font-bold text-sm border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)] transition-all"
+        >
+          Cancel
+        </a>
+      </div>
+    </div>
+
+    <!-- Right Column: Interactive Leaflet Map (5 cols) -->
+    <div class="lg:col-span-5">
+      <div class="sticky top-24 p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-1.5">
+            <svg class="size-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+              <line x1="8" x2="8" y1="2" y2="18"/>
+              <line x1="16" x2="16" y1="6" y2="22"/>
+            </svg>
+            Interactive Venue Pin
+          </h3>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            OpenStreetMap
+          </span>
+        </div>
+
+        <p class="text-xs text-[var(--color-text-muted)]">
+          Drag the pin or click on the map to pinpoint exact entrance coordinates.
+        </p>
+
+        <!-- Leaflet Map Viewport Container -->
+        <div class="venue-editor-map-wrapper relative rounded-xl overflow-hidden border border-[var(--color-border)] h-80 sm:h-96">
+          <div #mapContainer class="w-full h-full"></div>
+        </div>
+
+        <div class="text-[11px] text-[var(--color-text-muted)] flex items-center justify-between pt-1">
+          <span>Coordinates sync live with form</span>
+          <span class="font-mono text-indigo-500">{{ venueForm.value.latitude }}, {{ venueForm.value.longitude }}</span>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

@@ -72,7 +72,10 @@ We establish a dedicated **Staff Role & Gate Scanner Architecture**:
 4. **Dual-Compatible QR Code Payload (Deep-Link Standard):**
    - QR code data contains the deep-link URL: `https://seatflow.app/tickets/guest/{ticketCode}`.
    - **Attendee Flow:** Scanning with native iOS/Android camera opens the mobile web viewer (`GuestTicketComponent`).
-   - **Staff Flow:** The dedicated Angular scanner route (`/scanner`, protected by `staff.guard.ts`) activates the device camera, detects the QR code, extracts the `ticketCode`, and invokes `POST /api/scanner/tickets/validate`.
+   - **Staff Flow:** The dedicated Angular scanner route (`/scanner`, protected by `staff.guard.ts`) activates the device camera, detects the QR code, extracts the `ticketCode`, and invokes `POST /api/scanner/tickets/validate`. The interface implements a **3-Color Sensory Feedback Matrix**:
+      - 🟢 **SUCCESS (Emerald):** Valid ticket, entry granted, pleasant confirmation chime, displays attendee name, section, row, and seat number.
+      - 🟡 **ALREADY_USED (Amber):** Ticket already scanned, double warning beep, displays timestamp and gate device of initial scan.
+      - 🔴 **INVALID / CANCELLED (Rose):** Invalid or revoked ticket, error buzz tone, displays failure reason.
 
 5. **Discrete Ticket Entity per Physical Seat:**
    - Every individual seat purchased within a reservation produces a unique `Ticket` entity with its own `ticket_code`, distinct QR code image, and independent entry audit record in `ticket_validations`.

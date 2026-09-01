@@ -6,4 +6,5 @@ import java.util.UUID;
 
 public interface ReservationServiceClient {
     Optional<ReservationClientResponse> getReservationById(UUID reservationId);
+    Optional<ReservationClientResponse> getReservationById(UUID reservationId, String customerEmail);
 }

@@ -3,13 +3,13 @@ package com.seatflow.realtime.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
-import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TicketEventListener {
 
-    private final SeatStatusBroadcaster seatStatusBroadcaster;
+    private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
             topics = EventTopics.TICKET_EVENTS,
@@ -27,40 +28,24 @@ public class TicketEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleTicketEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
-            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
-            return;
-        }
-
-        String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
-        CorrelationContext.setCorrelationId(correlationId);
-        MDC.put("correlationId", correlationId);
-        if (envelope.eventId() != null) {
-            MDC.put("traceId", envelope.eventId());
-        }
-
-        try {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.TICKET_EVENTS)) {
+            if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+                log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
+                return;
+            }
             log.info("Received ticket event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
-
             if ("TicketIssued".equals(envelope.eventType())) {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
-                seatStatusBroadcaster.broadcastSeatStatus(
-                        event.eventId(),
-                        event.seatId(),
-                        SeatStatus.SOLD
-                );
+                realtimeFanOutPublisher.publish(envelope.eventId(),
+                        SeatStatusUpdateMessage.of(event.eventId(), event.seatId(), SeatStatus.SOLD));
             } else {
                 log.debug("Ignoring ticket event type: {}", envelope.eventType());
             }
         } catch (Exception ex) {
             log.error("Failed to process ticket event: type={}, eventId={}: {}",
-                    envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
+                    envelope != null ? envelope.eventType() : "null", envelope != null ? envelope.eventId() : "null", ex.getMessage(), ex);
             throw ex;
-        } finally {
-            MDC.remove("correlationId");
-            MDC.remove("traceId");
-            CorrelationContext.clear();
         }
     }
 

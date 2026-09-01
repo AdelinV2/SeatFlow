@@ -1,0 +1,31 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.qr-dialog-shell {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.25), transparent 55%),
+    #0f172a;
+}
+
+.qr-dialog-content {
+  max-height: min(75vh, 38rem);
+  box-sizing: border-box;
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+
+.qr-dialog-actions {
+  background: transparent !important;
+}
+
+.qr-code-frame {
+  box-shadow:
+    0 20px 35px -10px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(99, 102, 241, 0.2);
+}

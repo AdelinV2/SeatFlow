@@ -33,12 +33,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         // Public reservation creation & availability (Hybrid Guest Flow - ADR-001)
                         .requestMatchers(HttpMethod.POST, "/api/reservations").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/reservations/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reservations/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reservations/events/*/availability").permitAll()
-                        // Documentation & Actuator
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-                                "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                        // Documentation
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/prometheus").hasAuthority("SCOPE_metrics.read")
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**").hasRole("ADMIN")
                         // All other routes require authentication
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->

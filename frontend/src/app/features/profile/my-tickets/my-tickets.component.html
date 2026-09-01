@@ -1,0 +1,241 @@
+<div class="min-h-screen py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-8 animate-fade-in-up">
+  <!-- Page Header & Title -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-border)] pb-6">
+    <div class="space-y-1">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+          Digital Wallet
+        </span>
+        <span class="text-xs text-[var(--color-text-muted)]">•</span>
+        <span class="text-xs text-[var(--color-text-muted)]">{{ allTickets().length }} Total Passes</span>
+      </div>
+      <h1 class="text-3xl font-black tracking-tight text-[var(--color-text-primary)]">
+        My Tickets & Passes
+      </h1>
+      <p class="text-xs sm:text-sm text-[var(--color-text-secondary)]">
+        All your digital tickets, seat assignments, and scannable gate passes in one secure place.
+      </p>
+    </div>
+
+    <a routerLink="/events">
+      <app-tactile-button variant="secondary" size="md">
+        + Browse More Events
+      </app-tactile-button>
+    </a>
+  </div>
+
+  <!-- Tab Filter Switcher -->
+  <div class="flex items-center gap-2 border-b border-[var(--color-border)] pb-4" role="tablist" aria-label="Ticket filter tabs">
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'upcoming'"
+      class="btn-spring flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all"
+      [class.bg-indigo-600]="activeTab() === 'upcoming'"
+      [class.text-white]="activeTab() === 'upcoming'"
+      [class.shadow-md]="activeTab() === 'upcoming'"
+      [class.shadow-indigo-500/25]="activeTab() === 'upcoming'"
+      [class.bg-[var(--color-surface)]]="activeTab() !== 'upcoming'"
+      [class.text-[var(--color-text-secondary)]]="activeTab() !== 'upcoming'"
+      [class.border]="activeTab() !== 'upcoming'"
+      [class.border-[var(--color-border)]]="activeTab() !== 'upcoming'"
+      (click)="setTab('upcoming')"
+    >
+      <span>Upcoming Events</span>
+      <span
+        class="size-5 rounded-full text-[10px] flex items-center justify-center font-extrabold"
+        [class.bg-white/20]="activeTab() === 'upcoming'"
+        [class.text-white]="activeTab() === 'upcoming'"
+        [class.bg-indigo-500/15]="activeTab() !== 'upcoming'"
+        [class.text-indigo-600]="activeTab() !== 'upcoming'"
+        [class.dark:text-indigo-400]="activeTab() !== 'upcoming'"
+      >
+        {{ upcomingTickets().length }}
+      </span>
+    </button>
+
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="activeTab() === 'past'"
+      class="btn-spring flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition-all"
+      [class.bg-indigo-600]="activeTab() === 'past'"
+      [class.text-white]="activeTab() === 'past'"
+      [class.shadow-md]="activeTab() === 'past'"
+      [class.shadow-indigo-500/25]="activeTab() === 'past'"
+      [class.bg-[var(--color-surface)]]="activeTab() !== 'past'"
+      [class.text-[var(--color-text-secondary)]]="activeTab() !== 'past'"
+      [class.border]="activeTab() !== 'past'"
+      [class.border-[var(--color-border)]]="activeTab() !== 'past'"
+      (click)="setTab('past')"
+    >
+      <span>Past Events</span>
+      <span
+        class="size-5 rounded-full text-[10px] flex items-center justify-center font-extrabold"
+        [class.bg-white/20]="activeTab() === 'past'"
+        [class.text-white]="activeTab() === 'past'"
+        [class.bg-slate-500/15]="activeTab() !== 'past'"
+        [class.text-slate-600]="activeTab() !== 'past'"
+        [class.dark:text-slate-400]="activeTab() !== 'past'"
+      >
+        {{ pastTickets().length }}
+      </span>
+    </button>
+  </div>
+
+  <!-- Content Section -->
+  @if (isLoading()) {
+    <!-- Skeleton Loading Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (i of [1, 2, 3]; track i) {
+        <app-glass-card elevation="raised" padding="lg">
+          <div class="space-y-4">
+            <app-skeleton-loader shape="rectangle" width="100%" height="6rem" />
+            <app-skeleton-loader shape="text" width="80%" height="1.5rem" />
+            <app-skeleton-loader shape="text" width="60%" height="1rem" />
+            <div class="grid grid-cols-3 gap-2 pt-2">
+              <app-skeleton-loader shape="rectangle" width="100%" height="3rem" />
+              <app-skeleton-loader shape="rectangle" width="100%" height="3rem" />
+              <app-skeleton-loader shape="rectangle" width="100%" height="3rem" />
+            </div>
+          </div>
+        </app-glass-card>
+      }
+    </div>
+  } @else if (displayedTickets().length === 0) {
+    <!-- Empty State -->
+    <app-glass-card elevation="flat" padding="lg" class="text-center py-16 space-y-6">
+      <div class="size-20 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center mx-auto text-4xl shadow-inner">
+        🎟️
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-2xl font-black text-[var(--color-text-primary)]">
+          {{ activeTab() === 'upcoming' ? 'No Upcoming Event Tickets' : 'No Past Event Passes' }}
+        </h2>
+        <p class="text-xs sm:text-sm text-[var(--color-text-secondary)] max-w-md mx-auto leading-relaxed">
+          {{
+            activeTab() === 'upcoming'
+              ? "You don't have any tickets for upcoming shows yet. Discover concerts, live sports, and theatre in the catalog!"
+              : 'Your attended concerts and past tickets will be archived here.'
+          }}
+        </p>
+      </div>
+      @if (activeTab() === 'upcoming') {
+        <div class="pt-2">
+          <a routerLink="/events">
+            <app-tactile-button variant="primary" size="md">
+              Explore Events Catalog
+            </app-tactile-button>
+          </a>
+        </div>
+      }
+    </app-glass-card>
+  } @else {
+    <!-- Ticket Passes Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (ticket of displayedTickets(); track ticket.id) {
+        @let eventInfo = eventDetailsMap().get(ticket.eventId);
+        @let seatInfo = getSeatDetail(ticket);
+        <div class="wallet-pass-card relative flex flex-col rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
+          <!-- Pass Header / Banner Image (Clickable to Event Details) -->
+          <a
+            class="relative h-32 w-full block bg-gradient-to-tr from-indigo-950 via-slate-900 to-indigo-900 overflow-hidden border-b border-[var(--color-border)] group"
+            [routerLink]="['/events', ticket.eventId]"
+            [attr.aria-label]="'View details for ' + (eventInfo?.title || ticket.eventTitle || 'event')"
+          >
+            @if (ticket.bannerUrl || eventInfo?.bannerUrl) {
+              <img
+                [src]="ticket.bannerUrl || eventInfo?.bannerUrl"
+                [alt]="ticket.eventTitle || eventInfo?.title || 'Event promotional banner'"
+                class="size-full object-cover opacity-60 transition-transform duration-500 group-hover:scale-105"
+              />
+            }
+            <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-surface)] via-black/40 to-transparent"></div>
+
+            <div class="absolute top-3.5 left-4 right-4 flex items-center justify-between gap-2 z-10">
+              <span class="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-extrabold uppercase tracking-widest text-white border border-white/10">
+                {{ eventInfo?.category || 'LIVE EVENT' }}
+              </span>
+              <app-status-badge [status]="ticket.status" />
+            </div>
+
+            <div class="absolute bottom-3 left-4 right-4 z-10">
+              <h2 class="text-base font-extrabold text-white tracking-tight truncate drop-shadow-md group-hover:text-indigo-300 transition-colors">
+                {{ eventInfo?.title || ticket.eventTitle || 'SeatFlow Live Event' }}
+              </h2>
+            </div>
+          </a>
+
+          <!-- Pass Details & Notches -->
+          <div class="p-5 space-y-4 flex-1 flex flex-col justify-between">
+            <div class="space-y-3">
+              <div class="text-xs text-[var(--color-text-secondary)] space-y-1">
+                <p class="font-bold text-[var(--color-text-primary)] flex items-center gap-1.5">
+                  <span>📅</span>
+                  <span>{{ (eventInfo?.eventDate || ticket.eventDate || ticket.createdAt) | sfDate:'full' }}</span>
+                </p>
+                <p class="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 truncate">
+                  <span>📍</span>
+                  <span>{{ eventInfo?.venueName || eventInfo?.venueAddress || eventInfo?.venueCity || ticket.venueName || 'Official Venue' }}</span>
+                </p>
+              </div>
+
+              <!-- Seat Chips Grid -->
+              <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-center text-xs">
+                <div>
+                  <span class="text-[9px] font-extrabold uppercase text-[var(--color-text-muted)] block">Section</span>
+                  <span class="font-bold text-[var(--color-text-primary)]">{{ seatInfo?.ticketType || ticket.section || 'General' }}</span>
+                </div>
+                <div class="border-x border-[var(--color-border)]">
+                  <span class="text-[9px] font-extrabold uppercase text-[var(--color-text-muted)] block">Row</span>
+                  <span class="font-bold text-[var(--color-text-primary)]">{{ seatInfo?.rowNumber || ticket.rowNumber || '—' }}</span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-extrabold uppercase text-[var(--color-text-muted)] block">Seat</span>
+                  <span class="font-bold text-[var(--color-text-primary)]">{{ seatInfo?.seatNumber || ticket.seatNumber || '—' }}</span>
+                </div>
+              </div>
+
+              <!-- Ticket Code & Price -->
+              <div class="flex justify-between items-center text-xs pt-1 border-t border-[var(--color-border)]/50">
+                <span class="font-mono text-[11px] font-semibold text-[var(--color-text-muted)]">{{ ticket.ticketCode }}</span>
+                <span class="font-black text-indigo-600 dark:text-indigo-400">{{ ticket.price | sfCurrency }}</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="pt-3 border-t border-[var(--color-border)] grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                [attr.aria-label]="'View QR pass for ' + (eventInfo?.title || ticket.eventTitle || ticket.ticketCode)"
+                class="btn-spring flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 text-xs font-bold transition-colors"
+                (click)="openQrModal(ticket)"
+              >
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect width="18" height="18" x="3" y="3" rx="2" />
+                  <path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01" />
+                </svg>
+                <span>QR Pass</span>
+              </button>
+
+              <button
+                type="button"
+                [attr.aria-label]="'Download PDF for ' + (eventInfo?.title || ticket.eventTitle || ticket.ticketCode)"
+                class="btn-spring flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)] text-xs font-bold transition-colors disabled:opacity-50"
+                [disabled]="downloadingTicketId() === ticket.id"
+                (click)="downloadPdf(ticket)"
+              >
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>{{ downloadingTicketId() === ticket.id ? 'PDF...' : 'PDF' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

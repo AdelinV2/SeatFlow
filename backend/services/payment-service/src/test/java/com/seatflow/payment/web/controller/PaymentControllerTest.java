@@ -7,8 +7,10 @@ import com.seatflow.payment.model.enums.PaymentStatus;
 import com.seatflow.payment.service.PaymentService;
 import com.seatflow.payment.service.StripeWebhookService;
 import com.seatflow.payment.web.dto.request.CreatePaymentIntentRequest;
+import com.seatflow.payment.web.dto.request.TaxPreviewRequest;
 import com.seatflow.payment.web.dto.response.PaymentIntentResponse;
 import com.seatflow.payment.web.dto.response.PaymentResponse;
+import com.seatflow.payment.web.dto.response.TaxPreviewResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,7 +60,7 @@ class PaymentControllerTest {
         CreatePaymentIntentRequest request = new CreatePaymentIntentRequest(UUID.randomUUID(), "idem-key-1");
         PaymentIntentResponse response = new PaymentIntentResponse(
                 UUID.randomUUID(), "pi_secret_123", new BigDecimal("49.99"), "USD", PaymentStatus.INITIATED);
-        when(paymentService.createPaymentIntent(any(), any())).thenReturn(response);
+        when(paymentService.createPaymentIntent(any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/payments/intent")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -81,11 +83,13 @@ class PaymentControllerTest {
     void getPaymentReturns200Ok() throws Exception {
         PaymentResponse response = new PaymentResponse(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
-                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), "USD", PaymentStatus.INITIATED,
+                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
+                "USD", PaymentStatus.INITIATED,
                 null, Instant.now(), Instant.now());
-        when(paymentService.getPaymentById(any(), any(), anyBoolean())).thenReturn(response);
+        when(paymentService.getPaymentById(any(), any(), anyBoolean(), any())).thenReturn(response);
 
-        mockMvc.perform(get("/api/payments/" + UUID.randomUUID()))
+        mockMvc.perform(get("/api/payments/" + UUID.randomUUID())
+                        .header("X-Customer-Email", "cust@example.com"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("INITIATED"));
     }
@@ -94,12 +98,32 @@ class PaymentControllerTest {
     void getPaymentByReservationReturns200Ok() throws Exception {
         PaymentResponse response = new PaymentResponse(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
-                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), "USD", PaymentStatus.INITIATED,
+                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
+                "USD", PaymentStatus.INITIATED,
                 null, Instant.now(), Instant.now());
-        when(paymentService.getPaymentByReservationId(any(), any(), anyBoolean())).thenReturn(response);
+        when(paymentService.getPaymentByReservationId(any(), any(), anyBoolean(), any())).thenReturn(response);
 
-        mockMvc.perform(get("/api/payments/reservation/" + UUID.randomUUID()))
+        mockMvc.perform(get("/api/payments/reservation/" + UUID.randomUUID())
+                        .header("X-Customer-Email", "cust@example.com"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void taxPreviewReturnsStripeCalculatedRate() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        TaxPreviewRequest request = new TaxPreviewRequest(
+                "1 Test Avenue", null, "Bucharest", null, "010101", "RO");
+        when(paymentService.calculateTaxPreview(any(), any(), any(), anyBoolean(), any()))
+                .thenReturn(new TaxPreviewResponse(new BigDecimal("19.00"), new BigDecimal("23.46"), "USD"));
+
+        mockMvc.perform(post("/api/payments/" + paymentId + "/tax-preview")
+                .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Customer-Email", "cust@example.com")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taxAmount").value(19.00))
+                .andExpect(jsonPath("$.effectiveRate").value(23.46))
+                .andExpect(jsonPath("$.currency").value("USD"));
     }
 
     @Test

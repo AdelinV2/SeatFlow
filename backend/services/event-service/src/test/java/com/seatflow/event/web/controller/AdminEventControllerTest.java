@@ -75,6 +75,17 @@ class AdminEventControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void listEvents_admin_returns200() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(eventService.findEventsForAdministration(any(), any(), any(), any()))
+                .thenReturn(com.seatflow.common.domain.dto.PagedResult.of(List.of(sampleDetail(id)), 0, 50, 1));
+
+        mockMvc.perform(get("/api/admin/events?status=DRAFT&search=Hamlet"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void getEvent_admin_returns200() throws Exception {
         UUID id = UUID.randomUUID();
         when(eventService.getEventForAdministration(id)).thenReturn(sampleDetail(id));

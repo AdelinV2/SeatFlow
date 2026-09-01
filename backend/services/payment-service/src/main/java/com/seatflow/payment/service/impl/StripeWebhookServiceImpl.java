@@ -8,6 +8,10 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.metrics.AfterCommitMetrics;
+import com.seatflow.common.observability.metrics.MetricTagPolicy;
+import com.seatflow.common.observability.metrics.SeatFlowMetricNames;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.payment.config.StripeConfig;
 import com.seatflow.payment.messaging.event.PaymentCompletedEvent;
 import com.seatflow.payment.messaging.event.PaymentFailedEvent;
@@ -24,7 +28,9 @@ import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeError;
 import com.stripe.model.StripeObject;
 import com.stripe.net.Webhook;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,6 +52,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -103,7 +110,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
 
         // Webhook Idempotency Check
         if (payment.getStatus() == PaymentStatus.SUCCESS) {
-            log.info("Duplicate succeeded webhook ignored for paymentId={}, stripePaymentIntentId={}",
+            log.warn("Stripe webhook duplicate ignored. paymentId={}, stripePaymentIntentId={}",
                     payment.getId(), paymentIntentId);
             return;
         }
@@ -134,7 +141,11 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         );
 
         saveOutboxRecord("PaymentCompleted", payment.getId(), completedEvent);
-        meterRegistry.counter("seatflow.payments.completed.total", "status", "SUCCESS").increment();
+        String committedCurrency = payment.getCurrency();
+        AfterCommitMetrics.afterCommit(() -> {
+            safeRecordPaymentProcessed(committedCurrency, "CARD", "SUCCESS");
+            safeIncrementLegacyCompleted();
+        });
 
         log.info("Payment successfully processed and PaymentCompleted outbox event created. paymentId={}, reservationId={}, taxAmount={}, netAmount={}",
                 payment.getId(), payment.getReservationId(), taxAmount, netAmount);
@@ -157,7 +168,7 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         Payment payment = paymentOpt.get();
 
         if (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED) {
-            log.info("Duplicate or late failed webhook ignored for paymentId={}, status={}",
+            log.warn("Stripe webhook duplicate or late failure ignored. paymentId={}, status={}",
                     payment.getId(), payment.getStatus());
             return;
         }
@@ -181,7 +192,11 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
         );
 
         saveOutboxRecord("PaymentFailed", payment.getId(), failedEvent);
-        meterRegistry.counter("seatflow.payments.failed.total", "reason", "STRIPE_FAILED").increment();
+        String committedCurrency = payment.getCurrency();
+        AfterCommitMetrics.afterCommit(() -> {
+            safeRecordPaymentProcessed(committedCurrency, "CARD", "FAILED");
+            safeIncrementLegacyFailed();
+        });
 
         log.warn("Payment marked as FAILED and PaymentFailed outbox event created. paymentId={}, reservationId={}",
                 payment.getId(), payment.getReservationId());
@@ -228,12 +243,20 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
 
     private void saveOutboxRecord(String eventType, UUID aggregateId, Object payload) {
         try {
-            EventEnvelope<?> envelope = EventEnvelope.of(
+            EventEnvelope<?> base = EventEnvelope.of(
                     eventType,
                     aggregateId.toString(),
                     CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString()),
                     (com.seatflow.common.events.DomainEvent) payload
             );
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            try {
+                if (w3cTraceContextPropagator != null) {
+                    w3cTraceContextPropagator.inject(headers);
+                }
+            } catch (Exception ignored) {
+            }
+            EventEnvelope<?> envelope = base.withHeaders(headers);
             // Store the envelope as a real JSON object in the jsonb column (not a JSON-string scalar).
             JsonNode payloadNode = objectMapper.valueToTree(envelope);
             OutboxEvent outboxEvent = OutboxEvent.builder()
@@ -246,6 +269,28 @@ public class StripeWebhookServiceImpl implements StripeWebhookService {
             log.error("Failed to serialize outbox event payload for payment aggregateId={}, eventType={}",
                     aggregateId, eventType, ex);
             throw new RuntimeException("Failed to persist payment outbox event", ex);
+        }
+    }
+
+    private void safeRecordPaymentProcessed(String currency, String paymentMethod, String status) {
+        try {
+            Tags tags = MetricTagPolicy.paymentProcessed(status, currency, paymentMethod);
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_PROCESSED).tags(tags).register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementLegacyCompleted() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_COMPLETED).tag("status", "SUCCESS").register(meterRegistry).increment();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void safeIncrementLegacyFailed() {
+        try {
+            Counter.builder(SeatFlowMetricNames.PAYMENTS_FAILED).tag("reason", "STRIPE_FAILED").register(meterRegistry).increment();
+        } catch (Exception ignored) {
         }
     }
 }

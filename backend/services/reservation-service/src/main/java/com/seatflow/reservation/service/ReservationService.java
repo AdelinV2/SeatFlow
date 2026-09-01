@@ -1,6 +1,7 @@
 package com.seatflow.reservation.service;
 
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 
@@ -12,6 +13,13 @@ public interface ReservationService {
     ReservationResponse createReservation(CreateReservationRequest request, UUID authenticatedUserId);
 
     ReservationResponse getReservationById(UUID reservationId, UUID authenticatedUserId, String customerEmailProof);
+
+    ReservationResponse getReservationByIdInternal(UUID reservationId);
+
+    ReservationResponse updateReservationPricing(UUID reservationId,
+                                                 SeatPricingSelectionRequest request,
+                                                 UUID authenticatedUserId,
+                                                 String customerEmailProof);
 
     SeatAvailabilityResponse getSeatAvailability(UUID eventId);
 

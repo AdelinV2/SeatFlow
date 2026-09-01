@@ -6,12 +6,26 @@ spring:
   jackson:
     default-property-inclusion: non_null
     time-zone: UTC
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:0}
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AZURE_ENTRA_ISSUER_URI:https://seatflow.ciamlogin.com/12345678-1234-1234-1234-123456789abc/v2.0}
-          client-id: ${AZURE_ENTRA_CLIENT_ID:00000000-0000-0000-0000-000000000000}
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+          audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:authenticated}
 
 server:
   port: ${SERVER_PORT:8087}
@@ -20,6 +34,10 @@ server:
 seatflow:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  realtime:
+    instance-id: ${REALTIME_INSTANCE_ID:${spring.application.name}:${random.uuid}}
+    redis:
+      channel: ${REALTIME_REDIS_CHANNEL:seatflow:realtime:seat-status}
 
 eureka:
   instance:
@@ -34,18 +52,42 @@ eureka:
     fetch-registry: true
 
 management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:local}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: when_authorized
       probes:
         enabled: true
+      show-details: when_authorized
   metrics:
     tags:
       application: ${spring.application.name}
+      environment: ${SEATFLOW_DEPLOYMENT_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        seatflow.reservations.hold.duration: true
+        seatflow.outbox.publish.latency: true
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
+      minimum-expected-value:
+        http.server.requests: 1ms
+      maximum-expected-value:
+        http.server.requests: 10s
 
 logging:
   pattern:

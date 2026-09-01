@@ -1,0 +1,15 @@
+# Downloads the pinned OpenTelemetry Java agent and verifies its published SHA-512.
+FROM eclipse-temurin:21-jre-alpine@sha256:3f08b13888f595cc49edabea7250ba69499ba25602b267da591720769400e08c AS downloader
+
+ARG OTEL_AGENT_VERSION=2.12.0
+ARG OTEL_AGENT_SHA512=82b6f52b76f1dbff6c5a651b3313411e499f24091a778536ddf1aa06e43dda64b71ed95d8f42b17578cb4b9a0e0c8a17d7566ca910bf232f2630e473891efa39
+
+RUN apk add --no-cache curl ca-certificates && \
+    mkdir -p /opt/opentelemetry && \
+    curl -fsSL -o /opt/opentelemetry/opentelemetry-javaagent.jar \
+      https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar && \
+    echo "${OTEL_AGENT_SHA512}  /opt/opentelemetry/opentelemetry-javaagent.jar" | sha512sum -c - && \
+    chmod 644 /opt/opentelemetry/opentelemetry-javaagent.jar
+
+FROM scratch AS export
+COPY --from=downloader /opt/opentelemetry/opentelemetry-javaagent.jar /agent.jar

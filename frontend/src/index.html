@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SeatFlow</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="SeatFlow makes discovering events and reserving the right seats effortless."
+    />
+    <meta name="theme-color" content="#F8FAFC" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap"
+      rel="stylesheet"
+    />
+    <script src="env.js"></script>
+    <script>
+      (function () {
+        try {
+          const mode = localStorage.getItem('seatflow_theme_mode');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (mode === 'dark' || (mode !== 'light' && prefersDark)) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+          }
+
+          const themeColor = document.querySelector('meta[name="theme-color"]');
+          themeColor?.setAttribute(
+            'content',
+            document.documentElement.classList.contains('dark') ? '#0B0F19' : '#F8FAFC'
+          );
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <app-root></app-root>
+    <noscript>SeatFlow requires JavaScript to run.</noscript>
+  </body>
+</html>

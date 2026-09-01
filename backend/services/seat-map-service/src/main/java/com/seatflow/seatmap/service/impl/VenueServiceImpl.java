@@ -11,6 +11,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.seatmap.mapper.VenueMapper;
 import com.seatflow.seatmap.mapper.VenueSectionMapper;
 import com.seatflow.seatmap.messaging.event.VenueCreatedEvent;
@@ -49,6 +50,7 @@ public class VenueServiceImpl implements VenueService {
     private final VenueMapper venueMapper;
     private final VenueSectionMapper venueSectionMapper;
     private final ObjectMapper objectMapper;
+    private final W3cTraceContextPropagator w3cTraceContextPropagator;
 
     @Override
     @Transactional
@@ -67,6 +69,8 @@ public class VenueServiceImpl implements VenueService {
                 .city(request.city())
                 .country(request.country() != null ? request.country() : "USA")
                 .capacity(request.capacity())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .build();
 
         venue = venueRepository.save(venue);
@@ -117,6 +121,8 @@ public class VenueServiceImpl implements VenueService {
         if (request.address() != null) venue.setAddress(request.address());
         if (request.city() != null) venue.setCity(request.city());
         if (request.country() != null) venue.setCountry(request.country());
+        if (request.latitude() != null) venue.setLatitude(request.latitude());
+        if (request.longitude() != null) venue.setLongitude(request.longitude());
 
         venue = venueRepository.save(venue);
         log.info("Venue updated. venueId={}, name={}", venue.getId(), venue.getName());
@@ -158,7 +164,15 @@ public class VenueServiceImpl implements VenueService {
 
     private <T extends DomainEvent> void writeOutboxEvent(UUID aggregateId, String eventType, T eventPayload) {
         String correlationId = CorrelationContext.getCorrelationId().orElse(UUID.randomUUID().toString());
-        EventEnvelope<T> envelope = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, eventPayload);
+        EventEnvelope<T> base = EventEnvelope.of(eventType, aggregateId.toString(), correlationId, eventPayload);
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        try {
+            if (w3cTraceContextPropagator != null) {
+                w3cTraceContextPropagator.inject(headers);
+            }
+        } catch (Exception ignored) {
+        }
+        EventEnvelope<T> envelope = base.withHeaders(headers);
 
         String payloadJson;
         try {
@@ -174,7 +188,7 @@ public class VenueServiceImpl implements VenueService {
                 .payload(payloadJson)
                 .build();
         outboxEvent = outboxEventRepository.save(outboxEvent);
-        log.info("Outbox event written. aggregateId={}, eventType={}, outboxEventId={}",
+        log.debug("Outbox event written. aggregateId={}, eventType={}, outboxId={}",
                 aggregateId, eventType, outboxEvent.getId());
     }
 }

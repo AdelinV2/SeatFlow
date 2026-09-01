@@ -1,0 +1,28 @@
+:host {
+  display: block;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  header,
+  footer,
+  .btn-spring,
+  a[routerLink],
+  app-tactile-button,
+  .animate-fade-in-up > section,
+  .bg-gradient-to-r {
+    display: none !important;
+  }
+
+  #printable-order-receipt {
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 1.5rem !important;
+  }
+}

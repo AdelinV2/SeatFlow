@@ -55,6 +55,7 @@ SeatFlow is engineered through an autonomous, modular engineering pipeline:
 | **Common Modules** | `common-domain`, `common-events`, `common-observability`, `common-security` | Section 4 of this document |
 | **Workflows** | Task planning, implementation sequence, bug fixing, QA | [.ai/workflows/](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/workflows/) |
 | **Architecture** | System overview, database models, auth, messaging, REST contracts | [.ai/architecture/](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/architecture/) |
+| **AI Model Routing** | Cost-effective model & reasoning effort selection | [.ai/MODEL_ROUTER.md](.ai/MODEL_ROUTER.md) (Reference: [.ai/AI_MODEL_REFERENCE.md](.ai/AI_MODEL_REFERENCE.md)) |
 
 ---
 
@@ -65,6 +66,8 @@ SeatFlow/
 ├── AGENTS.md                          # This file (Global Constitution)
 │
 ├── .ai/
+│   ├── MODEL_ROUTER.md                # AI model & reasoning effort routing policy
+│   ├── AI_MODEL_REFERENCE.md          # Detailed benchmark & economics reference (on-demand only)
 │   ├── architecture/                  # Modular architecture specifications
 │   ├── decisions/                     # Architecture Decision Records (ADRs)
 │   ├── tasks/                         # Phased execution tasks
@@ -242,4 +245,28 @@ A task is considered **DONE** only when:
 - [ ] Database migrations are backwards-compatible and indexed.
 - [ ] Relevant documentation/ADR updated if an architectural decision was modified.
 - [ ] Task file moved from active phase to `.ai/tasks/completed/<phase-name>/`.
+
+---
+
+## 10. AI Model Selection & Reasoning Effort Routing
+
+Whenever asked for recommendations on which AI model, persona, or reasoning effort to use for a development task (e.g., *"Which AI should I use for this task?"*, *"Which model should implement TASK-P01-002?"*, *"What model and reasoning effort should I use?"*, *"Should I use Luna, Terra, Sol, or Gemini for this?"*, *"Which AI should do the planning/review/debugging/implementation?"*):
+
+1. **Primary Operational Policy:** Read [`.ai/MODEL_ROUTER.md`](.ai/MODEL_ROUTER.md) to classify the task (complexity, failure risk, context size, agentic demand, verification strength) and determine the recommended model and reasoning effort.
+2. **Standard Recommendation Format:** Formulate the response concisely following the template in `.ai/MODEL_ROUTER.md`:
+   - **Recommended:** `MODEL` — `EFFORT`
+   - **Why:** 2–4 sentences explaining why this configuration fits the task profile.
+   - **Task profile:** Complexity (1–5), Risk (Low/Medium/High), Context (Small/Medium/Large/Very Large), Agentic demand (Low/Medium/High).
+   - **Cheaper option:** `MODEL` — `EFFORT` with explicit trade-off.
+   - **Escalate to:** `MODEL` — `EFFORT` with specific trigger condition.
+3. **Cost-Effectiveness Invariant:** Never automatically default to the strongest model or highest reasoning effort. Choose the most cost-effective configuration that is sufficiently reliable for the task.
+4. **Detailed Reference (On-Demand Only):** Read [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) **only** when additional evidence is genuinely required:
+   - The model choice is ambiguous or disputed;
+   - The user explicitly requests a detailed comparison between models;
+   - The user asks why one model is better than another for a specific workload;
+   - Quantitative cost/performance or benchmark justification is requested;
+   - The task is unusually complex, high-risk, or mission-critical.
+
+   > **Context Conservation Rule:** **Do NOT** load [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) for ordinary model-selection requests to avoid wasting context tokens.
+
 

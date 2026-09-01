@@ -1,13 +1,13 @@
 spring:
   datasource:
-    url: ${DB_URL}
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:seatflow_ticket}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: 10
+      minimum-idle: 2
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -19,21 +19,26 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI}
           audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES}
 
 event-service:
-  base-url: ${EVENT_SERVICE_URL:http://event-service:8083}
+  base-url: ${EVENT_SERVICE_URL:http://event-service}
 reservation-service:
-  base-url: ${RESERVATION_SERVICE_URL:http://reservation-service:8084}
+  base-url: ${RESERVATION_SERVICE_URL:http://reservation-service}
 seat-map-service:
-  base-url: ${SEAT_MAP_SERVICE_URL:http://seat-map-service:8082}
+  base-url: ${SEAT_MAP_SERVICE_URL:http://seat-map-service}
 
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_URI}
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
   instance:
     prefer-ip-address: true
+
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
 
 springdoc:
   api-docs:
@@ -42,6 +47,23 @@ springdoc:
     enabled: false
 
 logging:
+  config: classpath:logback-spring.xml
   level:
     com.seatflow: INFO
     org.hibernate.SQL: WARN
+management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.2}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:prod}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://otel-collector:4318/v1/traces}
+  endpoint:
+    health:
+      show-details: never

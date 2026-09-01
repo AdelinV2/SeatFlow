@@ -57,6 +57,18 @@ public class SeatHold {
     @ToString.Include
     private BigDecimal price;
 
+    @Column(name = "row_label", length = 20)
+    private String rowLabel;
+
+    @Column(name = "seat_number")
+    private Integer seatNumber;
+
+    @Column(name = "pricing_tier_id")
+    private UUID pricingTierId;
+
+    @Column(name = "ticket_type", length = 100)
+    private String ticketType;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

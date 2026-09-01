@@ -13,6 +13,8 @@ public record VenueDetailResponse(
     @Schema(description = "City") String city,
     @Schema(description = "Country") String country,
     @Schema(description = "Total maximum capacity (building/legal limit)") Integer capacity,
+    @Schema(description = "Geographic latitude") Double latitude,
+    @Schema(description = "Geographic longitude") Double longitude,
     @Schema(description = "Total active seats currently configured across all sections") Long totalConfiguredSeats,
     @Schema(description = "Venue sections") List<VenueSectionResponse> sections,
     @Schema(description = "Creation timestamp") Instant createdAt

@@ -5,9 +5,12 @@ import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.PricingTierClientDto;
+import com.seatflow.reservation.client.dto.SeatPricingDetails;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.model.entity.Reservation;
@@ -20,6 +23,7 @@ import com.seatflow.reservation.repository.SeatHoldRepository;
 import com.seatflow.reservation.repository.projection.ActiveSeatHoldProjection;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.EventSeatStatusResponse;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
@@ -69,6 +73,8 @@ class ReservationServiceImplTest {
     private EventClient eventClient;
     @Mock
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    @Mock
+    private W3cTraceContextPropagator w3cTraceContextPropagator;
 
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ReservationService service;
@@ -76,15 +82,7 @@ class ReservationServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new ReservationServiceImpl(reservationRepository, seatHoldRepository, outboxEventRepository,
-                reservationMapper, eventClient, objectMapper, meterRegistry);
-        // Emulate the Spring transactional proxy for the self-invoked transactional method in unit tests
-        try {
-            var field = ReservationServiceImpl.class.getDeclaredField("self");
-            field.setAccessible(true);
-            field.set(service, service);
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException(ex);
-        }
+                reservationMapper, eventClient, objectMapper, meterRegistry, w3cTraceContextPropagator);
         CorrelationContext.setCorrelationId("test-correlation");
     }
 
@@ -148,6 +146,39 @@ class ReservationServiceImplTest {
         verify(eventClient).getEventSeatPricing(eventId, new HashSet<>(seatIds));
         verify(reservationRepository).saveAndFlush(any(Reservation.class));
         verify(outboxEventRepository).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void createReservationLocksSeatsInSortedUuidOrder() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        UUID firstSeat = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondSeat = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID reservationId = UUID.randomUUID();
+        List<UUID> requestedSeatIds = List.of(secondSeat, firstSeat);
+        List<UUID> sortedSeatIds = List.of(firstSeat, secondSeat);
+        CreateReservationRequest request = buildRequest(eventId, requestedSeatIds,
+                List.of(new BigDecimal("20.00"), new BigDecimal("10.00")), "idem-lock-order");
+
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
+                Instant.now().plusSeconds(3600), requestedSeatIds,
+                Map.of(firstSeat, new BigDecimal("10.00"), secondSeat, new BigDecimal("20.00")));
+
+        when(eventClient.getEventSeatPricing(eventId, new HashSet<>(requestedSeatIds))).thenReturn(pricing);
+        when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-lock-order")).thenReturn(Optional.empty());
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eventId, sortedSeatIds)).thenReturn(List.of());
+        when(reservationMapper.toEntity(any(), any()))
+                .thenReturn(stubReservation(null, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(invocation -> {
+            Reservation reservation = invocation.getArgument(0);
+            reservation.setId(reservationId);
+            return reservation;
+        });
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(reservationId, eventId));
+
+        service.createReservation(request, null);
+
+        verify(seatHoldRepository).findAndLockSeatsForUpdate(eventId, sortedSeatIds);
     }
 
     @Test
@@ -268,6 +299,92 @@ class ReservationServiceImplTest {
         ReservationResponse result = service.getReservationById(id, owner, null);
 
         assertThat(result).isNotNull();
+    }
+
+    @Test
+    void updateReservationPricingResolvesSelectedTierAndRecalculatesTotal() {
+        UUID id = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID tierId = UUID.randomUUID();
+        SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).seatId(seatId)
+                .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
+        Reservation res = stubReservation(id, eventId, null, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
+        PricingTierClientDto tier = new PricingTierClientDto(tierId, UUID.randomUUID(), "Student",
+                new BigDecimal("35.00"), "USD");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(eventClient.getEventSeatPricing(eventId, Set.of(seatId))).thenReturn(new EventPricingDetails(
+                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), List.of(seatId),
+                Map.of(seatId, new BigDecimal("50.00")),
+                Map.of(seatId, new SeatPricingDetails(UUID.randomUUID(), "Orchestra", "B", 7, List.of(tier)))));
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, eventId));
+
+        service.updateReservationPricing(id,
+                new SeatPricingSelectionRequest(List.of(
+                        new SeatPricingSelectionRequest.SeatPricingSelection(seatId, tierId))),
+                null, "guest@example.com");
+
+        assertThat(hold.getPrice()).isEqualByComparingTo("35.00");
+        assertThat(hold.getTicketType()).isEqualTo("Student");
+        assertThat(hold.getRowLabel()).isEqualTo("B");
+        assertThat(hold.getSeatNumber()).isEqualTo(7);
+        assertThat(res.getTotalAmount()).isEqualByComparingTo("35.00");
+        verify(reservationRepository).saveAndFlush(res);
+    }
+
+    @Test
+    void getReservationByIdRejectsAnonymousGuestWithoutEmailProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, null, null));
+        verify(reservationMapper, never()).toResponse(any());
+    }
+
+    @Test
+    void updateReservationPricingRejectsAnonymousGuestWithoutEmailProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.updateReservationPricing(id, null, null, null));
+        verify(reservationRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void cancelReservationRejectsAnonymousGuestWithoutEmailProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.cancelReservation(id, null, null));
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    void getReservationByIdReturnsForAnonymousGuestWithValidProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(id, res.getEventId()));
+
+        ReservationResponse result = service.getReservationById(id, null, "guest@example.com");
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void getReservationByIdThrowsForAnonymousGuestWithInvalidProof() {
+        UUID id = UUID.randomUUID();
+        Reservation res = stubReservation(id, UUID.randomUUID(), null, ReservationStatus.PENDING, new HashSet<>());
+        res.setCustomerEmail("guest@example.com");
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.getReservationById(id, null, "wrong@example.com"));
     }
 
     @Test

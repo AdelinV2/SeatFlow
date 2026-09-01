@@ -1,0 +1,21 @@
+:host {
+  display: inline-flex;
+
+  &.w-full {
+    display: flex;
+    width: 100%;
+  }
+}
+
+:host([aria-disabled='true']) {
+  pointer-events: none;
+}
+
+button {
+  font: inherit;
+  isolation: isolate;
+}
+
+button:disabled::after {
+  display: none;
+}

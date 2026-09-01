@@ -40,7 +40,7 @@ public class SeatMapLayoutServiceImpl implements SeatMapLayoutService {
         List<SectionLayoutResponse> sectionLayouts = sections.stream()
                 .map(section -> {
                     List<SeatResponse> seatResponses = seatRepository
-                            .findActiveSeatsBySectionId(section.getId())
+                            .findBySectionIdOrderByGridYAscGridXAsc(section.getId())
                             .stream()
                             .map(seatMapper::toResponse)
                             .toList();
@@ -54,7 +54,7 @@ public class SeatMapLayoutServiceImpl implements SeatMapLayoutService {
                 .toList();
 
         long totalConfiguredSeats = sectionLayouts.stream()
-                .mapToLong(s -> s.seats().size())
+                .mapToLong(s -> s.seats().stream().filter(seat -> Boolean.TRUE.equals(seat.isActive())).count())
                 .sum();
 
         log.debug("Venue layout retrieved. venueId={}, name={}, sectionCount={}, totalConfiguredSeats={}",

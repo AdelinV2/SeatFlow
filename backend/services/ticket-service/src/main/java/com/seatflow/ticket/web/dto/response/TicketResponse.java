@@ -20,6 +20,7 @@ public record TicketResponse(
     @Schema(description = "Total gross ticket price") BigDecimal price,
     @Schema(description = "Tax / VAT portion included") BigDecimal taxAmount,
     @Schema(description = "Net ticket base price") BigDecimal netAmount,
+    @Schema(description = "Ticket tier / seat type") String ticketType,
     @Schema(description = "Ticket code") String ticketCode,
     @Schema(description = "Ticket status") TicketStatus status,
     @Schema(description = "Creation timestamp") Instant createdAt

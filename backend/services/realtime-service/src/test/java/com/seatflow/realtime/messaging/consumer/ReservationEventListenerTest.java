@@ -6,9 +6,11 @@ import com.seatflow.common.events.DomainEvent;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
+import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +31,7 @@ class ReservationEventListenerTest {
     record DummyEvent(String message) implements DomainEvent {}
 
     @Mock
-    private SeatStatusBroadcaster seatStatusBroadcaster;
+    private RealtimeFanOutPublisher realtimeFanOutPublisher;
 
     private ObjectMapper objectMapper;
     private ReservationEventListener listener;
@@ -37,7 +39,7 @@ class ReservationEventListenerTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        listener = new ReservationEventListener(seatStatusBroadcaster, objectMapper);
+        listener = new ReservationEventListener(realtimeFanOutPublisher, objectMapper, mock());
     }
 
     @Test
@@ -60,7 +62,7 @@ class ReservationEventListenerTest {
         );
 
         EventEnvelope<ReservationHeldEvent> envelope = EventEnvelope.of(
-                "ReservationHeld",
+                "ReservationHeldEvent",
                 reservationId.toString(),
                 "corr-1234",
                 payload
@@ -68,7 +70,37 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.HELD, expiresAt);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
+    }
+
+    @Test
+    @DisplayName("Should process ReservationConfirmed event and broadcast SOLD status")
+    void handleReservationEvent_ReservationConfirmed_BroadcastsSold() {
+        UUID eventId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        List<UUID> seatIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+
+        ReservationConfirmedEvent payload = new ReservationConfirmedEvent(
+                reservationId,
+                eventId,
+                UUID.randomUUID(),
+                "customer@seatflow.com",
+                seatIds,
+                BigDecimal.valueOf(150.00),
+                UUID.randomUUID(),
+                Instant.now()
+        );
+
+        EventEnvelope<ReservationConfirmedEvent> envelope = EventEnvelope.of(
+                "ReservationConfirmedEvent",
+                reservationId.toString(),
+                "corr-9999",
+                payload
+        );
+
+        listener.handleReservationEvent(envelope);
+
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -87,7 +119,7 @@ class ReservationEventListenerTest {
         );
 
         EventEnvelope<ReservationExpiredEvent> envelope = EventEnvelope.of(
-                "ReservationExpired",
+                "ReservationExpiredEvent",
                 reservationId.toString(),
                 "corr-5678",
                 payload
@@ -95,7 +127,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.AVAILABLE, null);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
@@ -115,7 +147,7 @@ class ReservationEventListenerTest {
         );
 
         EventEnvelope<ReservationCancelledEvent> envelope = EventEnvelope.of(
-                "ReservationCancelled",
+                "ReservationCancelledEvent",
                 reservationId.toString(),
                 "corr-9999",
                 payload
@@ -123,14 +155,14 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verify(seatStatusBroadcaster).broadcastSeatStatus(eventId, seatIds, SeatStatus.AVAILABLE, null);
+        verify(realtimeFanOutPublisher).publish(eq(envelope.eventId()), any(SeatStatusUpdateMessage.class));
     }
 
     @Test
     @DisplayName("Should silently ignore unrecognized reservation event types")
     void handleReservationEvent_UnrecognizedType_IgnoresEvent() {
         EventEnvelope<DummyEvent> envelope = EventEnvelope.of(
-                "ReservationConfirmed",
+                "SomeUnknownEvent",
                 UUID.randomUUID().toString(),
                 "corr-0000",
                 new DummyEvent("generic-payload")
@@ -138,7 +170,7 @@ class ReservationEventListenerTest {
 
         listener.handleReservationEvent(envelope);
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 
     @Test
@@ -147,6 +179,6 @@ class ReservationEventListenerTest {
         listener.handleReservationEvent(null);
         listener.handleReservationEvent(EventEnvelope.of(null, "id", "corr", null));
 
-        verifyNoInteractions(seatStatusBroadcaster);
+        verifyNoInteractions(realtimeFanOutPublisher);
     }
 }

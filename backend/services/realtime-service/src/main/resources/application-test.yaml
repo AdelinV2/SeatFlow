@@ -1,4 +1,10 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: false
   kafka:
     bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
     producer:

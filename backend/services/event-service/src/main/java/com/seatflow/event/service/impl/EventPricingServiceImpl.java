@@ -26,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -74,6 +73,7 @@ public class EventPricingServiceImpl implements EventPricingService {
         }
 
         event.getPricingTiers().clear();
+        pricingTierRepository.flush();
         List<EventPricingTier> tiers = items.stream()
                 .map(item -> tierMapper.toEntity(item, event)).toList();
         event.getPricingTiers().addAll(tiers);
@@ -83,7 +83,6 @@ public class EventPricingServiceImpl implements EventPricingService {
 
         return pricingTierRepository.findByEvent_IdOrderByPriceAsc(saved.getId()).stream()
                 .map(tierMapper::toResponse)
-                .sorted(Comparator.comparing(PricingTierResponse::price))
                 .toList();
     }
 

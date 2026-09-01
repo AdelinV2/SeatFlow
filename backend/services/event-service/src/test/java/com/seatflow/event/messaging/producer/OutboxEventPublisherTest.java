@@ -1,6 +1,7 @@
 package com.seatflow.event.messaging.producer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.event.model.entity.OutboxEvent;
 import com.seatflow.event.repository.OutboxEventRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +43,8 @@ class OutboxEventPublisherTest {
 
     @BeforeEach
     void setUp() {
-        publisher = new OutboxEventPublisher(outboxEventRepository, kafkaTemplate, objectMapper);
+        publisher = new OutboxEventPublisher(outboxEventRepository, kafkaTemplate, objectMapper,
+                mock(W3cTraceContextPropagator.class));
     }
 
     private OutboxEvent sampleEvent() {

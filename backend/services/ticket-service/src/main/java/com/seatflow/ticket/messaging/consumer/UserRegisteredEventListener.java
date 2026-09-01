@@ -3,6 +3,7 @@ package com.seatflow.ticket.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.ticket.messaging.event.UserRegisteredEvent;
 import com.seatflow.ticket.service.TicketService;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ public class UserRegisteredEventListener {
 
     private final TicketService ticketService;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
         topics = EventTopics.USER_EVENTS,
@@ -24,18 +26,15 @@ public class UserRegisteredEventListener {
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void onUserRegistered(EventEnvelope<Object> envelope) {
-        if (!"UserRegistered".equals(envelope.eventType())) {
-            log.debug("Ignoring irrelevant user event type: {}", envelope.eventType());
-            return;
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.USER_EVENTS)) {
+            if (!"UserRegistered".equals(envelope.eventType())) {
+                log.debug("Ignoring irrelevant user event type: {}", envelope.eventType());
+                return;
+            }
+            UserRegisteredEvent payload = objectMapper.convertValue(envelope.payload(), UserRegisteredEvent.class);
+            log.info("Processing UserRegistered event for guest ticket linking. userId={}, email={}", payload.userId(), payload.email());
+            int claimedCount = ticketService.claimGuestTickets(payload.userId(), payload.email());
+            log.info("Guest ticket linking complete. userId={}, claimedCount={}", payload.userId(), claimedCount);
         }
-
-        UserRegisteredEvent payload = objectMapper.convertValue(envelope.payload(), UserRegisteredEvent.class);
-
-        log.info("Processing UserRegistered event for guest ticket linking. userId={}, email={}",
-                payload.userId(), payload.email());
-
-        int claimedCount = ticketService.claimGuestTickets(payload.userId(), payload.email());
-
-        log.info("Guest ticket linking complete. userId={}, claimedCount={}", payload.userId(), claimedCount);
     }
 }

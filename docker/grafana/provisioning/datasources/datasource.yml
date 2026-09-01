@@ -1,8 +1,39 @@
 apiVersion: 1
 datasources:
   - name: Prometheus
+    uid: seatflow-prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      timeInterval: 15s
+
+  - name: Tempo
+    uid: seatflow-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: seatflow-logs
+        tags:
+          - key: service.name
+            value: service_name
+        filterByTraceID: true
+        filterBySpanID: false
+
+  - name: SeatFlow Logs
+    uid: seatflow-logs
+    type: loki
+    access: proxy
+    url: ${GRAFANA_LOKI_URL:http://loki:3100}
+    editable: false
+    jsonData:
+      derivedFields:
+        - datasourceUid: seatflow-tempo
+          matcherRegex: '"trace\.id":"([a-f0-9]{32})"'
+          name: TraceID
+          url: '$${__value.raw}'

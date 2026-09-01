@@ -3,15 +3,16 @@ package com.seatflow.realtime.messaging.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
+import com.seatflow.common.observability.tracing.KafkaListenerTraceScope;
 import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.ReservationCancelledEvent;
+import com.seatflow.realtime.messaging.event.ReservationConfirmedEvent;
 import com.seatflow.realtime.messaging.event.ReservationExpiredEvent;
 import com.seatflow.realtime.messaging.event.ReservationHeldEvent;
-import com.seatflow.realtime.service.SeatStatusBroadcaster;
-import com.seatflow.common.observability.context.CorrelationContext;
+import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
+import com.seatflow.realtime.service.RealtimeFanOutPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -20,8 +21,9 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ReservationEventListener {
 
-    private final SeatStatusBroadcaster seatStatusBroadcaster;
+    private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
+    private final KafkaListenerTraceScope kafkaListenerTraceScope;
 
     @KafkaListener(
             topics = EventTopics.RESERVATION_EVENTS,
@@ -29,60 +31,36 @@ public class ReservationEventListener {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleReservationEvent(EventEnvelope<?> envelope) {
-        if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
-            log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
-            return;
-        }
-
-        String correlationId = envelope.correlationId() != null ? envelope.correlationId() : "";
-        CorrelationContext.setCorrelationId(correlationId);
-        MDC.put("correlationId", correlationId);
-        if (envelope.eventId() != null) {
-            MDC.put("traceId", envelope.eventId());
-        }
-
-        try {
+        try (KafkaListenerTraceScope ignored = kafkaListenerTraceScope.open(envelope, EventTopics.RESERVATION_EVENTS)) {
+            if (envelope == null || envelope.eventType() == null || envelope.payload() == null) {
+                log.warn("Received invalid envelope (null envelope, missing eventType, or null payload), skipping message");
+                return;
+            }
             log.info("Received reservation event: type={}, eventId={}, aggregateId={}",
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
-
             switch (envelope.eventType()) {
-                case "ReservationHeld" -> {
+                case "ReservationHeld", "ReservationHeldEvent" -> {
                     ReservationHeldEvent event = convertPayload(envelope.payload(), ReservationHeldEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.HELD,
-                            event.expiresAt()
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.HELD, event.expiresAt());
                 }
-                case "ReservationExpired" -> {
+                case "ReservationExpired", "ReservationExpiredEvent" -> {
                     ReservationExpiredEvent event = convertPayload(envelope.payload(), ReservationExpiredEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.AVAILABLE,
-                            null
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.AVAILABLE, null);
                 }
-                case "ReservationCancelled" -> {
+                case "ReservationCancelled", "ReservationCancelledEvent" -> {
                     ReservationCancelledEvent event = convertPayload(envelope.payload(), ReservationCancelledEvent.class);
-                    seatStatusBroadcaster.broadcastSeatStatus(
-                            event.eventId(),
-                            event.seatIds(),
-                            SeatStatus.AVAILABLE,
-                            null
-                    );
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.AVAILABLE, null);
+                }
+                case "ReservationConfirmed", "ReservationConfirmedEvent" -> {
+                    ReservationConfirmedEvent event = convertPayload(envelope.payload(), ReservationConfirmedEvent.class);
+                    publish(envelope.eventId(), event.eventId(), event.seatIds(), SeatStatus.SOLD, null);
                 }
                 default -> log.debug("Ignoring reservation event type: {}", envelope.eventType());
             }
         } catch (Exception ex) {
             log.error("Failed to process reservation event: type={}, eventId={}: {}",
-                    envelope.eventType(), envelope.eventId(), ex.getMessage(), ex);
+                    envelope != null ? envelope.eventType() : "null", envelope != null ? envelope.eventId() : "null", ex.getMessage(), ex);
             throw ex;
-        } finally {
-            MDC.remove("correlationId");
-            MDC.remove("traceId");
-            CorrelationContext.clear();
         }
     }
 
@@ -91,5 +69,10 @@ public class ReservationEventListener {
             return targetClass.cast(payload);
         }
         return objectMapper.convertValue(payload, targetClass);
+    }
+
+    private void publish(String sourceEventId, java.util.UUID eventId, java.util.List<java.util.UUID> seatIds,
+                         SeatStatus status, java.time.Instant holdExpiresAt) {
+        realtimeFanOutPublisher.publish(sourceEventId, SeatStatusUpdateMessage.of(eventId, seatIds, status, holdExpiresAt));
     }
 }
