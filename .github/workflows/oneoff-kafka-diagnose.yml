@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Diagnose gateway and Promtail health
+      - name: Probe gateway listener and Promtail primitives
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -31,18 +31,21 @@ jobs:
           gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
           set -u
           echo '=== GATEWAY STATE ==='
-          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}} error={{.State.Error}}' seatflow-gateway
-          echo '=== GATEWAY HEALTH HISTORY ==='
-          docker inspect --format '{{if .State.Health}}{{range .State.Health.Log}}{{println "exit=" .ExitCode " output=" .Output}}{{end}}{{end}}' seatflow-gateway | tail -12
-          echo '=== GATEWAY FILTERED ERRORS ==='
-          docker logs --tail 350 seatflow-gateway 2>&1 \
-            | grep -Ei 'ERROR|Exception|Caused by|FATAL|OutOfMemory|Killed|connection refused|authentication failed|permission denied|does not exist|failed to|unable to|Redis|Kafka|Eureka|Bind|port|JWT|issuer|jwk' \
+          docker inspect --format 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restarts={{.RestartCount}} oom={{.State.OOMKilled}}' seatflow-gateway
+          echo '=== GATEWAY LOCALHOST RESOLUTION ==='
+          docker exec seatflow-gateway sh -c 'getent hosts localhost 2>/dev/null || cat /etc/hosts | grep localhost || true'
+          echo '=== GATEWAY PORT 8080 LISTENER (/proc/net/tcp*) ==='
+          docker exec seatflow-gateway sh -c "grep -Ei '(:1F90).* 0A ' /proc/net/tcp /proc/net/tcp6 2>/dev/null || true"
+          echo '=== GATEWAY PROBE 127.0.0.1 ==='
+          docker exec seatflow-gateway sh -c 'wget -S -O - -T 8 http://127.0.0.1:8080/actuator/health 2>&1 | head -40' || true
+          echo '=== GATEWAY PROBE localhost ==='
+          docker exec seatflow-gateway sh -c 'wget -S -O - -T 8 http://localhost:8080/actuator/health 2>&1 | head -40' || true
+          echo '=== GATEWAY LOG TAIL ==='
+          docker logs --tail 100 seatflow-gateway 2>&1 \
             | sed -E 's#(password|token|secret|api[_-]?key)=([^[:space:]]+)#\1=[REDACTED]#Ig' \
-            | tail -90 || true
-          echo '=== PROMTAIL PROCESS ==='
-          docker inspect --format 'path={{.Path}} args={{json .Args}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' seatflow-promtail
-          echo '=== PROMTAIL AVAILABLE COMMANDS ==='
-          docker exec seatflow-promtail sh -c 'for c in promtail curl wget busybox nc netcat; do p=$(command -v "$c" 2>/dev/null || true); echo "$c=${p:-missing}"; done'
-          echo '=== PROMTAIL VERSION PROBE ==='
-          docker exec seatflow-promtail sh -c 'promtail -version 2>&1 || /usr/bin/promtail -version 2>&1 || true' | head -20
+            | tail -100
+          echo '=== PROMTAIL PRIMITIVES ==='
+          docker exec seatflow-promtail sh -c 'for c in sh grep cat sed awk; do p=$(command -v "$c" 2>/dev/null || true); echo "$c=${p:-missing}"; done'
+          echo '=== PROMTAIL 9080 LISTENER (/proc/net/tcp*) ==='
+          docker exec seatflow-promtail sh -c "grep -Ei '(:2378).* 0A ' /proc/net/tcp /proc/net/tcp6 2>/dev/null || true"
           REMOTE
