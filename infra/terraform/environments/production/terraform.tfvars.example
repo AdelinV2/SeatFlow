@@ -3,7 +3,7 @@
 
 project_id                    = "seatflow-production-507311"
 region                        = "europe-west1"
-zone                          = "europe-west1-b"
+zone                          = "europe-west1-c"
 environment                   = "production"
 vm_name                       = "seatflow-production"
 machine_type                  = "e2-highmem-2"
@@ -20,3 +20,4 @@ subnet_cidr                   = "10.0.1.0/24"
 artifact_registry_repo_id     = "seatflow"
 workload_identity_pool_id     = "seatflow-github-pool"
 workload_identity_provider_id = "seatflow-github-provider"
+

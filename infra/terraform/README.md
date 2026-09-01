@@ -42,7 +42,7 @@ The infrastructure design follows [ADR-008: Compute Engine Single-VM Portfolio D
 │                                                                             │
 │  Managed Cloud Capabilities:                                                │
 │  • Artifact Registry: Docker repository `seatflow` (europe-west1)           │
-│  • Secret Manager: 14 empty secret containers (populated out-of-band)       │
+│  • Secret Manager: 8 empty secret containers (populated out-of-band)        │
 │  • Workload Identity Federation: Pool & OIDC Provider for GitHub Actions    │
 │  • Cloud Logging & Monitoring: Google Cloud Ops Agent integration           │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -68,7 +68,7 @@ infra/terraform/
 │       ├── artifact-registry.tf         # Docker Artifact Registry repo
 │       ├── iam.tf                       # Runtime & Deploy Service Accounts + IAM roles
 │       ├── wif.tf                       # Workload Identity Federation for GitHub Actions
-│       ├── secrets.tf                   # 14 Secret Manager containers
+│       ├── secrets.tf                   # 8 Secret Manager containers
 │       └── monitoring.tf                # Ops Agent alert policies (CPU, Disk)
 │
 └── environments/
@@ -165,3 +165,4 @@ Execute the automated foundation verification script:
 ```
 
 For complete step-by-step operations, DNS mapping, SSL provisioning, and disaster recovery procedures, refer to [GCP Compute Engine Deployment Runbook](../runbooks/gcp-compute-engine-deployment-and-verification.md).
+

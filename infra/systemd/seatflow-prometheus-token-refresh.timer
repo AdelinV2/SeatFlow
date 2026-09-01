@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh SeatFlow Prometheus token every 45 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=45min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
