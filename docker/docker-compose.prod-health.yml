@@ -6,10 +6,15 @@
 services:
   kafka:
     healthcheck:
-      timeout: 45s
+      # Avoid kafka-topics.sh here: that probe launches a JVM every interval and
+      # materially worsens CPU starvation during a full production cold start.
+      # A successful TCP connect proves the broker listener is accepting clients;
+      # application clients retain their own Kafka retry/reconnect behavior.
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9092'"]
+      timeout: 5s
       interval: 10s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 60s
 
   eureka-server:
     healthcheck:
