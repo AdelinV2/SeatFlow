@@ -1,7 +1,8 @@
-# Production-only health windows for the single e2-highmem-2 VM.
-# Cold simultaneous JVM startup is CPU-bound on 2 vCPU; these grace periods
-# prevent Docker from reporting false failures while retaining normal probes
-# after startup. Local Compose defaults remain intentionally faster.
+# Production-only health and resource overrides for the single e2-highmem-2 VM.
+# The production host has 2 vCPU / 16 GiB. Cold simultaneous JVM startup is
+# CPU-bound and several services have also exceeded their original cgroup memory
+# ceilings even while the host itself retained ample free RAM. Keep local Compose
+# defaults intentionally smaller/faster; these values apply only to production.
 
 services:
   kafka:
@@ -17,41 +18,81 @@ services:
       start_period: 60s
 
   eureka-server:
+    mem_limit: 512m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   api-gateway:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   user-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   seat-map-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   event-service:
+    mem_limit: 896m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   reservation-service:
+    mem_limit: 896m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   payment-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   ticket-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   realtime-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
 
   notification-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 480s
+      start_period: 600s
