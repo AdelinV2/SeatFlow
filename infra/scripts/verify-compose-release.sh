@@ -66,8 +66,13 @@ frontend_status=$("${compose[@]}" exec -T frontend \
   wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 | awk '/HTTP\// {print $2}' | tail -1)
 [[ ${frontend_status} == 200 ]]
 
-websocket_status=$("${compose[@]}" exec -T frontend sh -c \
-  "wget -qSO /dev/null --header='Connection: Upgrade' --header='Upgrade: websocket' http://127.0.0.1:8080/ws 2>&1 | awk '/HTTP\\// {print \\$2}' | tail -1" || true)
+websocket_status=$("${compose[@]}" exec -T frontend \
+  wget -qSO /dev/null \
+    --header='Connection: Upgrade' \
+    --header='Upgrade: websocket' \
+    http://127.0.0.1:8080/ws 2>&1 \
+  | awk '/HTTP\// {print $2}' \
+  | tail -1 || true)
 if [[ ! ${websocket_status} =~ ^(101|200|400|401|403|426)$ ]]; then
   echo "WebSocket edge probe returned unexpected status: ${websocket_status:-none}" >&2
   exit 1
