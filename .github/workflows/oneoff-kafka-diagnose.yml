@@ -1,4 +1,4 @@
-name: One-off - Verify Stripe Secret Write Permission
+name: One-off - Activate Production Stripe Webhook Secret
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  verify-secret-write:
+  activate-stripe-webhook:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -20,17 +20,80 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Test Secret Manager write permission
+      - name: Activate webhook secret and recreate payment service only
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+          GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+          GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
         shell: bash
         run: |
           set -euo pipefail
-          access_token=$(gcloud auth print-access-token)
-          permissions=$(curl -fsS -X POST \
-            -H "Authorization: Bearer ${access_token}" \
-            -H 'Content-Type: application/json' \
-            "https://secretmanager.googleapis.com/v1/projects/${GCP_PROJECT_ID}/secrets/stripe-webhook-secret:testIamPermissions" \
-            -d '{"permissions":["secretmanager.versions.access","secretmanager.versions.add"]}' \
-            | jq -r '.permissions[]?' | sort | paste -sd, -)
-          echo "deploy_sa_stripe_webhook_secret_permissions=${permissions:-none}"
+          gcloud compute ssh "${GCP_VM_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --zone="${GCP_VM_ZONE}" \
+            --tunnel-through-iap --quiet \
+            --command="sudo env GCP_PROJECT_ID='${GCP_PROJECT_ID}' GCP_REGION='${GCP_REGION}' ARTIFACT_REGISTRY_REPOSITORY='${ARTIFACT_REGISTRY_REPOSITORY}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          runtime_file=/run/seatflow/runtime.env
+          seatflow_root=/opt/seatflow
+
+          current_tag=$(awk -F= '$1=="SEATFLOW_IMAGE_TAG" {print $2}' "$runtime_file")
+          [[ $current_tag =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid current image tag'; exit 1; }
+
+          webhook_secret=$(gcloud secrets versions access latest \
+            --secret=stripe-webhook-secret --project="$GCP_PROJECT_ID")
+          [[ $webhook_secret == whsec_* ]] || { echo 'stripe webhook secret is missing or malformed'; exit 1; }
+          unset webhook_secret
+          echo 'stripe_webhook_secret_valid=true'
+
+          "$seatflow_root/infra/scripts/render-runtime-env.sh" \
+            "$GCP_PROJECT_ID" "$GCP_REGION" "$ARTIFACT_REGISTRY_REPOSITORY" "$current_tag"
+          grep -q '^STRIPE_WEBHOOK_SECRET=whsec_' "$runtime_file"
+          [[ $(stat -c '%a' "$runtime_file") == 600 ]] || { echo 'runtime env permissions are not 0600'; exit 1; }
+          echo 'runtime_env_webhook_secret_loaded=true'
+
+          compose=(docker compose
+            -f "$seatflow_root/docker-compose.yml"
+            -f "$seatflow_root/docker-compose.services.yml"
+            -f "$seatflow_root/docker-compose.monitoring.yml"
+            -f "$seatflow_root/docker-compose.prod.yml"
+            -f "$seatflow_root/docker-compose.prod-health.yml"
+            --env-file "$runtime_file")
+
+          "${compose[@]}" config --quiet
+          old_id=$("${compose[@]}" ps -q payment-service 2>/dev/null || true)
+          "${compose[@]}" up -d --no-deps --force-recreate payment-service
+          new_id=$("${compose[@]}" ps -q payment-service)
+          [[ -n $new_id ]] || { echo 'payment service container missing after recreate'; exit 1; }
+          [[ $new_id != "$old_id" ]] || { echo 'payment service container was not recreated'; exit 1; }
+
+          deadline=$((SECONDS + 600))
+          while (( SECONDS < deadline )); do
+            status=$(docker inspect --format '{{.State.Status}}' "$new_id")
+            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$new_id")
+            restarts=$(docker inspect --format '{{.RestartCount}}' "$new_id")
+            oom=$(docker inspect --format '{{.State.OOMKilled}}' "$new_id")
+            if [[ $status == running && ( $health == healthy || $health == none ) ]]; then
+              echo "payment_service=status:${status},health:${health},restarts:${restarts},oom:${oom}"
+              break
+            fi
+            if [[ $status == exited || $oom == true ]]; then
+              echo "payment_service=status:${status},health:${health},restarts:${restarts},oom:${oom}"
+              docker logs --tail 120 "$new_id" 2>&1 \
+                | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
+                | tail -120
+              exit 1
+            fi
+            sleep 10
+          done
+
+          health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$new_id")
+          [[ $health == healthy || $health == none ]] || { echo "payment service did not become healthy: $health"; exit 1; }
+
+          "$seatflow_root/infra/scripts/verify-compose-release.sh" "$seatflow_root"
+          public_status=$(curl -fsS -o /dev/null -w '%{http_code}' 'https://seat-flow.me/api/events?size=1')
+          echo "public_events_status=${public_status}"
+          [[ $public_status =~ ^2[0-9]{2}$ ]]
+          REMOTE
