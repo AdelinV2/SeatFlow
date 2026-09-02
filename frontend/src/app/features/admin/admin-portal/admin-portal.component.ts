@@ -38,7 +38,7 @@ export class AdminPortalComponent implements OnInit {
   readonly venues = signal<VenueSummary[]>([]);
   readonly users = signal<UserProfile[]>([]);
   readonly totalVenues = signal<number>(0);
-  readonly totalUsers = signal<number>(0);
+  readonly totalUsers = signal<number | '—'>(0);
 
   readonly totalCapacity = computed(() =>
     this.venues().reduce((sum, v) => sum + (v.capacity || 0), 0)
@@ -73,6 +73,7 @@ export class AdminPortalComponent implements OnInit {
       },
       error: () => {
         this.users.set([]);
+        this.totalUsers.set('—');
         this.isLoading.set(false);
       },
     });

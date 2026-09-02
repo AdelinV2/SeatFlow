@@ -6,6 +6,7 @@ import {
   User,
 } from '@supabase/supabase-js';
 import { JwtClaims, UserProfile } from '../../models/user.model';
+import { UserApiService } from '../../services/user-api.service';
 import { UserContextService } from './user-context.service';
 
 export interface SupabaseAuthConfiguration {
@@ -54,9 +55,12 @@ export const SUPABASE_CLIENT = new InjectionToken<SupabaseClient>('SUPABASE_CLIE
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly userContext = inject(UserContextService);
+  private readonly userApi = inject(UserApiService);
   private readonly supabase = inject(SUPABASE_CLIENT);
   private readonly accessToken = signal<string | null>(null);
   private readonly initialization: Promise<void>;
+  private provisioningUserId: string | null = null;
+  private provisionedUserId: string | null = null;
 
   readonly isReady = signal(false);
   readonly lastError = signal<string | null>(null);
@@ -221,6 +225,32 @@ export class AuthService {
     const user = session.user;
 
     this.syncUserFromSession(claims, user);
+
+    const userId = user?.id ?? claims?.sub;
+    if (userId) {
+      this.ensureSeatFlowUserProvisioned(userId);
+    }
+  }
+
+  private ensureSeatFlowUserProvisioned(userId: string): void {
+    if (this.provisionedUserId === userId || this.provisioningUserId === userId) {
+      return;
+    }
+
+    this.provisioningUserId = userId;
+    this.userApi.getProfile().subscribe({
+      next: () => {
+        this.provisionedUserId = userId;
+        if (this.provisioningUserId === userId) {
+          this.provisioningUserId = null;
+        }
+      },
+      error: () => {
+        if (this.provisioningUserId === userId) {
+          this.provisioningUserId = null;
+        }
+      },
+    });
   }
 
   private syncUserFromSession(claims: JwtClaims | null, user: User | null): void {
@@ -273,6 +303,8 @@ export class AuthService {
 
   private clearSession(): void {
     this.accessToken.set(null);
+    this.provisioningUserId = null;
+    this.provisionedUserId = null;
     this.userContext.clearUser();
   }
 
