@@ -118,7 +118,7 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 |---|---|---|---|
 | **Eureka Server** | `8761` | None | Service registry and discovery |
 | **API Gateway** | `8080` | None | Single entry point, routing, CORS, JWT forwarding |
-| **User Service** | `8081` | `seatflow_user` | User profiles, identity sync from Entra External ID |
+| **User Service** | `8081` | `seatflow_user` | User profiles, identity sync from Supabase Auth |
 | **Seat Map Service** | `8082` | `seatflow_seatmap` | Venue layouts, sections, rows, seat configurations |
 | **Event Service** | `8083` | `seatflow_event` | Event catalog, dates, descriptions, category pricing |
 | **Reservation Service** | `8084` | `seatflow_reservation` | 15-minute seat holds, concurrency locks, hold expiration sweeper |
@@ -146,3 +146,43 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
   - Email notification trigger.
   - Real-time seat status update broadcast.
 - Critical state changes publish via the **Transactional Outbox Pattern** to prevent dual-write discrepancies.
+
+---
+
+## 5. Post-MVP Architecture Evolution (Phases 11–17)
+
+The original master blueprint contains an older post-MVP sequence whose phase numbers no longer match the implemented repository. For all work **after Phase 10**, the authoritative sequencing and architecture extension is now:
+
+- `.ai/architecture/09-post-mvp-evolution.md`
+
+The approved sequence is:
+
+1. **Phase 11 — Advanced Venue & Seat Map Designer**
+2. **Phase 12 — Multiple Event Sessions / Showings**
+3. **Phase 13 — Refunds & Ticket Cancellation**
+4. **Phase 14 — Admin Analytics & Operations Dashboard**
+5. **Phase 15 — AI Assistant & MCP / Tool Calling**
+6. **Phase 16 — Public Site Completion, Legal & Support**
+7. **Phase 17 — Full Testing, Quality Gates & Final Polish**
+
+These phases preserve the existing portfolio/demo deployment model and Stripe Test Mode. They do **not** turn SeatFlow into a real-money commercial ticketing system.
+
+### 5.1 Planned Service Extensions
+
+Two optional services are introduced only when their phases are implemented:
+
+| Planned Service | Default Port | Database | Purpose |
+|---|---:|---|---|
+| **Analytics Service** | `8089` | `seatflow_analytics` | Event-driven business read model for admin KPIs and charts |
+| **AI Service** | `8090` | None required | Spring AI orchestration and controlled domain tool calling; no direct DB access |
+
+The base application must remain functional when the AI provider/API key is absent. The Analytics Service is administrative and must never become part of reservation correctness or payment execution.
+
+### 5.2 New Cross-Cutting Business Invariants
+
+- **Bookable inventory is session-scoped:** after Phase 12, availability and reservations are bound to `eventSessionId`, not only `eventId`.
+- **Refund cutoff:** after Phase 13, a confirmed purchase is eligible for a customer-initiated refund only when the corresponding event session starts at least **24 hours** after the authoritative server time at the moment the refund request is accepted.
+- **Refund policy is server-side:** frontend visibility of the refund button is convenience only; Reservation Service enforces ownership, state, and the 24-hour cutoff.
+- **Refunded tickets are invalid:** successful refund causes ticket revocation and released seats become available again when the session is still bookable.
+- **AI never bypasses domain rules:** AI tools invoke existing authenticated APIs; they do not query databases directly and cannot bypass the 10-seat limit, 15-minute hold, authorization, session availability, or refund policy.
+- **Testing is intentionally final:** Phase 17 adds the full cross-service/E2E quality gate after the new domain model and post-MVP features are stable. Feature phases still require focused tests for the code they introduce.
