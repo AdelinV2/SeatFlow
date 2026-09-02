@@ -13,6 +13,11 @@ spring:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:realtime-service}
       auto-offset-reset: latest
       enable-auto-commit: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jws-algorithms: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS:ES256,RS256}
 
 eureka:
   client:
