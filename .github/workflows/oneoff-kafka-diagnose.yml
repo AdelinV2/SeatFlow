@@ -1,4 +1,4 @@
-name: One-off - Configure Production HTTPS
+name: One-off - Identify Production Stripe Account
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  configure-https:
+  identify-stripe:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -20,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Verify DNS and configure HTTPS edge
+      - name: Identify Stripe account without exposing credentials
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -34,24 +34,39 @@ jobs:
             --tunnel-through-iap --quiet \
             --command='sudo bash -s' <<'REMOTE'
           set -euo pipefail
-          echo '=== DNS RESOLUTION ==='
-          for host in seat-flow.me www.seat-flow.me api.seat-flow.me; do
-            printf '%s=' "$host"
-            getent ahostsv4 "$host" | awk '{print $1}' | sort -u | paste -sd, - || true
-          done
+          project_id=$(curl -fsS -H 'Metadata-Flavor: Google' \
+            'http://metadata.google.internal/computeMetadata/v1/project/project-id')
+          stripe_key=$(gcloud secrets versions access latest --secret=stripe-api-key --project="$project_id")
+          if [[ $stripe_key == sk_test_* ]]; then
+            echo 'stripe_key_mode=test'
+          else
+            echo 'stripe_key_mode=unexpected'
+            exit 1
+          fi
 
-          echo '=== HTTPS CONFIGURATION ==='
-          /opt/seatflow/infra/scripts/configure-https-edge.sh 'https://seat-flow.me/api/events?size=1'
+          account_json=$(curl -fsS -u "${stripe_key}:" https://api.stripe.com/v1/account)
+          account_id=$(jq -r '.id // empty' <<<"$account_json")
+          [[ $account_id =~ ^acct_ ]] || { echo 'stripe_account_id_invalid'; exit 1; }
+          echo "stripe_account_id=${account_id}"
 
-          echo '=== TLS CERTIFICATE ==='
-          openssl x509 -in /etc/letsencrypt/live/seat-flow.me/fullchain.pem -noout -subject -issuer -dates
+          if webhook_value=$(gcloud secrets versions access latest --secret=stripe-webhook-secret --project="$project_id" 2>/dev/null); then
+            if [[ -n $webhook_value ]]; then
+              echo 'stripe_webhook_secret_present=true'
+            else
+              echo 'stripe_webhook_secret_present=false'
+            fi
+          else
+            echo 'stripe_webhook_secret_present=false'
+          fi
 
-          echo '=== PUBLIC HTTPS SMOKE ==='
-          for url in \
-            'https://seat-flow.me/' \
-            'https://www.seat-flow.me/' \
-            'https://api.seat-flow.me/api/events?size=1'; do
-            status=$(curl -sS -o /dev/null -w '%{http_code}' "$url")
-            echo "$url -> $status"
-          done
+          access_token=$(curl -fsS -H 'Metadata-Flavor: Google' \
+            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+            | jq -r '.access_token')
+          permissions=$(curl -fsS -X POST \
+            -H "Authorization: Bearer ${access_token}" \
+            -H 'Content-Type: application/json' \
+            "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/stripe-webhook-secret:testIamPermissions" \
+            -d '{"permissions":["secretmanager.versions.access","secretmanager.versions.add"]}' \
+            | jq -r '.permissions[]?' | sort | paste -sd, -)
+          echo "stripe_webhook_secret_permissions=${permissions:-none}"
           REMOTE
