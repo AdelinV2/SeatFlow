@@ -42,7 +42,7 @@ jobs:
           test_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           response=$(curl -sS https://api.stripe.com/v1/payment_intents \
             -u "${stripe_key}:" \
-            -d amount=100 \
+            -d amount=200 \
             -d currency=ron \
             -d 'payment_method_types[]=card' \
             -d payment_method=pm_card_visa \
