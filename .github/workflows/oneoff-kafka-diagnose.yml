@@ -1,6 +1,6 @@
 name: One-off - Diagnose Production Kafka
 
-# snapshot-trigger: 2026-09-01T21:28Z
+# snapshot-trigger: 2026-09-02T07:15Z
 on:
   push:
     branches: [ops/kafka-diagnose-20260901]
@@ -54,4 +54,7 @@ jobs:
           for c in seatflow-gateway seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-realtime seatflow-notification seatflow-frontend; do
             docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|image={{.Config.Image}}' "$c" 2>/dev/null | sed 's#^/##' || true
           done
+          echo '=== TEMPO HARDENING ==='
+          docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|oom={{.State.OOMKilled}}|memory_limit_bytes={{.HostConfig.Memory}}|image={{.Config.Image}}' seatflow-tempo 2>/dev/null | sed 's#^/##' || true
+          docker stats --no-stream --format '{{.Name}}|mem={{.MemUsage}}|mem_pct={{.MemPerc}}' seatflow-tempo 2>/dev/null || true
           REMOTE
