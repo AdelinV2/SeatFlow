@@ -96,3 +96,8 @@ services:
       OTEL_LOGS_EXPORTER: none
     healthcheck:
       start_period: 600s
+
+  tempo:
+    # Observed production cold start crossed the original 256 MiB cgroup limit
+    # while the host retained ample memory. Keep the increase scoped to production.
+    mem_limit: 384m
