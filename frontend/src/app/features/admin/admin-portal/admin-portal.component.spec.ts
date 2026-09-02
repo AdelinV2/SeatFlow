@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AdminPortalComponent } from './admin-portal.component';
 import { AdminVenueApiService } from '../../../services/admin-venue-api.service';
 import { AdminUserApiService } from '../../../services/admin-user-api.service';
@@ -105,5 +105,15 @@ describe('AdminPortalComponent', () => {
     expect(component.totalUsers()).toBe(1);
     expect(component.totalCapacity()).toBe(6200);
     expect(component.totalConfiguredSeats()).toBe(5950);
+  });
+
+  it('does not report zero registered users when the admin user request fails', () => {
+    userApiSpy.getUsers.and.returnValue(throwError(() => new Error('user-service unavailable')));
+
+    component.loadDashboardData();
+
+    expect(component.users()).toEqual([]);
+    expect(component.totalUsers()).toBe('—');
+    expect(component.isLoading()).toBeFalse();
   });
 });
