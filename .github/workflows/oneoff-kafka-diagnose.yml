@@ -1,6 +1,5 @@
-name: One-off - Diagnose Production Kafka
+name: One-off - Configure Production HTTPS
 
-# snapshot-trigger: 2026-09-02T07:15Z
 on:
   push:
     branches: [ops/kafka-diagnose-20260901]
@@ -10,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  diagnose-kafka:
+  configure-https:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -21,7 +20,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Inspect migration progress without mutations
+      - name: Verify DNS and configure HTTPS edge
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
@@ -29,32 +28,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gcloud compute ssh "${GCP_VM_NAME}" --project="${GCP_PROJECT_ID}" --zone="${GCP_VM_ZONE}" --tunnel-through-iap --quiet --command='sudo bash -s' <<'REMOTE'
+          gcloud compute ssh "${GCP_VM_NAME}" \
+            --project="${GCP_PROJECT_ID}" \
+            --zone="${GCP_VM_ZONE}" \
+            --tunnel-through-iap --quiet \
+            --command='sudo bash -s' <<'REMOTE'
           set -euo pipefail
-          echo '=== RELEASE ==='
-          grep '^SEATFLOW_IMAGE_TAG=' /run/seatflow/runtime.env 2>/dev/null || true
-          echo '=== DEPENDENCIES ==='
-          for c in seatflow-postgres seatflow-redis seatflow-kafka seatflow-eureka; do
-            docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|oom={{.State.OOMKilled}}' "$c" 2>/dev/null | sed 's#^/##' || true
+          echo '=== DNS RESOLUTION ==='
+          for host in seat-flow.me www.seat-flow.me api.seat-flow.me; do
+            printf '%s=' "$host"
+            getent ahostsv4 "$host" | awk '{print $1}' | sort -u | paste -sd, - || true
           done
-          echo '=== MIGRATION MARKERS ==='
-          find /opt/seatflow/deployment -maxdepth 1 -type f -name 'migrations-*.done' -printf '%f\n' 2>/dev/null | sort || true
-          echo '=== MIGRATION CONTAINERS ==='
-          docker ps -a --filter 'name=seatflow-migrate-' --format '{{.Names}}|{{.Status}}|{{.Image}}' | sort || true
-          echo '=== MIGRATION LOG SIGNALS ==='
-          while read -r name; do
-            [[ -n ${name} ]] || continue
-            echo "--- ${name}"
-            docker logs --tail 120 "$name" 2>&1 \
-              | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
-              | grep -Ei 'flyway|migration|schema .*up to date|successfully applied|error|exception|failed|started .*application' \
-              | tail -80 || true
-          done < <(docker ps -a --filter 'name=seatflow-migrate-' --format '{{.Names}}')
-          echo '=== APP CONTAINERS ==='
-          for c in seatflow-gateway seatflow-user seatflow-seatmap seatflow-event seatflow-reservation seatflow-payment seatflow-ticket seatflow-realtime seatflow-notification seatflow-frontend; do
-            docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|image={{.Config.Image}}' "$c" 2>/dev/null | sed 's#^/##' || true
+
+          echo '=== HTTPS CONFIGURATION ==='
+          /opt/seatflow/infra/scripts/configure-https-edge.sh 'https://seat-flow.me/api/events?size=1'
+
+          echo '=== TLS CERTIFICATE ==='
+          openssl x509 -in /etc/letsencrypt/live/seat-flow.me/fullchain.pem -noout -subject -issuer -dates
+
+          echo '=== PUBLIC HTTPS SMOKE ==='
+          for url in \
+            'https://seat-flow.me/' \
+            'https://www.seat-flow.me/' \
+            'https://api.seat-flow.me/api/events?size=1'; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' "$url")
+            echo "$url -> $status"
           done
-          echo '=== TEMPO HARDENING ==='
-          docker inspect --format '{{.Name}}|status={{.State.Status}}|health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|restarts={{.RestartCount}}|oom={{.State.OOMKilled}}|memory_limit_bytes={{.HostConfig.Memory}}|image={{.Config.Image}}' seatflow-tempo 2>/dev/null | sed 's#^/##' || true
-          docker stats --no-stream --format '{{.Name}}|mem={{.MemUsage}}|mem_pct={{.MemPerc}}' seatflow-tempo 2>/dev/null || true
           REMOTE
