@@ -1,4 +1,4 @@
-name: One-off - Activate Production Stripe Webhook Secret
+name: One-off - Smoke Test Stripe Webhook Delivery
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  activate-stripe-webhook:
+  smoke-stripe-webhook:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -20,11 +20,9 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Activate webhook secret and recreate payment service only
+      - name: Create Stripe sandbox payment and verify webhook receipt
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GCP_REGION: ${{ vars.GCP_REGION }}
-          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
           GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
         shell: bash
@@ -34,66 +32,63 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --zone="${GCP_VM_ZONE}" \
             --tunnel-through-iap --quiet \
-            --command="sudo env GCP_PROJECT_ID='${GCP_PROJECT_ID}' GCP_REGION='${GCP_REGION}' ARTIFACT_REGISTRY_REPOSITORY='${ARTIFACT_REGISTRY_REPOSITORY}' bash -s" <<'REMOTE'
+            --command="sudo env GCP_PROJECT_ID='${GCP_PROJECT_ID}' bash -s" <<'REMOTE'
           set -euo pipefail
-          runtime_file=/run/seatflow/runtime.env
-          seatflow_root=/opt/seatflow
 
-          current_tag=$(awk -F= '$1=="SEATFLOW_IMAGE_TAG" {print $2}' "$runtime_file")
-          [[ $current_tag =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid current image tag'; exit 1; }
+          stripe_key=$(gcloud secrets versions access latest \
+            --secret=stripe-api-key --project="$GCP_PROJECT_ID")
+          [[ $stripe_key == sk_test_* ]] || { echo 'refusing non-test Stripe key'; exit 1; }
 
-          webhook_secret=$(gcloud secrets versions access latest \
-            --secret=stripe-webhook-secret --project="$GCP_PROJECT_ID")
-          [[ $webhook_secret == whsec_* ]] || { echo 'stripe webhook secret is missing or malformed'; exit 1; }
-          unset webhook_secret
-          echo 'stripe_webhook_secret_valid=true'
+          test_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          response=$(curl -sS https://api.stripe.com/v1/payment_intents \
+            -u "${stripe_key}:" \
+            -d amount=100 \
+            -d currency=ron \
+            -d 'payment_method_types[]=card' \
+            -d payment_method=pm_card_visa \
+            -d confirm=true \
+            --data-urlencode 'description=SeatFlow production webhook smoke test')
+          unset stripe_key
 
-          "$seatflow_root/infra/scripts/render-runtime-env.sh" \
-            "$GCP_PROJECT_ID" "$GCP_REGION" "$ARTIFACT_REGISTRY_REPOSITORY" "$current_tag"
-          grep -q '^STRIPE_WEBHOOK_SECRET=whsec_' "$runtime_file"
-          [[ $(stat -c '%a' "$runtime_file") == 600 ]] || { echo 'runtime env permissions are not 0600'; exit 1; }
-          echo 'runtime_env_webhook_secret_loaded=true'
+          payment_intent_id=$(jq -r '.id // empty' <<<"$response")
+          payment_status=$(jq -r '.status // empty' <<<"$response")
+          [[ $payment_intent_id =~ ^pi_ ]] || {
+            echo 'test PaymentIntent was not created successfully'
+            jq -r '{type: .error.type, code: .error.code, message: .error.message}' <<<"$response"
+            exit 1
+          }
+          echo "stripe_test_payment_intent=${payment_intent_id}"
+          echo "stripe_test_payment_status=${payment_status}"
+          [[ $payment_status == succeeded ]] || { echo 'test PaymentIntent did not succeed'; exit 1; }
 
-          compose=(docker compose
-            -f "$seatflow_root/docker-compose.yml"
-            -f "$seatflow_root/docker-compose.services.yml"
-            -f "$seatflow_root/docker-compose.monitoring.yml"
-            -f "$seatflow_root/docker-compose.prod.yml"
-            -f "$seatflow_root/docker-compose.prod-health.yml"
-            --env-file "$runtime_file")
-
-          "${compose[@]}" config --quiet
-          old_id=$("${compose[@]}" ps -q payment-service 2>/dev/null || true)
-          "${compose[@]}" up -d --no-deps --force-recreate payment-service
-          new_id=$("${compose[@]}" ps -q payment-service)
-          [[ -n $new_id ]] || { echo 'payment service container missing after recreate'; exit 1; }
-          [[ $new_id != "$old_id" ]] || { echo 'payment service container was not recreated'; exit 1; }
-
-          deadline=$((SECONDS + 600))
+          deadline=$((SECONDS + 120))
+          matched=false
           while (( SECONDS < deadline )); do
-            status=$(docker inspect --format '{{.State.Status}}' "$new_id")
-            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$new_id")
-            restarts=$(docker inspect --format '{{.RestartCount}}' "$new_id")
-            oom=$(docker inspect --format '{{.State.OOMKilled}}' "$new_id")
-            if [[ $status == running && ( $health == healthy || $health == none ) ]]; then
-              echo "payment_service=status:${status},health:${health},restarts:${restarts},oom:${oom}"
+            logs=$(docker logs --since "$test_started" seatflow-payment 2>&1 || true)
+            if grep -Fq 'Processing Stripe webhook event. eventType=payment_intent.succeeded' <<<"$logs" \
+              && grep -Fq "$payment_intent_id" <<<"$logs"; then
+              matched=true
               break
             fi
-            if [[ $status == exited || $oom == true ]]; then
-              echo "payment_service=status:${status},health:${health},restarts:${restarts},oom:${oom}"
-              docker logs --tail 120 "$new_id" 2>&1 \
-                | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
-                | tail -120
-              exit 1
-            fi
-            sleep 10
+            sleep 5
           done
 
-          health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$new_id")
-          [[ $health == healthy || $health == none ]] || { echo "payment service did not become healthy: $health"; exit 1; }
+          if [[ $matched != true ]]; then
+            echo 'signed Stripe webhook was not observed in payment-service logs within 120s'
+            docker logs --since "$test_started" seatflow-payment 2>&1 \
+              | sed -E 's#(password|passwd|token|secret|api[_-]?key|authorization)[=:][^[:space:]]+#\1=[REDACTED]#Ig' \
+              | grep -Ei 'Stripe webhook|payment_intent|signature|error|exception' \
+              | tail -120 || true
+            exit 1
+          fi
 
-          "$seatflow_root/infra/scripts/verify-compose-release.sh" "$seatflow_root"
-          public_status=$(curl -fsS -o /dev/null -w '%{http_code}' 'https://seat-flow.me/api/events?size=1')
-          echo "public_events_status=${public_status}"
-          [[ $public_status =~ ^2[0-9]{2}$ ]]
+          logs=$(docker logs --since "$test_started" seatflow-payment 2>&1 || true)
+          if grep -Fq 'Invalid Stripe webhook signature verification failed' <<<"$logs"; then
+            echo 'Stripe webhook signature validation failed'
+            exit 1
+          fi
+
+          echo 'stripe_webhook_signature_validated=true'
+          echo 'stripe_webhook_delivery_observed=true'
+          echo 'stripe_webhook_event_type=payment_intent.succeeded'
           REMOTE
