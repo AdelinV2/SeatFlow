@@ -37,16 +37,16 @@ describe('core HTTP interceptors', () => {
 
   afterEach(() => httpTesting.verify());
 
-  it('adds a UUID correlation header to every outgoing request', () => {
+  it('adds a UUID correlation header to SeatFlow API requests', () => {
     const http = TestBed.inject(HttpClient);
 
-    http.get('/public/health').subscribe();
+    http.get('/api/users/me').subscribe();
 
-    const request = httpTesting.expectOne('/public/health');
+    const request = httpTesting.expectOne('/api/users/me');
     expect(request.request.headers.get('X-Correlation-Id')).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
-    request.flush({ status: 'UP' });
+    request.flush({});
   });
 
   it('preserves an existing correlation header', () => {
@@ -66,28 +66,33 @@ describe('core HTTP interceptors', () => {
     http.get('http://localhost:8080/api/users/me').subscribe();
     const apiRequest = httpTesting.expectOne('http://localhost:8080/api/users/me');
     expect(apiRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
+    expect(apiRequest.request.headers.has('X-Correlation-Id')).toBeTrue();
     apiRequest.flush({});
 
     http.get('/api/admin/events').subscribe();
     const adminRequest = httpTesting.expectOne('/api/admin/events');
     expect(adminRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
+    expect(adminRequest.request.headers.has('X-Correlation-Id')).toBeTrue();
     adminRequest.flush([]);
 
     // Purely public anonymous endpoints omit Authorization header to prevent stale token 401s
     http.get('/api/events').subscribe();
     const publicRequest = httpTesting.expectOne('/api/events');
     expect(publicRequest.request.headers.has('Authorization')).toBeFalse();
+    expect(publicRequest.request.headers.has('X-Correlation-Id')).toBeTrue();
     publicRequest.flush([]);
 
-    // External service that happens to contain /api/ in URL
+    // External services must not receive SeatFlow authentication or correlation headers.
     http.get('https://api.stripe.com/v1/tokens').subscribe();
     const stripeRequest = httpTesting.expectOne('https://api.stripe.com/v1/tokens');
     expect(stripeRequest.request.headers.has('Authorization')).toBeFalse();
+    expect(stripeRequest.request.headers.has('X-Correlation-Id')).toBeFalse();
     stripeRequest.flush({});
 
     http.get('https://tiles.example.test/map').subscribe();
     const externalRequest = httpTesting.expectOne('https://tiles.example.test/map');
     expect(externalRequest.request.headers.has('Authorization')).toBeFalse();
+    expect(externalRequest.request.headers.has('X-Correlation-Id')).toBeFalse();
     externalRequest.flush({});
   });
 
