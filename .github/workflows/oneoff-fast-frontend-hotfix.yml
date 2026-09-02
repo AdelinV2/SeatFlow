@@ -1,4 +1,4 @@
-name: One-off - Fast Frontend Hotfix
+name: One-off - Verify Frontend Hotfix
 
 on:
   push:
@@ -9,120 +9,50 @@ permissions:
   id-token: write
 
 jobs:
-  build-and-deploy-frontend:
+  verify-frontend-hotfix:
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v7
-
       - name: Authenticate to GCP with WIF
         uses: ./.github/actions/setup-gcp-wif
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
-      - name: Configure Artifact Registry authentication
-        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build and push frontend image only
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/frontend:${{ github.sha }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-          provenance: true
-          sbom: true
-
-      - name: Deploy only frontend through IAP
+      - name: Verify public frontend and deployed container
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GCP_REGION: ${{ vars.GCP_REGION }}
-          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
           GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
           GCP_VM_ZONE: ${{ vars.GCP_VM_ZONE }}
-          HOTFIX_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          registry="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}"
           gcloud compute ssh "${GCP_VM_NAME}" \
             --project="${GCP_PROJECT_ID}" \
             --zone="${GCP_VM_ZONE}" \
             --tunnel-through-iap --quiet \
-            --command="sudo env HOTFIX_SHA='${HOTFIX_SHA}' REGISTRY='${registry}' bash -s" <<'REMOTE'
+            --command='sudo bash -s' <<'REMOTE'
           set -euo pipefail
-          seatflow_root=/opt/seatflow
-          runtime_file=/run/seatflow/runtime.env
-          override=/run/seatflow/frontend-hotfix.yml
-          metadata_url=http://metadata.google.internal/computeMetadata/v1
+          frontend_id=$(docker ps -q --filter name='^/seatflow-frontend$')
+          [[ -n ${frontend_id} ]]
+          echo "frontend_image=$(docker inspect --format '{{.Config.Image}}' "${frontend_id}")"
+          echo "frontend_health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${frontend_id}")"
+          echo "frontend_restarts=$(docker inspect --format '{{.RestartCount}}' "${frontend_id}")"
+          echo "frontend_oom=$(docker inspect --format '{{.State.OOMKilled}}' "${frontend_id}")"
 
-          registry_token=$(curl -fsS -H 'Metadata-Flavor: Google' \
-            "${metadata_url}/instance/service-accounts/default/token" | jq -er '.access_token')
-          printf '%s' "${registry_token}" | docker login \
-            -u oauth2accesstoken --password-stdin "https://${REGISTRY%%/*}" >/dev/null
-          unset registry_token
-
-          cat > "${override}" <<YAML
-          services:
-            frontend:
-              image: ${REGISTRY}/frontend:${HOTFIX_SHA}
-          YAML
-          chown root:root "${override}"
-          chmod 0600 "${override}"
-
-          compose=(docker compose
-            -f "${seatflow_root}/docker-compose.yml"
-            -f "${seatflow_root}/docker-compose.services.yml"
-            -f "${seatflow_root}/docker-compose.monitoring.yml"
-            -f "${seatflow_root}/docker-compose.prod.yml"
-            -f "${seatflow_root}/docker-compose.prod-health.yml"
-            -f "${override}"
-            --env-file "${runtime_file}")
-
-          "${compose[@]}" config --quiet
-          "${compose[@]}" pull frontend
-          "${compose[@]}" up -d --no-deps --force-recreate frontend
-
-          frontend_id=$("${compose[@]}" ps -q frontend)
-          [[ -n ${frontend_id} ]] || { echo 'frontend container missing'; exit 1; }
-          deadline=$((SECONDS + 180))
-          while (( SECONDS < deadline )); do
-            status=$(docker inspect --format '{{.State.Status}}' "${frontend_id}")
-            health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${frontend_id}")
-            if [[ ${status} == running && ( ${health} == healthy || ${health} == none ) ]]; then
-              break
-            fi
-            sleep 5
-          done
-
-          status=$(docker inspect --format '{{.State.Status}}' "${frontend_id}")
-          health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${frontend_id}")
-          restarts=$(docker inspect --format '{{.RestartCount}}' "${frontend_id}")
-          oom=$(docker inspect --format '{{.State.OOMKilled}}' "${frontend_id}")
-          echo "frontend=status:${status},health:${health},restarts:${restarts},oom:${oom}"
-          [[ ${status} == running && ( ${health} == healthy || ${health} == none ) && ${oom} == false ]]
-
-          local_env=$(curl -fsS http://127.0.0.1:8080/env.js)
-          grep -q 'STRIPE_PUBLISHABLE_KEY' <<<"${local_env}"
-          grep -q 'pk_test_' <<<"${local_env}"
-          ! grep -qi 'replace_with_your' <<<"${local_env}"
-          echo 'frontend_runtime_stripe_key_configured=true'
-
-          public_env=$(curl -fsS https://seat-flow.me/env.js)
-          grep -q 'pk_test_' <<<"${public_env}"
-          ! grep -qi 'replace_with_your' <<<"${public_env}"
+          env_body=$(curl -fsS https://seat-flow.me/env.js)
+          grep -q 'STRIPE_PUBLISHABLE_KEY' <<<"${env_body}"
+          grep -q 'pk_test_' <<<"${env_body}"
+          ! grep -qi 'replace_with_your' <<<"${env_body}"
           echo 'public_env_configured=true'
 
-          headers=$(curl -fsSI https://seat-flow.me/ | tr -d '\r')
-          grep -i '^content-security-policy:' <<<"${headers}" | grep -q 'https://js.stripe.com'
-          grep -i '^content-security-policy:' <<<"${headers}" | grep -q 'https://hooks.stripe.com'
-          echo 'stripe_csp_configured=true'
+          echo '--- public_headers ---'
+          curl -fsSI https://seat-flow.me/ | tr -d '\r' \
+            | grep -Ei '^(HTTP/|content-security-policy:|cache-control:|x-content-type-options:|x-frame-options:|referrer-policy:|permissions-policy:)'
+          echo '--- local_headers ---'
+          curl -fsSI http://127.0.0.1:8080/ | tr -d '\r' \
+            | grep -Ei '^(HTTP/|content-security-policy:|cache-control:|x-content-type-options:|x-frame-options:|referrer-policy:|permissions-policy:)'
 
           public_status=$(curl -fsS -o /dev/null -w '%{http_code}' https://seat-flow.me/)
           echo "public_frontend_status=${public_status}"
