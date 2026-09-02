@@ -6,6 +6,19 @@
   transition: background-color 250ms ease;
 }
 
+.hero-media-overlay {
+  background: linear-gradient(
+    to top,
+    var(--color-canvas) 0%,
+    color-mix(in srgb, var(--color-canvas) 68%, transparent) 52%,
+    color-mix(in srgb, var(--color-surface) 92%, transparent) 100%
+  );
+}
+
+:host-context(html.dark) .hero-media-overlay {
+  background: linear-gradient(to top, var(--color-canvas) 0%, rgba(2, 6, 23, 0.7) 52%, rgba(2, 6, 23, 0.8) 100%);
+}
+
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }

@@ -41,3 +41,15 @@
     transform: scale(1);
   }
 }
+
+.quick-details-backdrop {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background-color: rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+:host-context(html.dark) .quick-details-backdrop {
+  background-color: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(12px);
+}

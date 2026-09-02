@@ -1,15 +1,18 @@
 <div class="catalog-page min-h-screen pb-16">
   <!-- 1. FEATURED HERO CAROUSEL -->
   @if (activeHeroEvent(); as hero) {
-    <section class="hero-section relative w-full overflow-hidden bg-slate-950 text-white" aria-label="Featured events carousel">
+    <section
+      class="hero-section relative w-full overflow-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)] dark:bg-slate-950 dark:text-white"
+      aria-label="Featured events carousel"
+    >
       <!-- Hero Background Image with Blur & Gradient -->
       <div class="absolute inset-0 z-0">
         <img
           [src]="hero.bannerUrl || 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=80'"
           [alt]="hero.title"
-          class="h-full w-full object-cover object-center opacity-40 blur-sm scale-105 transition-all duration-700"
+          class="h-full w-full object-cover object-center opacity-15 blur-sm scale-105 transition-all duration-700 dark:opacity-40"
         />
-        <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-canvas)] via-slate-950/70 to-slate-950/80"></div>
+        <div class="hero-media-overlay absolute inset-0"></div>
       </div>
 
       <!-- Hero Content Container -->
@@ -18,21 +21,21 @@
           <!-- Text Info Column -->
           <div class="animate-fade-in-up lg:col-span-7">
             <div class="mb-4 flex flex-wrap items-center gap-2.5">
-              <span class="rounded-full border border-indigo-400/40 bg-indigo-500/20 px-3 py-1 text-xs font-black uppercase tracking-widest text-indigo-300 backdrop-blur-md">
+              <span class="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-indigo-600 backdrop-blur-md dark:border-indigo-400/40 dark:bg-indigo-500/20 dark:text-indigo-300">
                 Featured Event
               </span>
-              <span class="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-200 backdrop-blur-md">
+              <span class="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] backdrop-blur-md dark:border-white/20 dark:bg-white/10 dark:text-slate-200">
                 {{ hero.category }}
               </span>
             </div>
 
-            <h1 class="mb-4 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
+            <h1 class="mb-4 text-3xl font-black tracking-tight text-[var(--color-text-primary)] sm:text-4xl lg:text-5xl dark:text-white">
               {{ hero.title }}
             </h1>
 
-            <div class="mb-6 flex flex-wrap items-center gap-4 text-sm text-slate-300 sm:text-base">
+            <div class="mb-6 flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-secondary)] sm:text-base dark:text-slate-300">
               <div class="flex items-center gap-1.5 font-medium">
-                <svg viewBox="0 0 24 24" class="size-4.5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" class="size-4.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                   <line x1="16" y1="2" x2="16" y2="6" />
                   <line x1="8" y1="2" x2="8" y2="6" />
@@ -43,7 +46,7 @@
 
               @if (hero.venueName) {
                 <div class="flex items-center gap-1.5 font-medium">
-                  <svg viewBox="0 0 24 24" class="size-4.5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg viewBox="0 0 24 24" class="size-4.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
                     <circle cx="12" cy="9" r="2.5" />
                   </svg>
@@ -66,7 +69,7 @@
 
               <a
                 [routerLink]="['/events', hero.id]"
-                class="btn-spring inline-flex min-h-12 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-5 font-semibold text-white backdrop-blur-md hover:bg-white/20 transition-colors"
+                class="btn-spring inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/75 px-5 font-semibold text-[var(--color-text-primary)] backdrop-blur-md hover:bg-[var(--color-surface-elevated)] transition-colors dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
               >
                 View Details
               </a>
@@ -75,7 +78,7 @@
 
           <!-- Hero Image Preview Card (Desktop) -->
           <div class="hidden lg:col-span-5 lg:block">
-            <div class="relative overflow-hidden rounded-2xl border border-white/20 shadow-2xl shadow-indigo-950/50">
+            <div class="relative overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-2xl shadow-slate-300/50 dark:border-white/20 dark:shadow-indigo-950/50">
               <img
                 [src]="hero.bannerUrl || 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80'"
                 [alt]="hero.title"
@@ -93,7 +96,7 @@
 
         <!-- Carousel Indicators & Arrows -->
         @if (featuredEvents().length > 1) {
-          <div class="mt-8 flex items-center justify-between border-t border-white/10 pt-4">
+          <div class="mt-8 flex items-center justify-between border-t border-[var(--color-border)] pt-4 dark:border-white/10">
             <!-- Indicator Dots -->
             <div class="flex items-center gap-2">
               @for (item of featuredEvents(); track item.id; let idx = $index) {
@@ -112,7 +115,7 @@
               <button
                 type="button"
                 (click)="prevHero()"
-                class="btn-spring flex size-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+                class="btn-spring flex size-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-primary)] hover:bg-[var(--color-surface-elevated)] cursor-pointer dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 aria-label="Previous featured event"
               >
                 ‹
@@ -120,7 +123,7 @@
               <button
                 type="button"
                 (click)="nextHero()"
-                class="btn-spring flex size-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20 cursor-pointer"
+                class="btn-spring flex size-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-primary)] hover:bg-[var(--color-surface-elevated)] cursor-pointer dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 aria-label="Next featured event"
               >
                 ›
@@ -131,27 +134,30 @@
       </div>
     </section>
   } @else {
-    <section class="hero-section relative w-full overflow-hidden bg-slate-950 text-white py-12 sm:py-20" aria-label="SeatFlow hero banner">
+    <section
+      class="hero-section relative w-full overflow-hidden bg-[var(--color-surface)] text-[var(--color-text-primary)] py-12 sm:py-20 dark:bg-slate-950 dark:text-white"
+      aria-label="SeatFlow hero banner"
+    >
       <div class="absolute inset-0 z-0">
         <img
           src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80"
           alt="Concert stage lights"
-          class="h-full w-full object-cover object-center opacity-30 blur-sm scale-105"
+          class="h-full w-full object-cover object-center opacity-15 blur-sm scale-105 dark:opacity-30"
         />
-        <div class="absolute inset-0 bg-gradient-to-t from-[var(--color-canvas)] via-slate-950/70 to-slate-950/80"></div>
+        <div class="hero-media-overlay absolute inset-0"></div>
       </div>
 
       <div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="max-w-3xl animate-fade-in-up">
-          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/15 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-300 backdrop-blur-md">
+          <div class="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-600 backdrop-blur-md dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-300">
             <span>✨</span>
             <span>Next-Gen Event Ticketing</span>
           </div>
-          <h1 class="text-3xl font-black tracking-tight sm:text-5xl text-white">
+          <h1 class="text-3xl font-black tracking-tight sm:text-5xl text-[var(--color-text-primary)] dark:text-white">
             Discover Live Events.<br />
-            <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Secure Your Favorite Seats.</span>
+            <span class="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Secure Your Favorite Seats.</span>
           </h1>
-          <p class="mt-4 text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
+          <p class="mt-4 max-w-2xl text-sm leading-relaxed text-[var(--color-text-secondary)] sm:text-base dark:text-slate-300">
             Real-time interactive seat maps, guaranteed 15-minute seat holds with zero double-booking, and instant digital tickets.
           </p>
         </div>
