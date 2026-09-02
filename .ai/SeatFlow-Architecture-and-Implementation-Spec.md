@@ -2640,6 +2640,10 @@ No major coding yet.
 
 This section defines the recommended implementation order. It is deliberately sequential: the project should gain one architectural capability at a time, and each phase should leave the repository in a runnable state.
 
+> [!NOTE]
+> **Post-MVP Supersession Notice (Phases 11–17):**  
+> The breakdown below reflects the historical baseline sequence. For all active post-MVP architecture, phase numbering, and scope specifications (Phases 11 through 17), refer to the authoritative documentation in [`.ai/architecture/09-post-mvp-evolution.md`](architecture/09-post-mvp-evolution.md) and the corresponding phase tasks in [`.ai/tasks/`](tasks/).
+
 ## 40.1 Phase 0 — Repository and Architecture Foundations
 
 Deliver:

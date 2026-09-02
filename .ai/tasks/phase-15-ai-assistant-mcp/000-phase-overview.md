@@ -2,6 +2,7 @@
 
 **Status:** `PLANNED`  
 **Architecture:** `.ai/architecture/09-post-mvp-evolution.md`  
+**Related ADR:** `.ai/decisions/ADR-014-ai-assistant-tool-orchestration.md`  
 **Estimated effort:** ~12–15 focused implementation hours  
 
 ---

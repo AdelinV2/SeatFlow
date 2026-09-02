@@ -83,6 +83,13 @@ SeatFlow/
 │   │   ├── phase-08-notification-service/ # Notification & email service
 │   │   ├── phase-09-frontend-portal/  # Angular client & admin UI
 │   │   ├── phase-10-devops-observability/ # Docker, monitoring & GCP deployment
+│   │   ├── phase-11-advanced-seat-map-designer/ # 2D visual layout editor
+│   │   ├── phase-12-event-sessions/   # Multiple scheduled showings per event
+│   │   ├── phase-13-refunds-ticket-cancellation/ # 24h cutoff & Stripe refund workflow
+│   │   ├── phase-14-admin-analytics/  # Event-driven CQRS analytics service
+│   │   ├── phase-15-ai-assistant-mcp/ # Spring AI & controlled domain tool calling
+│   │   ├── phase-16-public-site-legal-support/ # Public routes, disclosures & support
+│   │   ├── phase-17-testing-quality-final-polish/ # E2E Playwright & system-wide verification
 │   │   └── completed/                 # Archived completed tasks (organized by phase)
 │   │       ├── phase-00-foundation/
 │   │       └── ...
@@ -204,7 +211,7 @@ All implementation tasks follow a standardized **phase-scoped hierarchy** to ens
 - **Git Feature Branch:** `feat/p<XX>-<YYY>-<task-description>`
 
 ### 7.2 Numbering Rules
-1. **Phase Prefix (`P<XX>`):** Represents the 2-digit phase number (`P00`, `P01`, `P02`, ..., `P10`).
+1. **Phase Prefix (`P<XX>`):** Represents the 2-digit phase number (`P00`, `P01`, `P02`, ..., `P17`).
 2. **Task Number (`<YYY>`):** 3-digit sequence starting at `001` per phase (`001`, `002`, `003`...).
 3. **Phase Independence:** Each phase has its own task counter starting at `001`. Adding tasks to Phase 1 does not shift or impact task IDs in Phase 2.
 

@@ -75,6 +75,13 @@ The Architect/Planner MUST create an ADR in `.ai/decisions/` prior to task break
    - .ai/tasks/phase-08-notification-service/
    - .ai/tasks/phase-09-frontend-portal/
    - .ai/tasks/phase-10-devops-observability/
+   - .ai/tasks/phase-11-advanced-seat-map-designer/
+   - .ai/tasks/phase-12-event-sessions/
+   - .ai/tasks/phase-13-refunds-ticket-cancellation/
+   - .ai/tasks/phase-14-admin-analytics/
+   - .ai/tasks/phase-15-ai-assistant-mcp/
+   - .ai/tasks/phase-16-public-site-legal-support/
+   - .ai/tasks/phase-17-testing-quality-final-polish/
 6. Fill out all sections:
    - Header with TASK-P<XX>-<YYY>
    - Metadata (Target Module, Phase, Related Docs, Related ADRs)
