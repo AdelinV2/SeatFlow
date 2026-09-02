@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import { of } from 'rxjs';
 import {
   AuthService,
   SUPABASE_AUTH_CONFIG,
@@ -7,9 +8,11 @@ import {
   SupabaseAuthConfiguration,
 } from './auth.service';
 import { UserContextService } from './user-context.service';
+import { UserApiService } from '../../services/user-api.service';
 
 describe('AuthService', () => {
   let supabaseMock: any;
+  let userApiSpy: jasmine.SpyObj<UserApiService>;
   let authStateCallback: ((event: string, session: Session | null) => void) | null = null;
 
   const authConfig: SupabaseAuthConfiguration = {
@@ -19,6 +22,13 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     authStateCallback = null;
+    userApiSpy = jasmine.createSpyObj('UserApiService', ['getProfile', 'updateProfile']);
+    userApiSpy.getProfile.and.returnValue(of({
+      id: 'seatflow-user',
+      email: 'user@seatflow.test',
+      roles: ['ROLE_CUSTOMER'],
+    }));
+
     supabaseMock = {
       auth: {
         getSession: jasmine.createSpy('getSession').and.resolveTo({
@@ -100,6 +110,44 @@ describe('AuthService', () => {
     expect(userContext.currentUser()?.roles).toEqual(['ROLE_CUSTOMER', 'ROLE_STAFF']);
     expect(userContext.isStaff()).toBeTrue();
     expect(userContext.userName()).toBe('Alex Morgan');
+  });
+
+  it('JIT provisions an active Supabase session in user-service once per signed-in user', async () => {
+    const token = createJwt({
+      sub: 'user-123',
+      email: 'alex@seatflow.test',
+      app_metadata: { roles: ['ROLE_CUSTOMER'] },
+      exp: futureExpiration(),
+    });
+
+    const session: Session = {
+      access_token: token,
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: {
+        id: 'user-123',
+        email: 'alex@seatflow.test',
+        app_metadata: { roles: ['ROLE_CUSTOMER'] },
+        user_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User,
+    };
+
+    supabaseMock.auth.getSession.and.resolveTo({
+      data: { session },
+      error: null,
+    });
+
+    const service = createService();
+    await service.initialize();
+
+    expect(userApiSpy.getProfile).toHaveBeenCalledTimes(1);
+
+    service.syncSession(session);
+
+    expect(userApiSpy.getProfile).toHaveBeenCalledTimes(1);
   });
 
   it('defaults empty roles to ROLE_CUSTOMER aligning with backend convention', async () => {
@@ -211,6 +259,7 @@ describe('AuthService', () => {
     });
     expect(TestBed.inject(UserContextService).isAdmin()).toBeTrue();
     expect(service.getToken()).toBe(token);
+    expect(userApiSpy.getProfile).toHaveBeenCalledTimes(1);
   });
 
   it('executes logout and clears user context', async () => {
@@ -281,7 +330,6 @@ describe('AuthService', () => {
       } as User,
     };
 
-    // Trigger auth state change event
     if (authStateCallback) {
       authStateCallback('SIGNED_IN', newSession);
     }
@@ -289,6 +337,7 @@ describe('AuthService', () => {
     expect(userContext.isAuthenticated()).toBeTrue();
     expect(userContext.isStaff()).toBeTrue();
     expect(service.getToken()).toBe(token);
+    expect(userApiSpy.getProfile).toHaveBeenCalledTimes(1);
   });
 
   it('triggers resetPasswordForEmail via Supabase client with redirect url', async () => {
@@ -335,6 +384,7 @@ describe('AuthService', () => {
       providers: [
         { provide: SUPABASE_AUTH_CONFIG, useValue: authConfig },
         { provide: SUPABASE_CLIENT, useValue: supabaseMock },
+        { provide: UserApiService, useValue: userApiSpy },
       ],
     });
     return TestBed.inject(AuthService);
