@@ -1,5 +1,12 @@
 # Production Docker Compose on single VM (not Cloud Run).
 # Uses private Docker DNS (eureka-server) and JSON logging.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jws-algorithms: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS:ES256,RS256}
+
 eureka:
   instance:
     hostname: ${EUREKA_HOSTNAME:eureka-server}
