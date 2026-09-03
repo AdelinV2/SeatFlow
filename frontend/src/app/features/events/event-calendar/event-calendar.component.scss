@@ -3,5 +3,10 @@
 }
 
 .calendar-container {
-  transition: border-color 200ms ease, background-color 200ms ease;
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    box-shadow 200ms ease;
+  backdrop-filter: blur(8px);
 }
+
