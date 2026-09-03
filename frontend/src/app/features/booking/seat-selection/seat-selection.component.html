@@ -20,7 +20,7 @@
           <p class="eyebrow">{{ map.venueName }}</p>
           <h1>{{ map.eventTitle }}</h1>
           <p>
-            {{ map.eventDate | date: 'EEEE, MMMM d · h:mm a' }} ·
+            {{ map.eventDate | sfDate: 'full' }} ·
             {{ map.totalConfiguredSeats }} seats
           </p>
         </div>

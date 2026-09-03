@@ -31,6 +31,7 @@ import {
 } from '../../../services/reservation-api.service';
 import { SeatStateService } from '../../../services/seat-state.service';
 import { WebSocketService } from '../../../services/websocket.service';
+import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { SeatMapComponent } from '../seat-map/seat-map.component';
 import { SelectionDockComponent } from '../selection-dock/selection-dock.component';
 
@@ -43,7 +44,13 @@ interface SeatMapLoadResult {
 @Component({
   selector: 'app-seat-selection',
   standalone: true,
-  imports: [CommonModule, RouterLink, SeatMapComponent, SelectionDockComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    DateFormatPipe,
+    SeatMapComponent,
+    SelectionDockComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seat-selection.component.html',
   styleUrl: './seat-selection.component.scss',

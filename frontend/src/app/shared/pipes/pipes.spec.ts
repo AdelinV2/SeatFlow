@@ -27,10 +27,25 @@ describe('Shared formatting pipes', () => {
     const date = new Date(2026, 8, 15, 19, 30);
 
     it('formats full, short, and time variants from Date and timestamp number', () => {
-      expect(pipe.transform(date, 'full')).toContain('•');
+      expect(pipe.transform(date, 'full')).toContain('• 19:30');
       expect(pipe.transform(date, 'short')).toBe('Sep 15, 2026');
-      expect(pipe.transform(date, 'time')).toMatch(/07:30 PM/i);
+      expect(pipe.transform(date, 'time')).toBe('19:30');
       expect(pipe.transform(date.getTime(), 'short')).toBe('Sep 15, 2026');
+    });
+
+    it('formats 24-hour time consistently for both morning and evening without AM/PM', () => {
+      const morningDate = new Date(2026, 8, 15, 9, 5);
+      expect(pipe.transform(morningDate, 'time')).toBe('09:05');
+      expect(pipe.transform(morningDate, 'full')).toContain('• 09:05');
+      expect(pipe.transform(morningDate, 'time')).not.toMatch(/AM|PM/);
+
+      const eveningDate = new Date(2026, 8, 15, 21, 45);
+      expect(pipe.transform(eveningDate, 'time')).toBe('21:45');
+      expect(pipe.transform(eveningDate, 'full')).toContain('• 21:45');
+      expect(pipe.transform(eveningDate, 'time')).not.toMatch(/AM|PM/);
+
+      // Default format should be 'full'
+      expect(pipe.transform(eveningDate)).toBe(pipe.transform(eveningDate, 'full'));
     });
 
     it('returns an em dash for empty or invalid dates', () => {
