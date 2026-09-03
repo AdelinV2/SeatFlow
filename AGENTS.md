@@ -291,14 +291,18 @@ Whenever asked for recommendations on which AI model, persona, or reasoning effo
 1. **Primary Operational Policy:** Read [`.ai/MODEL_ROUTER.md`](.ai/MODEL_ROUTER.md) to classify the task (complexity, failure risk, context size, agentic demand, verification strength) and determine the recommended model and reasoning effort.
 2. **Standard Recommendation Format:** Follow the current template in `.ai/MODEL_ROUTER.md`:
    - **Recommended:** `MODEL` — `EFFORT`
-   - **Why:** 2–4 sentences tied to the actual failure mode and verification strength.
+   - **Why:** 2–4 sentences tied to the actual failure mode, agentic demand, and verification strength.
+   - **Alternative:** `MODEL` — `EFFORT`.
+   - **Trade-off:** one concise sentence explaining what the alternative gains/loses relative to the recommendation.
    - **Task profile:** Complexity, Risk, Context, Agentic demand, Verification.
    - **Implementation model:** only if different from the reasoning/review model.
    - **Review model:** only when a separate quality gate is needed.
    - **Escalate to:** stronger model only under a concrete trigger condition.
-3. **Cost-Effectiveness Invariant:** Never automatically default to the strongest model or highest reasoning effort. Choose the most cost-effective configuration that is sufficiently reliable for the task.
-4. **Workflow Invariant:** Model choice does not replace process. Planning, execution, debugging, QA, code review, and refactoring must follow their corresponding `.ai/workflows/*.md` protocol.
-5. **Detailed Reference (On-Demand Only):** Read [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) **only** when additional evidence is genuinely required:
+3. **Alternative vs Escalation Invariant:** An **Alternative** is an immediately usable peer route for quota/provider/privacy/harness/diversity reasons. An **Escalation** is a stronger or more expensive route justified by failure, ambiguity, weak verification, or increased risk. Never conflate them.
+4. **Java/Spring Routing Invariant:** Java or Spring alone is **not** sufficient justification to route deterministic implementation away from Muse Spark 1.3. Follow `.ai/MODEL_ROUTER.md` risk and verification rules instead.
+5. **Cost-Effectiveness Invariant:** Never automatically default to the strongest model or highest reasoning effort. Choose the most cost-effective configuration that is sufficiently reliable for the task.
+6. **Workflow Invariant:** Model choice does not replace process. Planning, execution, debugging, QA, code review, and refactoring must follow their corresponding `.ai/workflows/*.md` protocol.
+7. **Detailed Reference (On-Demand Only):** Read [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) **only** when additional evidence is genuinely required:
    - The model choice is ambiguous or disputed;
    - The user explicitly requests a detailed comparison between models;
    - The user asks why one model is better than another for a specific workload;
