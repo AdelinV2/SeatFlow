@@ -81,6 +81,7 @@ Follow this strict sequence for every backend task without skipping steps:
    h. Controller (web/controller/)
    i. Tests
 5. Run verification command specified in the task file (e.g. mvn test).
+6. Mandatory Next Stage Handoff: Upon passing self-verification, provide the user with the mandatory Next Stage Handoff block (Recommended Review AI Model: `GPT-5.6 Terra High` / `Sol High`, and the pre-filled prompt from `.ai/workflows/02-task-execution.md` to initiate independent code review).
 ```
 
 ---

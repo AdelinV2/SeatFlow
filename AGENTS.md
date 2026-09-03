@@ -64,6 +64,15 @@ SeatFlow is engineered through an autonomous, modular engineering pipeline:
 
 For structural changes that promise behavior preservation, use `.ai/workflows/06-refactoring.md` during implementation, then run the same independent review and final QA gates.
 
+### 1.1 Mandatory Next Stage Handoff Protocol
+
+Every AI agent or engineer executing a stage in this pipeline **MUST** conclude its work by delivering a structured **Next Stage Handoff** block in its final response to the user. Never end a stage with only a generic summary or status update without providing the user with the exact prompt and model for the next step.
+
+The handoff block must contain:
+1. **Target Next Stage & Protocol:** The specific workflow file to follow next (e.g. `.ai/workflows/02-task-execution.md`, `.ai/workflows/05-code-review.md`, etc.).
+2. **AI Model & Reasoning Effort Recommendation:** The exact recommended model, alternative, and escalation path based on [`.ai/MODEL_ROUTER.md`](.ai/MODEL_ROUTER.md) and the workflow specification.
+3. **Copy-Paste Prompt for the Next Stage:** A complete, ready-to-run prompt populated with the current context (Task ID `TASK-P<XX>-<YYY>`, branch `feat/p<XX>-<YYY>-<desc>`, task file path, and verification commands).
+
 ---
 
 ## 2. Technology Stack & Subsystem References
@@ -211,8 +220,8 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
    git checkout -b feat/p<XX>-<YYY>-<description> develop
    ```
 2. **Local Environment:** Copy `.env.example` to `.env` in the target service directory if not already created.
-3. **Execute & Self-Verify:** Follow the task specification, write required tests, run deterministic verification, and inspect the diff.
-4. **Independent Quality Cycle:** Run `.ai/workflows/05-code-review.md`; resolve accepted findings through `.ai/workflows/03-bug-fixing.md`; re-review when required; then pass `.ai/workflows/04-testing-and-qa.md`. Temporary `.ai/tmp/review-*.md` ledgers must be deleted only after resolution and must never be committed.
+3. **Execute & Self-Verify:** Follow the task specification, write required tests, run deterministic verification, and inspect the diff. Upon passing self-verification, provide the mandatory Next Stage Handoff block (model recommendation + copy-paste prompt for `.ai/workflows/05-code-review.md`).
+4. **Independent Quality Cycle:** Run `.ai/workflows/05-code-review.md`; resolve accepted findings through `.ai/workflows/03-bug-fixing.md`; re-review when required; then pass `.ai/workflows/04-testing-and-qa.md`. At each stage transition, the acting agent must output the mandatory Next Stage Handoff block. Temporary `.ai/tmp/review-*.md` ledgers must be deleted only after resolution and must never be committed.
 5. **Commit with Conventional Commits:**
    - `feat(<scope>): add reservation hold scheduler`
    - `fix(<scope>): resolve optimistic locking retry in payment processing`
@@ -281,6 +290,7 @@ A task is considered **DONE** only when:
 - [ ] No active `.ai/tmp/review-*.md` ledger remains and no `.ai/tmp/` artifact is committed.
 - [ ] `.ai/workflows/04-testing-and-qa.md` final quality gate returns PASS or an explicitly valid PASS WITH NON-BLOCKING NOTES.
 - [ ] Task file is moved from the active phase to `.ai/tasks/completed/<phase-name>/` only after the quality cycle completes.
+- [ ] Final response delivers the mandatory Next Stage Handoff containing the recommended AI model and copy-paste prompt for the subsequent workflow stage.
 
 ---
 
@@ -310,3 +320,5 @@ Whenever asked for recommendations on which AI model, persona, or reasoning effo
    - The task is unusually complex, high-risk, or mission-critical.
 
    > **Context Conservation Rule:** **Do NOT** load [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) for ordinary model-selection requests to avoid wasting context tokens.
+
+8. **Mandatory Next Stage Handoff Invariant:** AI agents must proactively include the recommended AI model (with reasoning effort and alternative) and the pre-filled copy-paste prompt for the subsequent stage at the conclusion of every stage (Planning, Implementation, Review, Bug Fixing, QA, Refactoring). Do not wait for the user to prompt for the next action.
