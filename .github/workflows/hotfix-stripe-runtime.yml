@@ -1,0 +1,78 @@
+name: Hotfix - Stripe Runtime Env
+
+on:
+  push:
+    branches: [ops/stripe-runtime-hotfix]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: hotfix-stripe-runtime
+  cancel-in-progress: false
+
+jobs:
+  patch-production:
+    name: Patch production Stripe runtime env
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GCP with WIF
+        uses: ./.github/actions/setup-gcp-wif
+        with:
+          project_id: seatflow-production-507311
+          workload_identity_provider: projects/515874727347/locations/global/workloadIdentityPools/seatflow-github-pool/providers/seatflow-github-provider
+          service_account: seatflow-github-deploy@seatflow-production-507311.iam.gserviceaccount.com
+
+      - name: Apply runtime env hotfix on production VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/seatflow-stripe-hotfix.sh <<'HOTFIX'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          install -d -o root -g root -m 0755 /var/www/seatflow-runtime
+          cat > /var/www/seatflow-runtime/env.js <<'EOF'
+          window.__env = window.__env || {};
+          window.__env.STRIPE_PUBLISHABLE_KEY = 'pk_test_51U8gDf6kBeMTFPV3CQI6ZGdfPTSMfo9aOLkgsdsrNS8AVYAujCehbkEfQvtPBaM2oZTBySkCUA1AhvDASA8GFDTn00E6h4JznV';
+          EOF
+          chown root:root /var/www/seatflow-runtime/env.js
+          chmod 0644 /var/www/seatflow-runtime/env.js
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('/etc/nginx/sites-available/seatflow')
+          text = path.read_text()
+          if 'location = /env.js {' not in text:
+              needle = '  location / { include /etc/nginx/snippets/seatflow-proxy.conf; }'
+              block = '''  location = /env.js {
+              alias /var/www/seatflow-runtime/env.js;
+              default_type application/javascript;
+              add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+            }
+          '''
+              if needle not in text:
+                  raise SystemExit('SeatFlow proxied Nginx location was not found')
+              text = text.replace(needle, block + needle, 1)
+              path.write_text(text)
+          PY
+
+          nginx -t
+          systemctl reload nginx
+          body="$(curl -fsS https://seat-flow.me/env.js)"
+          grep -Fq 'window.__env.STRIPE_PUBLISHABLE_KEY' <<<"${body}"
+          grep -Fq 'pk_test_51U8gDf6kBeMTFPV3' <<<"${body}"
+          echo 'Stripe runtime env hotfix applied and verified on seat-flow.me'
+          HOTFIX
+
+          payload="$(base64 -w0 /tmp/seatflow-stripe-hotfix.sh)"
+          gcloud compute ssh seatflow-production \
+            --project=seatflow-production-507311 \
+            --zone=europe-west1-c \
+            --tunnel-through-iap --quiet \
+            --command="echo '${payload}' | base64 --decode >/tmp/seatflow-stripe-hotfix.sh && sudo bash /tmp/seatflow-stripe-hotfix.sh && rm -f /tmp/seatflow-stripe-hotfix.sh"
