@@ -111,6 +111,18 @@ describe('AdminEventListComponent', () => {
     expect(component.isLoading()).toBeFalse();
   });
 
+  it('should render event dates using consistent 24-hour sfDate format without AM/PM', () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const rows = compiled.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(2);
+    const firstDateCell = rows[0].querySelector('td:nth-child(4)');
+    expect(firstDateCell).toBeTruthy();
+    const text = firstDateCell?.textContent || '';
+    expect(text).toContain('•');
+    expect(text).not.toMatch(/AM|PM/);
+  });
+
   it('should filter events by status', () => {
     component.selectedStatus.set('DRAFT');
     const filtered = component.filteredEvents();

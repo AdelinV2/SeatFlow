@@ -13,6 +13,7 @@ import {
 } from '../../../services/reservation-api.service';
 import { SeatStateService } from '../../../services/seat-state.service';
 import { ConnectionStatus, WebSocketService } from '../../../services/websocket.service';
+import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { SeatSelectionComponent } from './seat-selection.component';
 
 describe('SeatSelectionComponent', () => {
@@ -201,5 +202,12 @@ describe('SeatSelectionComponent', () => {
     const disconnectCount = webSocketService.disconnect.calls.count();
     fixture.destroy();
     expect(webSocketService.disconnect.calls.count()).toBe(disconnectCount + 1);
+  });
+
+  it('formats event date with sfDate full variant in 24-hour format matching event detail', () => {
+    const pipe = new DateFormatPipe();
+    const formatted = pipe.transform(response.eventDate, 'full');
+    expect(formatted).toContain('•');
+    expect(formatted).not.toMatch(/AM|PM/);
   });
 });

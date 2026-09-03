@@ -14,6 +14,7 @@ import { AdminEventApiService } from '../../../../services/admin-event-api.servi
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import { EventDetail, EventStatus } from '../../../../models/event.model';
 import { SkeletonLoaderComponent } from '../../../../shared/components/skeleton-loader/skeleton-loader.component';
+import { DateFormatPipe } from '../../../../shared/pipes/date-format.pipe';
 
 export interface ActionModalState {
   type: 'PUBLISH' | 'CANCEL';
@@ -27,6 +28,7 @@ export interface ActionModalState {
     CommonModule,
     RouterModule,
     FormsModule,
+    DateFormatPipe,
     SkeletonLoaderComponent,
   ],
   templateUrl: './admin-event-list.component.html',
