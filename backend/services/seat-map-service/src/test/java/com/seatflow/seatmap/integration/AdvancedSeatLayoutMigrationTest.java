@@ -59,6 +59,9 @@ class AdvancedSeatLayoutMigrationTest {
     private static final String SEAT_9_ID = "00000000-0000-0000-0000-000000000009";
     private static final String SEAT_10_ID = "00000000-0000-0000-0000-000000000010";
 
+    private record SeededSeat(String sectionId, int gridX, int gridY, boolean active) {
+    }
+
     private Flyway flywayAt(String target) {
         var builder = Flyway.configure()
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
@@ -290,15 +293,16 @@ class AdvancedSeatLayoutMigrationTest {
         Set<String> preVenueIds = new HashSet<>(querySingleColumn("SELECT id::text FROM venues ORDER BY id"));
         Set<String> preSectionIds = new HashSet<>(querySingleColumn("SELECT id::text FROM venue_sections ORDER BY id"));
         Set<String> preSeatIds = new HashSet<>(querySingleColumn("SELECT id::text FROM seats ORDER BY id"));
-        Map<String, int[]> preSeatGrid = new HashMap<>();
+        Map<String, SeededSeat> preSeatGrid = new HashMap<>();
         Map<String, Integer> preSectionRowCount = new HashMap<>();
         Map<String, Integer> preSectionColCount = new HashMap<>();
         long preActiveSeatCount;
         Map<String, Long> preActivePerVenue = new HashMap<>();
         try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
-            try (ResultSet rs = st.executeQuery("SELECT id::text, grid_x, grid_y FROM seats")) {
+            try (ResultSet rs = st.executeQuery("SELECT id::text, section_id::text, grid_x, grid_y, is_active FROM seats")) {
                 while (rs.next()) {
-                    preSeatGrid.put(rs.getString(1), new int[]{rs.getInt(2), rs.getInt(3)});
+                    preSeatGrid.put(rs.getString(1),
+                            new SeededSeat(rs.getString(2), rs.getInt(3), rs.getInt(4), rs.getBoolean(5)));
                 }
             }
             try (ResultSet rs = st.executeQuery("SELECT id::text, row_count, col_count FROM venue_sections")) {
@@ -490,20 +494,31 @@ class AdvancedSeatLayoutMigrationTest {
             assertThat(def).contains("true");
         }
 
-        // Exact seat backfill: position = grid *44
+        // Exact seat backfill: position = pre-V5 grid * 44, with per-seat identity/ownership/compatibility unchanged
         try (Connection conn = getConnection(); Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(
-                "SELECT id::text, grid_x, grid_y, position_x, position_y FROM seats ORDER BY id")) {
+                "SELECT id::text, section_id::text, grid_x, grid_y, position_x, position_y, is_active FROM seats ORDER BY id")) {
+            Set<String> seenSeatIds = new HashSet<>();
             while (rs.next()) {
                 String id = rs.getString(1);
-                int gx = rs.getInt(2);
-                int gy = rs.getInt(3);
-                BigDecimal px = rs.getBigDecimal(4);
-                BigDecimal py = rs.getBigDecimal(5);
-                BigDecimal expectedX = BigDecimal.valueOf(gx * 44L).setScale(3);
-                BigDecimal expectedY = BigDecimal.valueOf(gy * 44L).setScale(3);
+                String postSectionId = rs.getString(2);
+                int postGridX = rs.getInt(3);
+                int postGridY = rs.getInt(4);
+                BigDecimal px = rs.getBigDecimal(5);
+                BigDecimal py = rs.getBigDecimal(6);
+                boolean postActive = rs.getBoolean(7);
+                seenSeatIds.add(id);
+                SeededSeat pre = preSeatGrid.get(id);
+                assertThat(pre).as("pre-V5 snapshot missing for seat %s", id).isNotNull();
+                assertThat(postSectionId).as("seat %s section_id changed by V5", id).isEqualTo(pre.sectionId());
+                assertThat(postGridX).as("seat %s grid_x changed by V5", id).isEqualTo(pre.gridX());
+                assertThat(postGridY).as("seat %s grid_y changed by V5", id).isEqualTo(pre.gridY());
+                assertThat(postActive).as("seat %s is_active changed by V5", id).isEqualTo(pre.active());
+                BigDecimal expectedX = BigDecimal.valueOf(pre.gridX() * 44L).setScale(3);
+                BigDecimal expectedY = BigDecimal.valueOf(pre.gridY() * 44L).setScale(3);
                 assertThat(px).as("seat %s position_x", id).isEqualByComparingTo(expectedX);
                 assertThat(py).as("seat %s position_y", id).isEqualByComparingTo(expectedY);
             }
+            assertThat(seenSeatIds).as("post-V5 seat rows must match pre-V5 snapshot").isEqualTo(preSeatGrid.keySet());
         }
 
         // Verify inactive seats keep FALSE+UUID and are not changed
