@@ -2,606 +2,481 @@
 
 ## Purpose
 
-Detailed reference for `.ai/MODEL_ROUTER.md`. Consult this file only when model selection is ambiguous, high-risk, cost-sensitive, or requires quantitative justification.
+Detailed evidence and rationale for `.ai/MODEL_ROUTER.md`.
 
-Data snapshot: **August 31, 2026**.
+Data snapshot: **September 3, 2026**.
 
-Benchmark numbers are directional, not guarantees. Harness, prompts, tools, repository structure, reasoning configuration, caching, retry policy, and provider implementation can materially change real-world results.
-
----
-
-## 1. Model Positioning
-
-### GPT-5.6 Luna
-Fast, extremely inexpensive premium worker for bounded, verifiable tasks. Strong ordinary coding performance, but substantially weaker than Terra/Sol on hard debugging and very-long-context reasoning.
-
-### GPT-5.6 Terra
-Default serious software-engineering model. Strong balance of planning, backend reasoning, review, debugging, context use, latency, and cost.
-
-### GPT-5.6 Sol
-Critical escalation model. Use when hidden mistakes can affect money, security, data integrity, distributed consistency, or production reliability.
-
-### Gemini 3.7 Flash High
-High-throughput premium agentic/frontend model with ~1M context. Particularly strong for Angular/web/UI work, tool-heavy workflows, and large repository exploration.
-
-### Hy3 High
-Free implementation worker in the current OpenCode/Kilo routes. Best used for deterministic implementation, tests, refactors, reproducible fixes, and CI/CD where external verification is strong.
-
-### Muse Spark 1.2 xHigh
-Free large-context/agentic worker in the current OpenCode route. Useful for large cross-file implementation and repo-wide work where ~1M context is beneficial, but it can be verbose and benchmark/harness dependent.
+Benchmark numbers are directional, not guarantees. Harness, prompts, tools, repository structure, reasoning configuration, caching, provider implementation, and task mix can materially change real-world results. Prefer benchmark families that resemble SeatFlow's actual workflow: long-horizon code changes, terminal/tool use, codebase understanding, debugging, and strong verification.
 
 ---
 
-## 2. SeatFlow Context
+## 1. SeatFlow Context
 
-SeatFlow is not a simple CRUD project. The model router must distinguish low-cost visible failures from hidden high-cost failures.
+SeatFlow is a Java/Spring + Angular system with multiple services and explicit AI workflow files. The project separates:
 
-Critical architecture areas include:
+`planning -> implementation -> review -> bug fixing -> verification`
+
+That structure is important: it allows a strong model to make decisions and a cheaper/high-throughput model to execute a deterministic task.
+
+Critical hidden-failure areas include:
 
 - reservation hold/concurrency behavior
 - zero-double-booking guarantees
 - PostgreSQL source-of-truth semantics
 - Kafka + transactional outbox behavior
-- payment/idempotency/Stripe state transitions
+- payment/refund/idempotency/Stripe state transitions
 - authentication/authorization
 - realtime/distributed consistency
-- database migrations and production reliability
+- destructive or production-sensitive migrations
 
-Because SeatFlow already separates planning, implementation, fixing, and verification, the repository is especially well suited to a **strong-model-for-decisions + free-model-for-deterministic-execution** workflow.
-
----
-
-## 3. Pricing and Economic Reference
-
-### GPT-5.6 standard API pricing
-
-| Model | Input / 1M | Output / 1M |
-|---|---:|---:|
-| GPT-5.6 Luna | $0.20 | $1.20 |
-| GPT-5.6 Terra | $2.00 | $12.00 |
-| GPT-5.6 Sol | $4.00 | $20.00 |
-
-GPT-5.6 supports reasoning levels from Low through Max in the relevant model configurations. Reasoning tokens are billed as output tokens.
-
-### Gemini 3.7 Flash
-
-Current introductory pricing around this snapshot:
-
-- $0.75 / 1M input
-- $3.75 / 1M output, including reasoning
-
-Gemini 3.7 Flash supports Low / Medium / High thinking and approximately 1,048,576 input tokens with 65,536 maximum output tokens.
-
-### Hy3
-
-Current free routes make model-token cost effectively $0 from the user's perspective.
-
-Relevant model characteristics:
-
-- approximately 295B total parameters
-- approximately 21B active parameters
-- approximately 256K context
-- reasoning/agent orientation
-
-### Muse Spark 1.2
-
-Standard hosted/API pricing has been reported around:
-
-- $1.25 / 1M input
-- $4.25 / 1M output
-
-The current free route exposes Muse Spark 1.2 at $0 from the user's perspective.
-
-Context is approximately 1M.
-
-### Economic rule
-
-Never compare only nominal token price.
-
-Use:
-
-`Effective Cost = model bill + retries + latency + developer review time + context churn + expected failure cost`
-
-A free model can still be operationally expensive if it requires repeated repair loops. A premium model can be economically superior when a wrong answer is difficult to detect.
+The target is **very good code quality**, not maximum model strength on every prompt.
 
 ---
 
-## 4. Token-Efficiency and Latency Evidence
+## 2. Active Model Set
 
-Independent measurements around this snapshot demonstrate that reasoning effort can dramatically change real economics.
+### Codex Plus
 
-Representative behavior:
+Primary models:
 
-| Configuration | AA Intelligence Index | Approx. output tokens across evaluation | Approx. evaluation cost | Operational takeaway |
-|---|---:|---:|---:|---|
-| GPT-5.6 Sol High | 57 | ~21M | ~$700 | Expensive/token but comparatively concise |
-| GPT-5.6 Terra High | 50 | ~24M | ~$395 | Strong interactive balance |
-| GPT-5.6 Luna Max | 52 | ~130M | ~$172 | Very cheap/token but ~5.4x Terra High output volume |
-| Muse Spark 1.2 xHigh | 57 | ~95M | ~$639 standard hosted | Attractive list price can be offset by verbosity |
-| Hy3 | ~42 | high-output/verbose profile | provider-dependent | Free route removes monetary output penalty but not developer-time penalty |
+- GPT-5.6 Luna
+- GPT-5.6 Terra
+- GPT-5.6 Sol
 
-Measured time-to-first-token also illustrates why Luna Max should not be used as the default interactive reasoning configuration: Luna Max has been measured around ~144 seconds TTFT versus only a few seconds for Terra High in comparable runs.
+GPT-5.6 supports reasoning efforts `none`, `low`, `medium`, `high`, `xhigh`, and `max` in the official model family. In SeatFlow, the normal useful range is Low/Medium for utility work, High for serious work, and xHigh only for genuinely difficult problems.
 
-Interpretation:
+### Antigravity Pro
 
-- **Luna Max is not a universal cheaper Terra High.**
-- **Muse xHigh can be economically inefficient at paid rates despite low list pricing.**
-- **Muse being free changes the recommendation substantially for verifiable implementation.**
-- **Sol is justified primarily by lower expected failure cost, not cheap inference.**
+Relevant current choices:
+
+- Gemini 3.8 Flash Medium
+- Gemini 3.8 Flash High
+- Gemini 3.1 Pro High
+- Claude Sonnet 4.6 Thinking
+- Claude Opus 4.6 Thinking
+
+Gemini 3.8 Flash is the default Antigravity coding choice. Older/alternative frontier models are retained mainly for independent second opinions.
+
+### OpenCode Go
+
+Relevant current choices:
+
+- Muse Spark 1.3 Contributor
+- Hy4 preview
+- GLM-5.3
+- other models available in the catalog
+
+OpenCode says model availability may change. Run `/models` and use the current catalog instead of assuming a variant exists.
 
 ---
 
-## 5. Development Benchmark Snapshot
+## 3. Benchmark Snapshot
 
 ### GPT-5.6 family
 
-Published results around this snapshot include:
+OpenAI's published software-engineering results:
 
 | Benchmark | Luna | Terra | Sol |
 |---|---:|---:|---:|
 | SWE-Bench Pro | 62.7% | 63.4% | 64.6% |
 | DeepSWE v1.1 | 67.2% | 69.6% | 72.7% |
 | Terminal-Bench 2.1 | 84.7% | 87.4% | 88.8% |
-| Internal Research Debugging | 50.8% | 67.8% | 68.3% |
 
-The most important SeatFlow signal is debugging: Luna is close on ordinary coding benchmarks but much weaker on the cited hard-debugging evaluation. That supports Luna/Hy3 for bounded implementation and Terra/Sol for root-cause analysis.
+Operational interpretation:
 
-### Gemini 3.7 Flash vs Terra / Muse
+- Sol is strongest, but the gap from Terra on these coding-agent benchmarks is relatively small.
+- Terra therefore has the best default role for planning/review/debugging when failure risk is serious but not critical.
+- Sol's main justification is **lower expected failure cost on hidden critical bugs**, not a need to maximize every benchmark point.
+- Luna remains capable for routine coding but is not the preferred hard-debugging/architecture authority.
 
-Published August 2026 comparison data:
+### Muse Spark 1.3
 
-| Benchmark | Gemini 3.7 Flash | GPT-5.6 Terra | Muse Spark 1.2 |
-|---|---:|---:|---:|
-| Artificial Analysis Intelligence Index | 56 | 57 | 57 |
-| FrontierCode 1.1 | 43.6% | 41.3% | — |
-| DeepSWE v1.1 | 65.3% | 69.6% | 54.9% |
-| Code Arena Web Development | 1588 Elo | 1523 | 1535 |
-| Terminal-Bench 2.1 | 85.8% | 87.4% | 82.9% |
-| Terminal-Bench 3.0 | 14.9% | 20.8% | — |
-| AutomationBench | 30.4% | 23.6% | — |
-| GDM-MRCR v2 128K avg. | 97.0% | 93.5% | — |
+Meta's release reports strong improvements in long-horizon coding and agentic work. Published release figures include:
 
-Interpretation:
+| Benchmark | Muse Spark 1.3 |
+|---|---:|
+| DeepSWE v1.1 | 75.4% |
+| SWE-Atlas Codebase QnA | 59.4% |
+| Terminal-Bench 2.1 | 88.8% |
+| MRCR 256K-512K | 98.5% |
+| MRCR 512K-1M | 98.1% |
 
-- Terra remains stronger on several difficult long-horizon software-engineering evaluations.
-- Gemini has particularly strong frontend/web and automation evidence.
-- Muse's strong composite intelligence score does not imply Terra-level reliability on DeepSWE/Terminal-Bench.
+Meta also reports that 1.3 used approximately:
 
-### Hy3
+- **20% fewer tool calls**
+- **25% fewer tokens**
 
-Public directly-comparable evidence is thinner and should be treated more cautiously.
+than Muse Spark 1.2 in comparisons by Meta engineers.
 
-Reported data includes:
+This is a major upgrade from the previous SeatFlow router, where Muse 1.2 was only a large-context implementation option.
 
-- ~295B total parameters, ~21B active
-- ~256K context
-- reasoning/agent orientation
-- 270-expert blind evaluation: Hy3 2.67/4 vs GLM-5.1 2.51/4
-- particularly strong relative performance in frontend, data/storage, and CI/CD categories
-- Kilo Terminal Bench 2.0 result around 47.6% on its own harness
+Important caveat for SeatFlow: Meta's DeepSWE v1.1 methodology covers TypeScript, Go, Python, JavaScript, and Rust — **not Java**. Therefore:
 
-Do not compare a Terminal-Bench 2.0 result directly to Terminal-Bench 2.1 as if they were identical experiments.
+- the benchmark strongly supports Muse as an agentic implementation worker
+- it does not directly validate Spring/JPA/transactional correctness
+- Terra/Sol remain the authority for subtle Java backend invariants
+
+### Gemini 3.8 Flash
+
+Google positions Gemini 3.8 Flash as its best Flash reasoning/coding model yet and specifically targets:
+
+- long-horizon software engineering
+- autonomous agents
+- iterative tool use
+- production-ready agent workflows
+
+Google states that 3.8 Flash substantially improves over 3.7 and can use extra reasoning/tool steps on difficult tasks. Published/launch benchmark reporting places it near larger frontier models on long-horizon software engineering and exceptionally strong on terminal/tool workflows.
+
+Operational interpretation:
+
+- strong fit for Angular/TypeScript/Tailwind and browser-heavy work
+- High is appropriate when quality and multi-step tool use matter
+- Medium is better when the task is simple enough that High's extra token/tool usage has little benefit
+- backend transaction/concurrency authority still belongs to Terra/Sol
+
+### Hy4 preview
+
+Tencent's published/vendor results include approximately:
+
+| Benchmark | Hy4 preview |
+|---|---:|
+| SWE-Bench Pro | 65.7% |
+| DeepSWE | 64.3% |
+| Terminal-Bench 2.1 | 85.4% |
+
+Tencent also describes a ~1M context window and strong gains in planning, debugging, verification, and frontend work.
+
+However, Tencent explicitly lists known preview limitations:
+
+- reasoning longer than necessary
+- over-verifying work
+
+Therefore Hy4 is a good **diversity fallback**, not the default SeatFlow implementation model.
+
+### GLM-5.3
+
+Published vendor/model-card reporting includes approximately:
+
+| Benchmark | GLM-5.3 |
+|---|---:|
+| DeepSWE v1.1 | 66.9% |
+| Terminal-Bench 2.1 | 88.2% |
+| Terminal-Bench 3.0 | 28.3% |
+
+This makes GLM-5.3 a credible terminal-heavy fallback, but OpenCode Go allowance economics are materially worse than Muse Spark 1.3, while Muse also has stronger published DeepSWE evidence.
 
 ---
 
-## 6. Long-Context Evidence
+## 4. Why Muse 1.3 Is the Default Implementer
 
-Nominal context capacity is not the same as context reasoning quality.
+SeatFlow's task execution protocol is unusually favorable to a model like Muse:
 
-OpenAI reports a major long-context distinction inside GPT-5.6:
+- architecture is pre-decided
+- task files provide explicit contracts
+- file inventory is known
+- deterministic verification commands exist
+- tests can reject many implementation failures
+- the implementation agent is instructed not to improvise architecture
 
-| MRCR range | Luna | Terra | Sol |
-|---|---:|---:|---:|
-| 256K-512K | 41.3% | 89.6% | 91.5% |
-| 512K-1M | 41.3% | 72.5% | 73.8% |
+That changes the economic optimum.
 
-Therefore, do not route a giant SeatFlow architecture/repository synthesis to Luna merely because Luna nominally accepts a very large context.
+For a complete, non-critical task file, the best workflow is usually:
 
-For large-context work:
+`Terra High plan -> Muse 1.3 High/xHigh implementation -> deterministic verification -> Terra High review`
 
-- **Muse xHigh**: free large-context implementation/exploration route
-- **Gemini High**: best premium value for large-context agentic/frontend work
-- **Terra High**: best default when subtle backend reasoning matters
-- **Sol High**: use when critical invariants must be synthesized correctly
-
-Hy3's ~256K context makes it best for bounded tasks rather than full-repository ingestion.
+This preserves premium reasoning for the stages where it has the highest marginal value.
 
 ---
 
-## 7. Model Profiles
+## 5. Why Terra Is the Default Quality Gate
 
-### Hy3 High
+OpenAI's published numbers show Terra close to Sol on long-horizon coding:
 
-Strengths:
+- DeepSWE: 69.6 vs 72.7
+- Terminal-Bench 2.1: 87.4 vs 88.8
+- SWE-Bench Pro: 63.4 vs 64.6
 
-- $0 in current free routes
-- good fit for coding agents
-- strong value for deterministic implementation
-- tests/refactors/CI/CD are good matches
-- suitable for straightforward backend/frontend changes
+For normal SeatFlow review/planning/debugging, that gap does not justify routing every task to Sol.
 
-Weaknesses:
-
-- ~256K context rather than ~1M
-- weaker overall reasoning evidence than Terra/Sol/Gemini
-- public benchmark evidence is thinner
-- can be verbose
-- provider/harness behavior can vary
-
-Best SeatFlow tasks:
-
-- User/Event/Seat Map straightforward implementation
-- tests
-- DTO/repository/controller/service work
-- mechanical refactors
-- reproducible bug fixes
-- Docker/GitHub Actions/observability
-
-Escalate when:
-
-- architecture is ambiguous
-- one meaningful repair loop fails
-- hidden correctness matters
-- task reaches reservation/payment/security/distributed-state logic
-
-### Muse Spark 1.2 xHigh
-
-Strengths:
-
-- $0 in current free route
-- ~1M context
-- strong composite intelligence
-- useful for long-horizon/cross-file agentic work
-- good free option for repo-wide refactors/exploration
-
-Weaknesses:
-
-- verbose/high token consumption in measured evaluations
-- weaker DeepSWE/TB2.1 than Terra in published comparison
-- xHigh behavior is provider/harness dependent
-- high reasoning does not guarantee high task efficiency
-
-Best SeatFlow tasks:
-
-- large cross-file implementation from an already-complete plan
-- repo-wide refactors
-- large-context exploration
-- autonomous implementation loops
-
-Escalate when:
-
-- repeated tool-loop drift appears
-- tests fail after one meaningful repair attempt
-- critical correctness is involved
-
-### GPT-5.6 Luna
-
-Strengths:
-
-- extremely low paid API cost
-- fast generation once started
-- strong ordinary coding for its price
-- stable premium fallback
-
-Weaknesses:
-
-- hard debugging gap vs Terra/Sol
-- weak demonstrated very-long-context reasoning
-- Max can be extremely verbose/slow to start
-
-Best SeatFlow tasks:
-
-- cheap premium fallback after Hy3
-- tests/docs/simple fixes
-- bounded implementation
-
-Recommended:
-
-- Low: docs/extraction
-- Medium: ordinary bounded work
-- High: bounded implementation/debugging
-- xHigh: niche
-- Max: rare/offline, not default interactive mode
-
-### GPT-5.6 Terra
-
-Strengths:
-
-- best overall SeatFlow balance
-- strong backend reasoning
-- strong debugging
-- concise relative to Luna Max/Muse xHigh
-- excellent planning/review profile
-- strong long-context reasoning
-
-Best SeatFlow tasks:
+Terra High is therefore the normal authority for:
 
 - task planning
-- Spring/JPA/transactions
+- code review
+- Spring/JPA reasoning
 - Kafka/outbox reasoning
-- API design
-- complex refactors
 - difficult debugging
-- PR review
+- API design
+- migrations
 - cross-service reasoning
 
-Recommended:
-
-- Medium: routine implementation/review
-- High: default planning/debugging/review
-- xHigh: difficult multi-service diagnosis/ADR
-- Max: rare; compare with Sol first
-
-### GPT-5.6 Sol
-
-Strengths:
-
-- strongest critical-reasoning tier here
-- best fit for hidden high-cost failure
-- strong software-engineering and terminal benchmarks
-
-Best SeatFlow tasks:
-
-- reservation concurrency / zero double booking
-- payment / Stripe / idempotency
-- security/auth
-- distributed state/ordering
-- production incidents
-- critical migration/release review
-
-Recommended:
-
-- High: critical default
-- xHigh: severe/high-stakes root cause
-- Max: exceptional final escalation
-
-### Gemini 3.7 Flash High
-
-Strengths:
-
-- strong frontend/web benchmark evidence
-- high-throughput agentic workflow
-- strong automation
-- ~1M context
-- attractive premium price/performance
-
-Best SeatFlow tasks:
-
-- Angular/Tailwind
-- screenshot/mock implementation
-- frontend visual debugging
-- browser/tool-heavy work
-- large-context exploration
-
-Use Terra instead when backend invariants or root-cause precision dominate.
+Use Terra xHigh when the problem itself is unusually hard, not because the diff is large.
 
 ---
 
-## 8. SeatFlow Development-Stage Recommendations
+## 6. Why Sol Is a Risk Override, Not a Default
 
-### Planning
+Sol is most valuable where an incorrect answer can look plausible and still pass ordinary verification.
 
-Default: **Terra High**
+Examples:
 
-Use Sol High for:
+- race conditions
+- double booking
+- payment/refund state transitions
+- idempotency
+- authorization
+- distributed ordering
+- data corruption
+- dangerous migration behavior
 
-- new distributed invariants
-- reservation/payment architecture
-- security-sensitive architecture
-- decisions expensive to reverse
+A critical SeatFlow change should often use Sol twice:
 
-Do not use free-first for authoritative planning unless the task is trivial.
+1. **before implementation** for architecture/invariant analysis
+2. **after implementation** for final critical review
 
-### Implementation
+The implementation itself can often be done by Terra High, or by Muse from a fully deterministic task specification.
 
-Bounded, complete task file:
-
-**Hy3 High**
-
-Large/cross-file/agentic implementation:
-
-**Muse xHigh**
-
-Normal backend feature requiring design judgment:
-
-**Terra Medium/High**
-
-Critical reservation/payment/security implementation:
-
-**Terra High or Sol High**
-
-### Review
-
-Routine PR:
-
-**Terra Medium**
-
-Complex PR:
-
-**Terra High**
-
-Security/payment/concurrency/invariant review:
-
-**Sol High/xHigh**
-
-Hy3 can perform a free first pass, but should not be the final authority on critical code.
-
-### Debugging / Fixing
-
-Localized + reproducible:
-
-**Hy3 High**
-
-Cheap premium fallback:
-
-**Luna High**
-
-Hard root cause:
-
-**Terra High**
-
-Concurrency/payment/distributed production bug:
-
-**Sol High/xHigh**
-
-### Testing
-
-Test generation:
-
-**Hy3 High**
-
-Large autonomous test/fix loop:
-
-**Muse xHigh**
-
-Complex failure interpretation:
-
-**Terra High**
-
-Critical failure analysis:
-
-**Sol High**
-
-### Frontend
-
-Default premium:
-
-**Gemini 3.7 Flash High**
-
-Simple deterministic component:
-
-**Hy3 High** is a valid free-first choice.
-
-Large cross-file frontend agent task:
-
-**Muse xHigh** can be tried free-first, with Gemini High as premium escalation.
-
-### DevOps / Observability
-
-Routine:
-
-**Hy3 High**
-
-Large cross-file infra work:
-
-**Muse xHigh**
-
-Hard incident/root cause:
-
-**Terra High / Sol High** depending on severity.
+This is higher quality than using Sol for everything because it preserves Sol quota for the checks where hidden failure risk is highest.
 
 ---
 
-## 9. Reliability-Oriented SeatFlow Router
+## 7. Gemini 3.8 vs Terra vs Muse
 
-The following reliability bands are engineering estimates derived from public evidence + SeatFlow task structure, not measured SeatFlow pass rates.
+Use the dominant requirement, not a global ranking.
 
-| SeatFlow task | Recommended | Effort | Expected model cost | Estimated reliability | Escalation |
-|---|---|---:|---:|---:|---|
-| Architecture -> atomic task spec | Terra | High | premium | 90-95% | Sol High |
-| Distributed consistency/concurrency ADR | Sol | High | premium | 93-97% | Sol xHigh |
-| User/Event/Seat Map bounded implementation | Hy3 | High | $0 route | 78-88% | Luna High -> Terra |
-| Ticket/Notification large implementation | Muse | xHigh | $0 route | 82-91% | Terra High |
-| Reservation locking | Terra | High | premium | 90-95% | Sol High/xHigh |
-| Payment/idempotency/Stripe | Sol | High | premium | 93-97% | Sol xHigh |
-| Kafka/outbox change | Terra | High | premium | 90-95% | Sol High |
-| Realtime cross-service integration | Terra | High | premium | 89-94% | Sol for race conditions |
-| Angular UI from clear spec | Gemini | High | low premium | 89-95% | Hy3 if simple / Terra for state issues |
-| Unit/integration tests | Hy3 | High | $0 route | 80-92% | Luna Medium/High |
-| CI/Docker/observability | Hy3 | High | $0 route | 80-90% | Muse -> Terra |
-| Small reproducible bug | Hy3 | High | $0 route | 82-92% | Luna High |
-| Hard cross-service debugging | Terra | High | premium | 90-95% | Sol xHigh |
-| Repo-wide refactor/exploration | Muse | xHigh | $0 route | 80-90% | Gemini/Terra |
-| Routine PR review | Terra | Medium | premium | 88-94% | Terra High |
-| Critical final review | Sol | High | premium | 93-97% | Sol xHigh |
+| Requirement | Best default |
+|---|---|
+| Deterministic implementation from a complete task | Muse 1.3 High |
+| Large/cross-file autonomous implementation | Muse 1.3 xHigh |
+| Angular / Tailwind / visual quality | Gemini 3.8 High |
+| Browser/tool-heavy frontend debugging | Gemini 3.8 High |
+| Quick/simple frontend change | Gemini 3.8 Medium |
+| Backend architecture | Terra High |
+| Spring/JPA/transactions | Terra High |
+| Code review | Terra High |
+| Hard root-cause debugging | Terra High |
+| Critical concurrency/payment/security | Sol High |
+
+Muse can score extremely well on agentic coding without being the best final authority for hidden backend invariants. Gemini can be a better frontend agent without replacing Terra for transaction semantics. Sol can be the strongest model without being the economically correct default.
 
 ---
 
-## 10. Escalation Rules
+## 8. OpenCode Go Economics
 
-### Free bounded workflow
+OpenCode Go currently defines:
 
-`Hy3 High -> one repair loop -> Luna High / Terra Medium -> Terra High`
+- **5-hour limit:** $12 of usage
+- **weekly limit:** $30
+- **monthly limit:** $60
 
-### Free large-context workflow
+Current Go pricing/allowance values include:
 
-`Muse xHigh -> one repair loop -> Gemini High or Terra High -> Sol if critical`
+| Model | Input / 1M | Output / 1M | Estimated requests / 5h | / week | / month |
+|---|---:|---:|---:|---:|---:|
+| Muse Spark 1.3 Contributor | $0.10 | $0.20 | 45,300 | 113,300 | 226,600 |
+| Hy4 preview | $0.834 | $2.501 | 1,350 | 3,380 | 6,770 |
+| GLM-5.3 | $1.40 | $4.40 | 220 | 540 | 1,080 |
+| Kimi K3 | $3.00 | $15.00 | 110 | 250 | 490 |
 
-### Planning / review / debugging
+The request counts are OpenCode's estimates from observed request patterns, **not guarantees**. Real SeatFlow prompts can be much larger than the assumed pattern.
 
-`Terra Medium/High -> Terra xHigh -> Sol High -> Sol xHigh -> Sol Max`
-
-### Critical SeatFlow paths
-
-Skip free-first when hidden failure can violate:
-
-- reservation correctness
-- payment correctness
-- auth/security
-- data integrity
-- distributed consistency
-
-Start at **Terra High or Sol High**.
+The important conclusion is not the exact request count. It is that Muse 1.3 Contributor is so inexpensive inside Go that inference cost should rarely be the reason to choose a weaker implementation model.
 
 ---
 
-## 11. Why More Reasoning Is Not Always Better
+## 9. Privacy / Data-Handling Constraint
 
-Reasoning effort is part of the routing decision, not a free quality slider.
+OpenCode's current privacy table says:
 
-Evidence such as Luna Max vs Terra High demonstrates:
-
-- higher effort can massively increase output/reasoning volume
-- latency can increase dramatically
-- benchmark gains can be modest relative to extra compute
-- a stronger base model at lower effort can be operationally superior
+- Muse Spark 1.3 Contributor: prompts/completions may be used for model training; not ZDR
+- Hy4 preview: not used for training; 0-day retention
+- GLM-5.3: not used for training; 0-day retention
 
 Therefore:
 
-- prefer **Terra High over Luna Max** for serious interactive planning/debugging
-- compare **Sol Medium/High** before blindly pushing Terra/Luna to Max
-- use **Max** only when lower settings have failed or expected failure cost clearly dominates latency/compute
+- public SeatFlow source code can use Muse Contributor
+- do not send `.env`, credentials, Stripe secrets, tokens, production dumps, private customer data, or any sensitive material to Muse Contributor
+- when sensitive context is unavoidable, use an appropriate non-Contributor route and still minimize the sensitive data sent
+
+Never commit secrets to SeatFlow regardless of model selection.
 
 ---
 
-## 12. Sources
+## 10. Reasoning-Effort Policy
 
-Primary reference categories used for this policy:
+### GPT-5.6
 
-- OpenAI GPT-5.6 model/pricing/benchmark documentation
-- Google DeepMind Gemini 3.7 Flash model card and pricing
-- Tencent Hy3 official repository/model documentation
-- OpenCode/Kilo current model availability
-- Artificial Analysis model latency, throughput, token-volume, and agent/coding evaluations
+- **Low:** extraction/docs/very small tasks
+- **Medium:** bounded implementation or small review
+- **High:** default planning, review, difficult debugging
+- **xHigh:** unusually difficult multi-service reasoning
+- **Max:** final escalation; not routine
 
-Re-check live vendor documentation when exact current pricing or availability is materially important.
+### Gemini 3.8 Flash
+
+Antigravity exposes Medium and High.
+
+- **Medium:** simple UI, quick exploration, low-risk changes
+- **High:** serious frontend, browser/tool loops, complex state, long-horizon work
+
+### Muse Spark 1.3
+
+Reasoning variants are provider/catalog dependent.
+
+- use **High** for normal implementation if exposed
+- use **xHigh** for large/cross-file/agentic implementation if exposed
+- avoid choosing Max merely because it exists; use the highest useful non-Max variant unless the task clearly benefits from more test-time compute
+
+OpenCode explicitly warns that variant names are model-specific. Check the current catalog.
+
+### Hy4 / GLM
+
+Use their normal reasoning configuration unless the current provider exposes a documented variant. Do not invent effort names.
 
 ---
 
-## 13. Final Policy
+## 11. Verification and Review Policy
 
-Use models according to their economic role:
+For good code quality, model routing is only half the system.
+
+### Strong oracle tasks
+
+Examples:
+
+- compiler errors
+- unit tests
+- integration tests
+- lint
+- deterministic API tests
+- browser checks
+
+Use Muse/Gemini aggressively for implementation.
+
+### Weak oracle tasks
+
+Examples:
+
+- race conditions not covered by load tests
+- transaction boundaries
+- idempotency
+- distributed ordering
+- authorization gaps
+- architecture drift
+
+Use Terra/Sol for reasoning and final review.
+
+### Review rule
+
+For substantive code:
+
+`implementation model != final reviewer` whenever practical.
+
+This reduces correlated mistakes and is more valuable than simply increasing the implementation model's thinking effort.
+
+---
+
+## 12. Recommended SeatFlow Pipelines
+
+### Standard backend task
+
+`Terra High planning -> Muse High implementation -> tests -> Terra High review`
+
+### Large backend task
+
+`Terra High planning -> Muse xHigh implementation -> full verification -> Terra High review`
+
+### Frontend task
+
+`Gemini 3.8 High implementation -> browser/tests -> Terra High review for state/contracts if non-trivial`
+
+### Small reproducible bug
+
+`Muse High reproduce/test/fix -> verification`
+
+If one real repair loop fails:
+
+`Terra High root-cause analysis`
+
+### Critical payment/reservation/security task
+
+`Sol High reasoning -> Terra High implementation -> exhaustive tests -> Sol High final review`
+
+Muse may replace Terra for implementation only when the Sol/Terra plan is fully deterministic and the task has strong tests.
+
+### Production incident
+
+`Terra High triage/root cause`
+
+Escalate to `Sol High/xHigh` when money, security, data integrity, concurrency, or distributed correctness is implicated.
+
+---
+
+## 13. Models Not in the Default Route
+
+OpenCode Go contains many other capable models, including Qwen3.8, DeepSeek V4, Kimi K3, GLM variants, MiniMax, and others.
+
+They are intentionally not in the normal SeatFlow route because:
+
+1. more model choices increase routing friction
+2. Muse 1.3 has unusually strong coding evidence and allowance economics
+3. Terra/Gemini/Sol already cover the main capability gaps
+4. secondary models are still available for diversity when a primary route fails
+
+Do not add a model to the default router simply because it tops one benchmark.
+
+---
+
+## 14. Sources
+
+Re-check these when models or subscription limits change:
+
+- OpenAI GPT-5.6 launch / benchmarks: https://openai.com/index/gpt-5-6/
+- OpenAI GPT-5.6 model guidance: https://developers.openai.com/api/docs/guides/latest-model
+- Meta Muse Spark 1.3 release: https://research.meta.ai/blog/introducing-muse-spark-1-3
+- Meta Muse Spark 1.3 evaluation methodology: https://research.meta.ai/static/muse-spark-1-3-multimodal-evaluation-methodology
+- Google Gemini 3.8 Flash launch: https://blog.google/innovation-and-ai/models-and-research/gemini-models/3-8-flash-and-3-8-flash-cyber/
+- Google Gemini 3.8 Flash model card: https://deepmind.google/models/model-cards/gemini-3-8-flash/
+- Google Antigravity models: https://antigravity.google/docs/models/
+- Google Antigravity headless/model efforts: https://antigravity.google/docs/cli/headless/
+- Tencent Hy4 preview: https://github.com/Tencent-Hunyuan/Hy4-preview
+- OpenCode Go models, limits, pricing, privacy: https://opencode.ai/docs/go/
+- OpenCode model variants: https://opencode.ai/docs/models/
+
+---
+
+## 15. Final Policy
 
 ```text
-HY3 HIGH
-= free bounded implementation worker
+MUSE SPARK 1.3 HIGH
+= default deterministic implementation worker
 
-MUSE SPARK 1.2 XHIGH
-= free large-context / agentic implementation worker
+MUSE SPARK 1.3 XHIGH
+= large / cross-file / long-horizon implementation worker
 
-LUNA
-= cheap premium deterministic fallback
+GEMINI 3.8 FLASH HIGH
+= frontend / visual / browser / tool-heavy worker
 
-GEMINI 3.7 FLASH HIGH
-= premium frontend / agentic / large-context worker
+GEMINI 3.8 FLASH MEDIUM
+= simple frontend / fast exploration worker
 
-TERRA
-= senior engineer for planning / review / debugging / backend reasoning
+GPT-5.6 TERRA HIGH
+= default planner / reviewer / debugger / backend reasoning authority
 
-SOL
-= principal engineer for critical correctness
+GPT-5.6 TERRA MEDIUM
+= bounded work with some judgment / small review
+
+GPT-5.6 SOL HIGH
+= critical correctness authority
+
+GPT-5.6 SOL XHIGH
+= severe critical escalation
+
+GPT-5.6 LUNA LOW/MEDIUM
+= docs / extraction / low-risk utility
+
+HY4 / GLM-5.3
+= independent OpenCode fallback, not default
 ```
 
-The best model is the **cheapest configuration whose expected reliability clears the task's risk threshold**.
+The best SeatFlow workflow is usually **strong decisions + high-throughput execution + independent review + deterministic verification**.
 
-Exploit free models when external verification is strong. Escalate when failures are hard to detect. Reserve Sol-class compute for mistakes whose consequences are materially worse than the inference bill.
+Use Sol where the consequences justify it. Do not use Sol merely to make a normal task feel safer.
