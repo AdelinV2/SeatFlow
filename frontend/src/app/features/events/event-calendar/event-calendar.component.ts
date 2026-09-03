@@ -7,12 +7,13 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { CalendarDay, EventSummary } from '../../../models/event.model';
+import { CalendarDay, EventCategory, EventSummary } from '../../../models/event.model';
+import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 
 @Component({
   selector: 'app-event-calendar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, DateFormatPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './event-calendar.component.html',
   styleUrl: './event-calendar.component.scss',
@@ -28,6 +29,12 @@ export class EventCalendarComponent {
   readonly formattedMonthHeader = computed(() => {
     const d = this.currentMonth();
     return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  });
+
+  readonly isCurrentMonthToday = computed(() => {
+    const today = new Date();
+    const cur = this.currentMonth();
+    return today.getFullYear() === cur.getFullYear() && today.getMonth() === cur.getMonth();
   });
 
   readonly calendarDays = computed<CalendarDay[]>(() => {
@@ -110,7 +117,14 @@ export class EventCalendarComponent {
     this.currentMonth.update((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
   }
 
+  goToToday(): void {
+    this.currentMonth.set(new Date());
+  }
+
   selectDay(day: CalendarDay): void {
+    if (!day.isCurrentMonth) {
+      this.currentMonth.set(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
+    }
     if (day.isSelected) {
       this.dateSelected.emit(null); // Deselect on second click
     } else {
@@ -120,5 +134,24 @@ export class EventCalendarComponent {
 
   clearSelection(): void {
     this.dateSelected.emit(null);
+  }
+
+  getCategoryDotColor(category?: EventCategory | string): string {
+    switch (category) {
+      case 'CONCERT':
+        return 'bg-purple-500';
+      case 'THEATRE':
+        return 'bg-amber-500';
+      case 'SPORTS':
+        return 'bg-emerald-500';
+      case 'FESTIVAL':
+        return 'bg-pink-500';
+      case 'COMEDY':
+        return 'bg-sky-500';
+      case 'SYMPHONY':
+        return 'bg-rose-500';
+      default:
+        return 'bg-indigo-500';
+    }
   }
 }
