@@ -1,7 +1,7 @@
 ﻿# ADR-014: Spring AI Assistant with Controlled Tool Calling and Zero Direct DB Access
 
 - **Date:** 2026-09-02
-- **Status:** `PROPOSED`
+- **Status:** `ACCEPTED`
 - **Driven by:** Phase 15 — AI Assistant & MCP / Controlled Tool Calling
 
 ## 1. Context

@@ -1,7 +1,7 @@
 # ADR-012: 24-Hour Refund Cutoff and Ticket Revocation Workflow
 
 - **Date:** 2026-09-02
-- **Status:** `PROPOSED`
+- **Status:** `ACCEPTED`
 - **Driven by:** Phase 13 — Refunds & Ticket Cancellation
 
 ## 1. Context

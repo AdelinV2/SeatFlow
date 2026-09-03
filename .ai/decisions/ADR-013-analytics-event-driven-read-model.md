@@ -1,7 +1,7 @@
 ﻿# ADR-013: Dedicated Analytics Microservice with Event-Driven CQRS Projections
 
 - **Date:** 2026-09-02
-- **Status:** `PROPOSED`
+- **Status:** `ACCEPTED`
 - **Driven by:** Phase 14 — Admin Analytics & Operations Dashboard
 
 ## 1. Context
