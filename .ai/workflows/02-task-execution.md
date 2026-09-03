@@ -4,44 +4,154 @@
 
 ---
 
-## 1. Goal & Rules of Engagement
+## 1. Goal
 
-The Builder/Implementer role receives a single task specification (`.ai/tasks/phase-XX-<phase-name>/<YYY>-<task-name>.md`) and implements it with zero deviation.
+The Builder receives one approved task specification and implements it **faithfully, minimally, and verifiably**. The implementer may resolve local coding details, but must not silently redesign architecture, weaken invariants, or expand scope.
 
-### Non-Negotiable Rules:
-1. **Do not improvise architecture:** Follow the exact schema, method signatures, and directory layout given in the task file.
-2. **Follow the stack standards:**
-   - For backend tasks: Follow [backend/AGENTS.md](../../backend/AGENTS.md).
-   - For frontend tasks: Follow [frontend/AGENTS.md](../../frontend/AGENTS.md).
-3. **Strict creation order:**
-   - Backend: Flyway Migration → Entity/Enum → Repository → Request/Response DTO Records → MapStruct Mapper → Service Interface → Service Impl → Controller → Tests.
-   - Frontend: Interfaces/Models → Service → Component → Template → Route → Tests.
-4. **No `@Data` on JPA Entities:** Always use explicit `@Getter`, `@Setter`, `@Builder`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, `@AllArgsConstructor`.
-5. **No custom GlobalExceptionHandler:** Use `common-observability` and `common-domain`.
-6. **Synchronous Inter-Service Calls via Eureka & LoadBalancer:** When a service calls another microservice synchronously, use Eureka service discovery + Spring Cloud LoadBalancer (`@LoadBalanced RestClient.Builder` with target `http://<service-name>`). Always declare a `@Primary` plain `RestClient.Builder` alongside the `@LoadBalanced` bean and wrap calls with Resilience4j circuit breakers.
+The task is not complete merely because code compiles or targeted tests pass. It must remain reviewable and survive the independent review + QA gates defined in workflows 05 and 04.
 
 ---
 
-## 2. Step-by-Step Execution Sequence
+## 2. Non-Negotiable Rules
 
+1. **Do not improvise architecture.** Follow the task, relevant ADRs, `.ai/architecture/`, and repository AGENTS files.
+2. **Respect subsystem standards.**
+   - Backend: `backend/AGENTS.md`
+   - Frontend: `frontend/AGENTS.md`
+3. **Do not weaken tests to make implementation pass.** Never delete, disable, broaden assertions, or replace meaningful integration behavior with mocks just to get green output.
+4. **No unrelated refactoring.** If unrelated cleanup is genuinely required, keep it minimal or move it to a separate refactor task.
+5. **Prefer the smallest correct diff.** Avoid speculative abstractions, duplicate helpers, or style churn outside the task.
+6. **Preserve compatibility unless the task explicitly changes it.** This includes API contracts, event schemas, DB semantics, environment variables, and frontend/back-end integration.
+7. **Treat tests as evidence, not proof.** Concurrency, payments, security, idempotency, migrations, and distributed state require explicit reasoning in addition to green tests.
+8. **Never commit temporary review files.** `.ai/tmp/` is local scratch state only.
+
+---
+
+## 3. Pre-Implementation Check
+
+Before editing:
+
+```text
+1. Checkout the dedicated task branch from `develop`.
+2. Read the full assigned task file.
+3. Read all referenced ADRs and architecture docs.
+4. Read `backend/AGENTS.md` or `frontend/AGENTS.md` as applicable.
+5. Inspect existing neighboring code and shared abstractions before creating new ones.
+6. Confirm dependent migrations, DTOs, endpoints, events, or frontend models actually match the task assumptions.
+7. Identify the task's critical invariants and highest-risk failure modes.
 ```
-1. Checkout a dedicated feature branch from develop:
-   git checkout -b feat/p<XX>-<YYY>-<description> develop
-2. Ingest the assigned task file from .ai/tasks/phase-XX-<phase-name>/<YYY>-<task-name>.md.
-3. Ensure the local .env file exists in the target service (copy from .env.example).
-4. Verify dependent classes in backend/common/ (e.g. ApiErrorResponse, EventEnvelope).
-5. Write files one by one in the order specified in Section 5 of the task.
-6. Add comprehensive unit tests and integration tests covering:
-   - Happy path
-   - Business invariant violations (e.g. limit exceeded)
-   - Edge cases (null inputs, optimistic locking conflicts)
-7. Run the Verification Command provided in the task file:
-   - Backend: mvn clean test -Dtest=...
-   - Frontend: npm test -- --watch=false
-8. If all tests pass:
-   - Update .env.example if new environment variables were introduced.
-   - Mark task checklist items as [x].
-   - Move task file to .ai/tasks/completed/phase-XX-<phase-name>/.
-   - Commit changes: git commit -m "feat(<scope>): <description>"
-   - Push and open PR targeting develop: git push origin feat/p<XX>-<YYY>-<description>
+
+If the repository contradicts the task in a way that changes architecture or acceptance criteria, stop treating the task as deterministic implementation: surface the inconsistency for planning rather than silently choosing one interpretation.
+
+---
+
+## 4. Implementation Sequence
+
+Use the task's explicit file inventory and sequence. Where the task delegates to repository standards, use these defaults.
+
+### Backend
+
+```text
+Flyway migration
+→ Entity / Enum / Value Object
+→ Repository
+→ Request / Response Records
+→ Mapper
+→ Service Interface
+→ Service Implementation
+→ Controller / Adapter
+→ Messaging / Client integration when applicable
+→ Tests
 ```
+
+### Frontend
+
+```text
+Interfaces / Models
+→ API service / state service
+→ Shared primitives when genuinely reusable
+→ Feature component
+→ Template / styles
+→ Routes / guards
+→ Tests
+```
+
+Do not create abstractions before confirming they are required by the task or an established repository pattern.
+
+---
+
+## 5. Implementation Discipline
+
+While coding:
+
+- preserve transaction boundaries and locking semantics;
+- preserve idempotency and retry behavior;
+- keep authorization server-side where required;
+- validate external and user-controlled inputs at the correct boundary;
+- keep DB constraints consistent with application invariants;
+- ensure time and money logic uses the types and semantics established by the architecture;
+- update `.env.example` only when a new version-controlled environment variable is actually introduced;
+- avoid logging credentials, tokens, payment details, or unnecessary PII;
+- keep frontend state transitions explicit and reconcile authoritative server state after reconnects or failed optimistic updates;
+- add tests at the same time as production behavior, not as an afterthought.
+
+If implementation reveals a genuine bug unrelated to the task, do not casually fold a broad fix into the feature. Either apply a tiny safe prerequisite fix with regression coverage or create a separate bug-fix task.
+
+---
+
+## 6. Self-Verification Before Review
+
+Run the task's exact verification command first. Then run the broader checks justified by the changed surface.
+
+Minimum self-check:
+
+```text
+1. Targeted tests for the changed behavior.
+2. Relevant module/service test suite.
+3. Build / typecheck / lint where applicable.
+4. Integration or concurrency tests required by the task.
+5. Inspect `git diff` manually.
+6. Check that every task acceptance criterion has observable evidence.
+7. Check for accidental TODO/FIXME/debug logging, dead code, stale comments, and unrelated formatting churn.
+8. Check that no secrets or local `.env` files were added.
+9. Check that API/event/frontend contracts remain aligned.
+```
+
+A green test suite does not justify skipping the diff review.
+
+---
+
+## 7. Handoff to Independent Code Review
+
+After self-verification, hand the task + diff to `.ai/workflows/05-code-review.md`.
+
+Do **not** move the task file to `completed/` before substantive review findings are resolved and the final QA gate passes.
+
+If the reviewer creates `.ai/tmp/review-<task-or-branch>.md`:
+
+1. treat each open finding as explicit work;
+2. use `.ai/workflows/03-bug-fixing.md` for bugs/errors and targeted corrections;
+3. mark findings resolved only after code + required tests are updated;
+4. request re-review of changed areas when the finding is substantive or high risk;
+5. keep the temporary review file until every accepted finding is resolved and verification passes;
+6. delete the temporary review file before final completion.
+
+Do not delete the file merely to satisfy the cleanup gate.
+
+---
+
+## 8. Completion Gate
+
+The task may be finalized only when:
+
+- implementation matches the approved task and architecture;
+- targeted and required broader checks pass;
+- code review is complete;
+- all accepted review findings are resolved;
+- `.ai/tmp/` contains no active review file for the task;
+- `.ai/workflows/04-testing-and-qa.md` final quality gate passes;
+- task checklist/acceptance criteria are complete;
+- the task file is moved to the appropriate `.ai/tasks/completed/...` folder;
+- changes are committed using the repository's conventional commit rules and proposed to `develop` through the normal PR workflow.
+
+Completion is a quality decision, not simply the end of code generation.
