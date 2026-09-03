@@ -23,7 +23,8 @@ import java.util.UUID;
         @UniqueConstraint(name = "uq_venue_sections_venue_name", columnNames = {"venue_id", "name"})
     },
     indexes = {
-        @Index(name = "idx_venue_sections_venue_id", columnList = "venue_id")
+        @Index(name = "idx_venue_sections_venue_id", columnList = "venue_id"),
+        @Index(name = "idx_venue_sections_venue_active", columnList = "venue_id, is_active")
     }
 )
 @Getter
