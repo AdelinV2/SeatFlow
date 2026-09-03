@@ -22,27 +22,47 @@ SeatFlow is engineered through an autonomous, modular engineering pipeline:
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 2. BUILDER / IMPLEMENTER                                    │
-│ • Receives single task: .ai/tasks/phase-XX-<name>/XXX-task.md│
-│ • Reads stack rules in backend/AGENTS.md or frontend/AGENTS.md│
-│ • Strictly executes the implementation sequence             │
-│ • Writes production code + comprehensive unit/slice tests   │
+│ • Receives one approved atomic task                         │
+│ • Reads backend/AGENTS.md or frontend/AGENTS.md             │
+│ • Implements the smallest correct diff + tests              │
+│ • Self-verifies before independent review                   │
 │ • Follows .ai/workflows/02-task-execution.md                │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 3. FIXER / DEBUGGER                                         │
-│ • Analyzes test logs or compiler outputs                    │
-│ • Follows .ai/workflows/03-bug-fixing.md                   │
-│ • Writes a regression-reproducing test first, then fixes    │
+│ 3. INDEPENDENT CODE REVIEWER                                │
+│ • Reviews diff + surrounding contracts proactively          │
+│ • Searches for bugs, security/invariant issues & test gaps  │
+│ • Uses temporary .ai/tmp/review-*.md ledger when needed     │
+│ • Follows .ai/workflows/05-code-review.md                   │
 └──────────────────────────────┬──────────────────────────────┘
+                               │ findings
+                     ┌─────────┴─────────┐
+                     │                   │
+                     ▼                   │ no findings
+┌─────────────────────────────────────────────────────────────┐
+│ 4. FIXER / DEBUGGER                                         │
+│ • Reproduces/validates findings and fixes root causes       │
+│ • Adds regression coverage where meaningful                │
+│ • Re-runs verification and triggers re-review when required │
+│ • Follows .ai/workflows/03-bug-fixing.md                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               └──────────────► re-review
+
+                     after review/fix cycle
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 4. QA / TEST ENGINEER                                       │
+│ 5. QA / FINAL QUALITY GATE                                  │
+│ • Validates tests, contracts, diff hygiene and cleanup      │
+│ • Rejects unresolved/active temporary review ledgers        │
 │ • Follows .ai/workflows/04-testing-and-qa.md                │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+For structural changes that promise behavior preservation, use `.ai/workflows/06-refactoring.md` during implementation, then run the same independent review and final QA gates.
 
 ---
 
@@ -53,7 +73,7 @@ SeatFlow is engineered through an autonomous, modular engineering pipeline:
 | **Backend** | Java 21 (LTS), Spring Boot 4.1.x, Spring Cloud 2025.1 (Oakwood), PostgreSQL, Kafka, Redis, Testcontainers | [backend/AGENTS.md](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/backend/AGENTS.md) |
 | **Frontend** | Angular 22.x, Angular Material 22.x, TailwindCSS v4, TypeScript 5.x, @stomp/stompjs | [frontend/AGENTS.md](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/frontend/AGENTS.md) |
 | **Common Modules** | `common-domain`, `common-events`, `common-observability`, `common-security` | Section 4 of this document |
-| **Workflows** | Task planning, implementation sequence, bug fixing, QA | [.ai/workflows/](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/workflows/) |
+| **Workflows** | Planning, implementation, debugging, QA, proactive code review, refactoring | [.ai/workflows/](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/workflows/) |
 | **Architecture** | System overview, database models, auth, messaging, REST contracts | [.ai/architecture/](file:///c:/Users/adeli/OneDrive/Projects/SeatFlow/.ai/architecture/) |
 | **AI Model Routing** | Cost-effective model & reasoning effort selection | [.ai/MODEL_ROUTER.md](.ai/MODEL_ROUTER.md) (Reference: [.ai/AI_MODEL_REFERENCE.md](.ai/AI_MODEL_REFERENCE.md)) |
 
@@ -97,7 +117,9 @@ SeatFlow/
 │       ├── 01-task-planning.md
 │       ├── 02-task-execution.md
 │       ├── 03-bug-fixing.md
-│       └── 04-testing-and-qa.md
+│       ├── 04-testing-and-qa.md
+│       ├── 05-code-review.md
+│       └── 06-refactoring.md
 │
 ├── backend/                           # Java 21 / Spring Boot 4.1.x Microservices
 │   ├── AGENTS.md                      # Backend engineering standards
@@ -109,6 +131,8 @@ SeatFlow/
     ├── AGENTS.md                      # Frontend engineering standards
     └── package.json
 ```
+
+`.ai/tmp/` is reserved for ignored local review/repair state and must not contain committed artifacts.
 
 ---
 
@@ -187,15 +211,16 @@ SeatFlow follows a clean 3-tier **Environment Branching Strategy** designed for 
    git checkout -b feat/p<XX>-<YYY>-<description> develop
    ```
 2. **Local Environment:** Copy `.env.example` to `.env` in the target service directory if not already created.
-3. **Execute & Test:** Follow the task specification and pass local unit/slice tests.
-4. **Commit with Conventional Commits:**
+3. **Execute & Self-Verify:** Follow the task specification, write required tests, run deterministic verification, and inspect the diff.
+4. **Independent Quality Cycle:** Run `.ai/workflows/05-code-review.md`; resolve accepted findings through `.ai/workflows/03-bug-fixing.md`; re-review when required; then pass `.ai/workflows/04-testing-and-qa.md`. Temporary `.ai/tmp/review-*.md` ledgers must be deleted only after resolution and must never be committed.
+5. **Commit with Conventional Commits:**
    - `feat(<scope>): add reservation hold scheduler`
    - `fix(<scope>): resolve optimistic locking retry in payment processing`
    - `test(<scope>): add concurrency test for seat hold race condition`
    - `docs(<scope>): update ADR-002 with outbox polling benchmarks`
-5. **Pull Request to `develop`:** Open PR targeting `develop`. GitHub Actions runs `ci-pr-check.yml`.
-6. **Staging Deploy:** Merging into `develop` triggers `cd-staging.yml` (GCP Staging + Azure Entra Sandbox).
-7. **Production Release:** Open release PR from `develop` into `main`. Merging triggers `cd-production.yml` (GCP Production + Azure Entra Prod).
+6. **Pull Request to `develop`:** Open PR targeting `develop`. GitHub Actions runs `ci-pr-check.yml`.
+7. **Staging Deploy:** Merging into `develop` triggers `cd-staging.yml` (GCP Staging + Azure Entra Sandbox).
+8. **Production Release:** Open release PR from `develop` into `main`. Merging triggers `cd-production.yml` (GCP Production + Azure Entra Prod).
 
 ---
 
@@ -246,12 +271,16 @@ An Architect or Agent MUST create an ADR when:
 
 A task is considered **DONE** only when:
 - [ ] Code strictly satisfies the task specification without extra unrequested features.
-- [ ] Compiles cleanly with zero compiler warnings or lint errors.
-- [ ] All unit and integration tests pass locally.
-- [ ] Local `.env.example` updated if new environment variables were introduced.
-- [ ] Database migrations are backwards-compatible and indexed.
-- [ ] Relevant documentation/ADR updated if an architectural decision was modified.
-- [ ] Task file moved from active phase to `.ai/tasks/completed/<phase-name>/`.
+- [ ] Compiles cleanly and relevant lint/type checks pass.
+- [ ] Required unit, integration, concurrency, contract, and/or frontend tests pass for the changed risk surface.
+- [ ] Local `.env.example` is updated if new environment variables were introduced.
+- [ ] Database migrations are compatible, correctly constrained/indexed, and validated for the task's rollout assumptions.
+- [ ] Relevant documentation/ADR is updated if an architectural decision was modified.
+- [ ] Independent review using `.ai/workflows/05-code-review.md` is complete for substantive changes.
+- [ ] All accepted review findings are resolved; P0/P1 and other high-risk fixes are re-reviewed as required.
+- [ ] No active `.ai/tmp/review-*.md` ledger remains and no `.ai/tmp/` artifact is committed.
+- [ ] `.ai/workflows/04-testing-and-qa.md` final quality gate returns PASS or an explicitly valid PASS WITH NON-BLOCKING NOTES.
+- [ ] Task file is moved from the active phase to `.ai/tasks/completed/<phase-name>/` only after the quality cycle completes.
 
 ---
 
@@ -260,14 +289,16 @@ A task is considered **DONE** only when:
 Whenever asked for recommendations on which AI model, persona, or reasoning effort to use for a development task (e.g., *"Which AI should I use for this task?"*, *"Which model should implement TASK-P01-002?"*, *"What model and reasoning effort should I use?"*, *"Should I use Luna, Terra, Sol, or Gemini for this?"*, *"Which AI should do the planning/review/debugging/implementation?"*):
 
 1. **Primary Operational Policy:** Read [`.ai/MODEL_ROUTER.md`](.ai/MODEL_ROUTER.md) to classify the task (complexity, failure risk, context size, agentic demand, verification strength) and determine the recommended model and reasoning effort.
-2. **Standard Recommendation Format:** Formulate the response concisely following the template in `.ai/MODEL_ROUTER.md`:
+2. **Standard Recommendation Format:** Follow the current template in `.ai/MODEL_ROUTER.md`:
    - **Recommended:** `MODEL` — `EFFORT`
-   - **Why:** 2–4 sentences explaining why this configuration fits the task profile.
-   - **Task profile:** Complexity (1–5), Risk (Low/Medium/High), Context (Small/Medium/Large/Very Large), Agentic demand (Low/Medium/High).
-   - **Cheaper option:** `MODEL` — `EFFORT` with explicit trade-off.
-   - **Escalate to:** `MODEL` — `EFFORT` with specific trigger condition.
+   - **Why:** 2–4 sentences tied to the actual failure mode and verification strength.
+   - **Task profile:** Complexity, Risk, Context, Agentic demand, Verification.
+   - **Implementation model:** only if different from the reasoning/review model.
+   - **Review model:** only when a separate quality gate is needed.
+   - **Escalate to:** stronger model only under a concrete trigger condition.
 3. **Cost-Effectiveness Invariant:** Never automatically default to the strongest model or highest reasoning effort. Choose the most cost-effective configuration that is sufficiently reliable for the task.
-4. **Detailed Reference (On-Demand Only):** Read [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) **only** when additional evidence is genuinely required:
+4. **Workflow Invariant:** Model choice does not replace process. Planning, execution, debugging, QA, code review, and refactoring must follow their corresponding `.ai/workflows/*.md` protocol.
+5. **Detailed Reference (On-Demand Only):** Read [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) **only** when additional evidence is genuinely required:
    - The model choice is ambiguous or disputed;
    - The user explicitly requests a detailed comparison between models;
    - The user asks why one model is better than another for a specific workload;
@@ -275,5 +306,3 @@ Whenever asked for recommendations on which AI model, persona, or reasoning effo
    - The task is unusually complex, high-risk, or mission-critical.
 
    > **Context Conservation Rule:** **Do NOT** load [`.ai/AI_MODEL_REFERENCE.md`](.ai/AI_MODEL_REFERENCE.md) for ordinary model-selection requests to avoid wasting context tokens.
-
-
