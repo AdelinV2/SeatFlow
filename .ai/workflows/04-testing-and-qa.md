@@ -231,3 +231,76 @@ QA should report:
 - final decision: `PASS`, `PASS WITH NON-BLOCKING NOTES`, or `FAIL`.
 
 Use `PASS WITH NON-BLOCKING NOTES` only for genuine low-risk improvements that do not contradict the task, architecture, security, data integrity, or correctness. Bugs and contract violations are blocking.
+
+---
+
+## 11. Next Stage Handoff
+
+Depending on the final QA decision, proceed to the corresponding next stage:
+
+### 11.1 Branch A: If QA Decision is `PASS` or `PASS WITH NON-BLOCKING NOTES`
+
+The task is verified and ready to be finalized. Proceed to **Task Finalization & Git Integration** (`AGENTS.md` Section 6 and Section 9).
+
+#### AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md` (low-risk deterministic git/doc operations):
+
+| Operation | Recommended Route | Alternative Route |
+|---|---|---|
+| **Task File Archival & Git PR Operations** | **GPT-5.6 Luna Low / Medium** | **Gemini 3.8 Flash Medium** |
+
+#### Prompt Template for Task Finalization
+
+Copy and paste the following prompt:
+
+```markdown
+You are finalizing the completed task for SeatFlow.
+Task: [TASK-P<XX>-<YYY>: <Task Title>]
+Active task file: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+Target completed path: `.ai/tasks/completed/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+
+Instructions:
+1. Verify that the QA gate has returned PASS or PASS WITH NON-BLOCKING NOTES.
+2. Ensure no active `.ai/tmp/review-*.md` file exists.
+3. Move the task file to the completed folder:
+   `git mv .ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md .ai/tasks/completed/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+4. Stage and commit all changes following Conventional Commits format:
+   `git add .`
+   `git commit -m "feat(<scope>): <concise description satisfying TASK-P<XX>-<YYY>"`
+5. Provide instructions/command to push the branch and open a PR targeting `develop`:
+   `git push -u origin feat/p<XX>-<YYY>-<task-desc>`
+```
+
+---
+
+### 11.2 Branch B: If QA Decision is `FAIL`
+
+Hand off back to **Workflow 03: Bug Fixing & Debugging Protocol** (`.ai/workflows/03-bug-fixing.md`).
+
+#### AI Model & Reasoning Effort Selection
+
+| QA Failure Type | Recommended Route | Alternative Route | Escalation |
+|---|---|---|---|
+| **Targeted Test / Assertion / Hygiene Failure** | **Muse Spark 1.3 xHigh** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** |
+| **Systemic Contract / Architectural / Concurrency Issue** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Sol High** (if critical invariant) |
+
+#### Prompt Template for QA Defect Repair
+
+Copy and paste the following prompt:
+
+```markdown
+You are the Fixer / Debugger for SeatFlow resolving QA failures.
+Task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+
+Instructions:
+1. Follow `.ai/workflows/03-bug-fixing.md`.
+2. Inspect and diagnose the specific QA failure report:
+   - Failing tests/commands: `<list failing commands and traces>`
+   - Diff hygiene / contract violations: `<list findings>`
+3. Reproduce the failure, apply the minimal root-cause fix, and add/adjust regression assertions.
+4. Verify using: `<verification-command>`
+5. Re-run `.ai/workflows/04-testing-and-qa.md` once clean.
+```

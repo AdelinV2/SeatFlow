@@ -150,3 +150,42 @@ A refactor is complete only when:
 - no temporary `.ai/tmp/review-*.md` ledger remains.
 
 A refactor that is cleaner but less demonstrably correct is not an improvement.
+
+---
+
+## 10. Next Stage Handoff: Independent Code Review
+
+Once refactoring transformations and self-verification pass, hand off to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`).
+
+### 10.1 AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md`:
+
+| Refactoring Scope | Recommended Route | Alternative Route | Escalation / High Risk |
+|---|---|---|---|
+| **Substantive Architecture Refactor Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
+| **Mechanical / Low-Risk Refactor Review** | **GPT-5.6 Terra Medium** | **Gemini 3.8 Flash Medium** | **GPT-5.6 Terra High** |
+| **Critical Domain Refactor Review** (Holds, Locking, Payments, Security) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** |
+
+### 10.2 Next Stage Prompt Template
+
+Copy and paste the following prompt to invoke the code reviewer:
+
+```markdown
+You are the Independent Code Reviewer for SeatFlow reviewing a Refactoring change.
+Task/Scope: [Refactoring Scope / Task ID]
+Branch: `refactor/<scope>` (or `feat/p<XX>-<YYY>-<task-desc>`)
+
+Instructions:
+1. Follow `.ai/workflows/05-code-review.md` and `.ai/workflows/06-refactoring.md`.
+2. Inspect the git diff against `develop`:
+   `git diff develop...HEAD`
+3. Verify that observable behavior is strictly preserved:
+   - No accidental contract changes (DTOs, REST endpoints, events, DB schema).
+   - Invariant guarantees remain intact.
+   - Spring proxy, `@Transactional`, JPA fetch types, and caching behavior are preserved.
+   - Angular Signals/computed reactivity semantics remain unchanged.
+4. Verify that characterization and existing regression tests pass.
+5. If behavioral drift, regressions, or contract breaks are found, create `.ai/tmp/review-<branch-or-task>.md`.
+6. Deliver verdict: `APPROVE`, `APPROVE WITH NON-BLOCKING P3 NOTES`, or `CHANGES REQUIRED`.
+```

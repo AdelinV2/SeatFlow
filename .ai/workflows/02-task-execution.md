@@ -121,11 +121,13 @@ A green test suite does not justify skipping the diff review.
 
 ---
 
-## 7. Handoff to Independent Code Review
+## 7. Next Stage Handoff: Independent Code Review
 
-After self-verification, hand the task + diff to `.ai/workflows/05-code-review.md`.
+After self-verification passes, hand the task and branch diff over to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`).
 
 Do **not** move the task file to `completed/` before substantive review findings are resolved and the final QA gate passes.
+
+### 7.1 Handling Review Findings
 
 If the reviewer creates `.ai/tmp/review-<task-or-branch>.md`:
 
@@ -137,6 +139,45 @@ If the reviewer creates `.ai/tmp/review-<task-or-branch>.md`:
 6. delete the temporary review file before final completion.
 
 Do not delete the file merely to satisfy the cleanup gate.
+
+### 7.2 AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md` before selecting the reviewer:
+
+| Review Domain | Recommended Route | Alternative Route | Escalation / High Risk |
+|---|---|---|---|
+| **Substantive Backend Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
+| **Routine / Small Review** | **GPT-5.6 Terra Medium** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** (if issues detected) |
+| **Frontend Review** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** | **GPT-5.6 Terra High** (for state/contract risks) |
+| **Critical Invariants** (Holds, Double Booking, Money, Security, Idempotency) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** (if unresolved ambiguity) |
+
+### 7.3 Next Stage Prompt Template
+
+Copy and paste the following prompt to invoke the independent code reviewer:
+
+```markdown
+You are the Independent Code Reviewer for SeatFlow.
+Review task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+
+Instructions:
+1. Follow `.ai/workflows/05-code-review.md`. Act as an independent, skeptical reviewer.
+2. Inspect the git diff against `develop`:
+   `git diff develop...feat/p<XX>-<YYY>-<task-desc>`
+3. Review surrounding contracts, JPA transactions, API/event schemas, and DB constraints.
+4. Verify non-negotiable invariants:
+   - Max 10 seats per reservation
+   - 15-minute hold TTL & expiration
+   - Zero double-booking concurrency guarantee (PostgreSQL source of truth)
+   - Transactional outbox pattern & Kafka envelope integrity
+   - Idempotency on payment and reservation endpoints
+   - Server-side JWT role authorization
+5. Evaluate test quality: are edge cases, boundaries, negative paths, and concurrency tested?
+6. If any actionable bug, error, invariant issue, or contract gap is found:
+   - Create `.ai/tmp/review-p<XX>-<YYY>.md` with the standard template (P0-P3).
+7. Finish with a formal verdict: `APPROVE`, `APPROVE WITH NON-BLOCKING P3 NOTES`, `CHANGES REQUIRED`, or `CRITICAL CHANGES REQUIRED`.
+```
 
 ---
 

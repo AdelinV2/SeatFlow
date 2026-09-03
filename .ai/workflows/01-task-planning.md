@@ -162,3 +162,42 @@ A task is not ready if any of these are true:
 - compatibility or migration impact is unknown.
 
 When ambiguity remains, resolve it during planning rather than delegating it silently to the implementer.
+
+---
+
+## 9. Next Stage Handoff: Task Execution
+
+Once the planning quality gate passes and the task status is set to `READY FOR IMPLEMENTATION`, hand off to **Workflow 02: Task Execution** (`.ai/workflows/02-task-execution.md`).
+
+### 9.1 AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md` before routing:
+
+| Task Type | Recommended Route | Alternative Route | Escalation / Override |
+|---|---|---|---|
+| **Substantive Backend Implementation** | **Muse Spark 1.3 xHigh** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** (if design judgment needed during coding) |
+| **Frontend Implementation (Angular / Tailwind)** | **Gemini 3.8 Flash High** | **Muse Spark 1.3 xHigh** | **GPT-5.6 Terra High** (for complex state/architecture) |
+| **Small / Mechanical Implementation** | **Muse Spark 1.3 High** | **Gemini 3.8 Flash Medium** | **GPT-5.6 Terra Medium** |
+| **Critical Invariant Implementation** (Holds, Locking, Concurrency, Payments, Security) | **Muse Spark 1.3 xHigh** (guided by strict spec) | **GPT-5.6 Terra High** | **GPT-5.6 Sol High** (mandatory pre-implementation review or active supervision) |
+
+### 9.2 Next Stage Prompt Template
+
+Copy and paste the following prompt to initiate execution:
+
+```markdown
+You are the Builder / Implementer for SeatFlow.
+Execute task: [TASK-P<XX>-<YYY>: <Task Title>]
+Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+
+Instructions:
+1. Follow `.ai/workflows/02-task-execution.md` and subsystem guidelines (`backend/AGENTS.md` or `frontend/AGENTS.md`).
+2. Create and checkout the dedicated branch:
+   `git checkout -b feat/p<XX>-<YYY>-<task-desc> develop`
+3. Read the task file, referenced ADRs, and neighboring abstractions. Do NOT improvise architecture.
+4. Implement the minimal correct diff according to the exact file inventory and sequence.
+5. Write and execute required unit, integration, and concurrency tests.
+6. Run self-verification:
+   - Command: `<verification-command-from-task>`
+   - Inspect `git diff` for hygiene, contract compliance, and zero unintended changes.
+7. Upon successful self-verification, prepare the handoff to independent code review.
+```

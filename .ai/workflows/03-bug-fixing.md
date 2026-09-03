@@ -154,3 +154,76 @@ A bug/review finding is complete only when:
 - the final diff does not introduce unrelated changes;
 - substantive/high-risk review findings have been re-reviewed;
 - any temporary `.ai/tmp/review-*.md` ledger has been deleted after all findings are resolved.
+
+---
+
+## 9. Next Stage Handoff
+
+Once fixes are applied and self-verified, determine the appropriate next stage:
+
+### 9.1 Branch A: If P0/P1 Findings or Critical Invariants Were Addressed
+
+Mandatory re-review is required before QA. Hand off to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`) Section 8.
+
+#### AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md`:
+
+| Scope of Fixed Defects | Recommended Route | Alternative Route | Escalation / High Risk |
+|---|---|---|---|
+| **Substantive Defect Re-Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
+| **Critical Invariant Re-Review** (Holds, Double Booking, Payments, Security) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** (if ambiguity remains) |
+
+#### Prompt Template for Re-Review
+
+Copy and paste the following prompt:
+
+```markdown
+You are the Independent Code Reviewer for SeatFlow performing a Re-Review.
+Task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+Review findings ledger: `.ai/tmp/review-p<XX>-<YYY>.md`
+
+Instructions:
+1. Follow `.ai/workflows/05-code-review.md` Section 8 (Re-Review Rules).
+2. Inspect the fixes applied for findings marked `RESOLVED`:
+   - Verify that each reported root cause is genuinely fixed.
+   - Verify that the fix did not introduce new defects or regressions nearby.
+   - Inspect the automated regression tests added during the repair pass.
+3. If any finding remains unresolved or new issues emerge, update `.ai/tmp/review-p<XX>-<YYY>.md`.
+4. Conclude with a clear re-review verdict: `APPROVE` or `CHANGES REQUIRED`.
+```
+
+---
+
+### 9.2 Branch B: If All Findings Are Resolved, Verified & Ledger Is Deleted
+
+When all findings are resolved, re-review (if required) is complete, and `.ai/tmp/review-*.md` has been deleted, hand off to **Workflow 04: Testing, QA & Final Quality Gate** (`.ai/workflows/04-testing-and-qa.md`).
+
+#### AI Model & Reasoning Effort Selection
+
+| Quality Gate | Recommended Route | Alternative Route | Escalation |
+|---|---|---|---|
+| **Final QA Gate** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** | **Muse Spark 1.3 xHigh** |
+
+#### Prompt Template for Final QA
+
+Copy and paste the following prompt:
+
+```markdown
+You are the QA / Test Engineer for SeatFlow.
+Execute the final quality gate for task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+
+Instructions:
+1. Follow `.ai/workflows/04-testing-and-qa.md`.
+2. Confirm that `.ai/tmp/` contains no active review ledger.
+3. Run the full verification suite:
+   - Task verification command: `<verification-command>`
+   - Module test suite: `<mvn test / npm test>`
+   - Build / typecheck / lint
+   - Concurrency and integration tests where applicable.
+4. Verify diff hygiene: no stray debug logs, commented code, or credentials.
+5. Provide final decision: `PASS`, `PASS WITH NON-BLOCKING NOTES`, or `FAIL`.
+```

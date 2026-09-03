@@ -353,3 +353,82 @@ Do not create findings solely for:
 - micro-performance changes with no realistic hot-path impact.
 
 The goal is **better software and fewer escaped defects**, not a longer review.
+
+---
+
+## 11. Next Stage Handoff
+
+Depending on the final review decision, proceed to the corresponding next stage:
+
+### 11.1 Branch A: If Review Decision is `CHANGES REQUIRED` or `CRITICAL CHANGES REQUIRED`
+
+Hand off to **Workflow 03: Bug Fixing & Debugging Protocol** (`.ai/workflows/03-bug-fixing.md`) using the temporary findings ledger `.ai/tmp/review-<task-id>.md`.
+
+#### AI Model & Reasoning Effort Selection
+
+Consult `.ai/MODEL_ROUTER.md` based on finding complexity:
+
+| Finding Nature | Recommended Route | Alternative Route | Escalation / High Risk |
+|---|---|---|---|
+| **Clear / Localized / Reproducible Defect** | **Muse Spark 1.3 High / xHigh** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** (after 1 failed repair) |
+| **Difficult Root Cause / Architecture Reasoning** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
+| **Critical Invariant / Concurrency / Money / Security** | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** (if unresolved) |
+
+#### Prompt Template for Bug Fixing
+
+Copy and paste the following prompt to invoke the fixer:
+
+```markdown
+You are the Fixer / Debugger for SeatFlow.
+Address review findings for task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+Review findings ledger: `.ai/tmp/review-p<XX>-<YYY>.md`
+
+Instructions:
+1. Follow `.ai/workflows/03-bug-fixing.md`.
+2. Inspect each finding in `.ai/tmp/review-p<XX>-<YYY>.md`:
+   - Set status to `IN_PROGRESS`.
+   - Reproduce with the narrowest failing test where practical.
+   - Apply the minimal surgical root-cause fix preserving architecture.
+   - Add/strengthen automated regression tests.
+   - Run verification and set status to `RESOLVED` with evidence (or `REJECTED_WITH_REASON`).
+3. Re-run task verification: `<verification-command>`
+4. When all findings are resolved and verified:
+   - If findings include P0/P1 or critical invariants, hand off for Re-Review (`.ai/workflows/05-code-review.md`).
+   - Otherwise, delete `.ai/tmp/review-p<XX>-<YYY>.md` and hand off to QA (`.ai/workflows/04-testing-and-qa.md`).
+```
+
+---
+
+### 11.2 Branch B: If Review Decision is `APPROVE` or `APPROVE WITH NON-BLOCKING P3 NOTES`
+
+Ensure no active `.ai/tmp/review-*.md` file remains, and hand off to **Workflow 04: Testing, QA & Final Quality Gate** (`.ai/workflows/04-testing-and-qa.md`).
+
+#### AI Model & Reasoning Effort Selection
+
+| Gate Validation | Recommended Route | Alternative Route | Escalation |
+|---|---|---|---|
+| **Final QA & Gate Verification** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** | **Muse Spark 1.3 xHigh** |
+
+#### Prompt Template for Final QA
+
+Copy and paste the following prompt to invoke QA:
+
+```markdown
+You are the QA / Test Engineer for SeatFlow.
+Execute the final quality gate for task: [TASK-P<XX>-<YYY>: <Task Title>]
+Branch: `feat/p<XX>-<YYY>-<task-desc>`
+Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+
+Instructions:
+1. Follow `.ai/workflows/04-testing-and-qa.md`.
+2. Verify that independent code review is complete and no active `.ai/tmp/review-*.md` ledger remains.
+3. Run the comprehensive verification sequence:
+   - Task verification command: `<verification-command>`
+   - Service test suite: `<mvn test / npm test>`
+   - Build / typecheck / lint
+   - Concurrency / Integration / Testcontainers checks where applicable.
+4. Perform diff hygiene review: check for stray TODOs, debug logs, commented code, or credentials.
+5. Validate all acceptance criteria and invariant rules.
+6. Deliver final verdict: `PASS`, `PASS WITH NON-BLOCKING NOTES`, or `FAIL`.
+```
