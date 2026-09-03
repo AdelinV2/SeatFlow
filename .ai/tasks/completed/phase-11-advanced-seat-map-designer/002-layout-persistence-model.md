@@ -8,7 +8,7 @@
 - **Phase:** `Phase 11 - Advanced Venue & Seat Map Designer`
 - **Related Specs:** `.ai/architecture/03-database-models.md` §1.3 and §2.2; `.ai/architecture/09-post-mvp-evolution.md` §3.2
 - **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `DONE`
 - **Complexity:** 3/5
 - **Failure Risk:** High
 - **Verification Strength:** Strong
@@ -145,3 +145,10 @@ Expected result: both commands exit 0 and the targeted repository tests show unc
 - [ ] Layout-element geometry round-trips as object JSON.
 - [ ] Existing seat-map repository tests remain green.
 - [ ] Targeted and module verification commands exit 0.
+
+## 13. Completion Record
+
+- **Completed:** 2026-09-03
+- **Review:** APPROVE; REV-001 resolved and independently re-reviewed.
+- **QA:** PASS. Targeted verification passed 22 tests; full seat-map module verification passed 63 tests with zero failures or errors.
+- **Merged:** `2f74a1b` (`test(seat-map): isolate advanced layout constraint checks`) is included in `develop`.
