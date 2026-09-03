@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -23,6 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -207,22 +209,63 @@ class AdvancedLayoutPersistenceTest {
     }
 
     @Test
-    @DisplayName("Non-object element geometry and shape metadata are rejected by V5 checks")
-    void shouldRejectNonObjectJson() {
-        Venue venue = saveVenue("Json Check Hall", "NYC");
-        VenueSection section = saveSection(venue, "Floor", 0, true);
+    @DisplayName("Array element geometry is rejected by V5 geometry check")
+    void shouldRejectArrayElementGeometry() {
+        Venue venue = saveVenue("Json Array Hall", "NYC");
 
         assertThatThrownBy(() -> elementRepository.saveAndFlush(VenueLayoutElement.builder()
                 .venue(venue).type(LayoutElementType.LABEL).geometry(obj("[1,2]")).zIndex(0)
-                .build())).isInstanceOf(RuntimeException.class);
+                .build()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .satisfies(ex -> assertCheckConstraintViolation(ex, "chk_venue_layout_elements_geometry"));
+    }
+
+    @Test
+    @DisplayName("String element geometry is rejected by V5 geometry check")
+    void shouldRejectStringElementGeometry() {
+        Venue venue = saveVenue("Json String Hall", "NYC");
 
         assertThatThrownBy(() -> elementRepository.saveAndFlush(VenueLayoutElement.builder()
                 .venue(venue).type(LayoutElementType.LABEL).geometry(obj("\"hello\"")).zIndex(0)
-                .build())).isInstanceOf(RuntimeException.class);
+                .build()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .satisfies(ex -> assertCheckConstraintViolation(ex, "chk_venue_layout_elements_geometry"));
+    }
 
+    @Test
+    @DisplayName("Non-object shape metadata is rejected by V5 shape check")
+    void shouldRejectNonObjectShapeMetadata() {
+        Venue venue = saveVenue("Json Meta Hall", "NYC");
+        VenueSection section = saveSection(venue, "Floor", 0, true);
         section.setShapeMetadata(obj("[\"not\",\"object\"]"));
+
         assertThatThrownBy(() -> sectionRepository.saveAndFlush(section))
-                .isInstanceOf(RuntimeException.class);
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .satisfies(ex -> assertCheckConstraintViolation(ex, "chk_venue_sections_shape_metadata"));
+    }
+
+    /**
+     * Asserts the failure is the intended PostgreSQL check violation (SQLState 23514)
+     * for the expected V5 constraint. Each caller runs in its own {@code @DataJpaTest}
+     * transaction, so this cannot pass because of an earlier aborted transaction.
+     */
+    private static void assertCheckConstraintViolation(Throwable ex, String expectedConstraint) {
+        StringBuilder chain = new StringBuilder();
+        String checkViolationState = null;
+        for (Throwable current = ex; current != null; current = current.getCause()) {
+            if (current.getMessage() != null) {
+                chain.append(current.getMessage()).append(" | ");
+            }
+            if (current instanceof SQLException sqlEx && "23514".equals(sqlEx.getSQLState())) {
+                checkViolationState = "23514";
+            }
+        }
+        assertThat(checkViolationState)
+                .as("expected PostgreSQL check_violation SQLState 23514, chain: %s", chain)
+                .isEqualTo("23514");
+        assertThat(chain.toString())
+                .as("expected V5 constraint %s in chain: %s", expectedConstraint, chain)
+                .contains(expectedConstraint);
     }
 
     @Test
