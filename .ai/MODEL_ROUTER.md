@@ -6,6 +6,8 @@ Use this file to choose the best AI model and reasoning effort for a SeatFlow so
 
 Optimize for **code quality and successful task completion per unit of usage, latency, context, retry effort, and failure risk**. Do not select the strongest model by default. SeatFlow's workflow deliberately separates planning, implementation, review, bug fixing, and verification, so each stage should use the cheapest model that still clears the required reliability threshold.
 
+The execution behavior of each stage is defined in `.ai/workflows/`; model routing does not replace those protocols.
+
 Current preferred subscriptions/providers:
 
 - **Codex Plus:** GPT-5.6 Luna / Terra / Sol
@@ -263,40 +265,47 @@ When correctness is weakly observable:
 
 For every non-trivial implementation:
 
-1. run the task's deterministic verification command
-2. run relevant regression/integration checks
-3. review the diff, not only the final test result
-4. use a stronger reviewer when the implementation model made architecture decisions outside the task spec
+1. run the task's deterministic verification command;
+2. run relevant regression/integration checks;
+3. perform the independent review using `.ai/workflows/05-code-review.md` — review the diff, not only the green test result;
+4. when actionable findings exist, use the temporary `.ai/tmp/review-<task-or-branch>.md` ledger defined by the review workflow and resolve issues through `.ai/workflows/03-bug-fixing.md`;
+5. re-review P0/P1 and other substantive/high-risk fixes;
+6. delete the temporary ledger only after all accepted findings are resolved and required verification/re-review completes;
+7. pass `.ai/workflows/04-testing-and-qa.md` as the final quality gate before task completion.
 
-Passing tests are evidence, not proof, for concurrency, payments, security, and distributed semantics.
+Use a stronger reviewer when the implementation model made architecture decisions outside the task spec or when verification has weak observability.
+
+Passing tests are evidence, not proof, for concurrency, payments, security, migrations, and distributed semantics.
 
 ---
 
 ## 7. Standard Quality Workflows
 
+The arrows below describe model routing. The actual execution rules come from `.ai/workflows/01-task-planning.md` through `.ai/workflows/06-refactoring.md`.
+
 ### Normal bounded backend task
 
-`Terra High task spec -> Muse 1.3 High implementation -> tests -> Terra High review`
+`Terra High task spec -> Muse 1.3 High implementation -> tests -> Terra High review -> fixes if needed -> final QA`
 
 For a tiny/mechanical task, Terra review may be Medium.
 
 ### Large backend / cross-file task
 
-`Terra High task spec -> Muse 1.3 xHigh implementation -> tests -> Terra High review`
+`Terra High task spec -> Muse 1.3 xHigh implementation -> tests -> Terra High review -> fixes/re-review -> final QA`
 
 If Muse drifts after one meaningful repair loop:
 
-`Hy4 or GLM-5.3 independent attempt -> Terra High`
+`Hy4 or GLM-5.3 independent attempt -> Terra High review`
 
 ### Frontend feature
 
-`Terra High or Gemini High plan -> Gemini 3.8 High implementation -> browser/tests -> Terra High review if state/contracts are non-trivial`
+`Terra High or Gemini High plan -> Gemini 3.8 High implementation -> browser/tests -> Terra High review if state/contracts are non-trivial -> final QA`
 
 Use Gemini Medium for simple UI work.
 
 ### Reproducible bug
 
-`Muse 1.3 High reproduce + regression test + fix -> tests`
+`Muse 1.3 High reproduce + regression test + fix -> tests -> review when substantive/high-risk -> final QA`
 
 If one meaningful repair loop fails:
 
@@ -304,21 +313,31 @@ If one meaningful repair loop fails:
 
 ### Hard backend bug
 
-`Terra High -> Terra xHigh if needed -> Sol High only when critical risk appears`
+`Terra High -> Terra xHigh if needed -> Sol High only when critical risk appears -> targeted fix -> review -> final QA`
 
 ### Critical reservation/payment/security task
 
-`Sol High architecture/risk analysis -> Terra High implementation (or Muse only from a fully deterministic spec) -> exhaustive tests -> Sol High final review`
+`Sol High architecture/risk analysis -> Terra High implementation (or Muse only from a fully deterministic spec) -> exhaustive tests -> Sol High final review -> fixes/re-review -> final QA`
 
 Use Sol xHigh only if the final review finds unresolved risk.
 
 ### Repo-wide refactor
 
-`Terra High plan -> Muse 1.3 xHigh execution -> full verification -> Terra High review`
+`Terra High plan -> Muse 1.3 xHigh execution using 06-refactoring -> full verification -> Terra High review -> final QA`
 
 ---
 
-## 8. Escalation Policy
+## 8. Review Execution Rule
+
+When a model is assigned a code-review stage, it must follow `.ai/workflows/05-code-review.md` rather than giving a generic prose review.
+
+The reviewer must prioritize concrete bugs, errors, invariant violations, security/data-integrity risks, contract mismatches, test gaps, and meaningful improvements. Findings must include a plausible failure scenario/evidence and use P0-P3 severity.
+
+If findings exist, the review workflow creates a temporary ignored ledger under `.ai/tmp/`. That ledger is repair state, **not documentation**: never commit it, never delete it before accepted findings are resolved, and never let a task pass final QA while it remains active.
+
+---
+
+## 9. Escalation Policy
 
 ### Bounded implementation
 
@@ -342,7 +361,7 @@ Start at `Sol High` for the decision/review layer. Do not waste time retrying we
 
 ---
 
-## 9. Usage / Privacy Principle
+## 10. Usage / Privacy Principle
 
 Never optimize only for nominal token price or subscription allowance.
 
@@ -361,7 +380,7 @@ Never paste `.env`, API keys, Stripe secrets, production credentials, private us
 
 ---
 
-## 10. Response Format
+## 11. Response Format
 
 When asked which model to use, respond:
 
@@ -384,7 +403,7 @@ When asked which model to use, respond:
 
 ---
 
-## 11. Reference Rule
+## 12. Reference Rule
 
 Consult `.ai/AI_MODEL_REFERENCE.md` when:
 
