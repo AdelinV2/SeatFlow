@@ -24,10 +24,7 @@
         <div class="flex items-center gap-2 text-xs font-semibold" [ngClass]="health.statusColor()">
           <span
             class="status-indicator"
-            [class.bg-emerald-500]="health.status() === 'OPERATIONAL'"
-            [class.bg-amber-500]="health.status() === 'DEGRADED'"
-            [class.bg-rose-500]="health.status() === 'DOWN'"
-            [class.bg-indigo-400]="health.status() === 'CHECKING'"
+            [ngClass]="health.statusBgColor()"
             aria-hidden="true"
           ></span>
           <span>{{ health.statusLabel() }}</span>
