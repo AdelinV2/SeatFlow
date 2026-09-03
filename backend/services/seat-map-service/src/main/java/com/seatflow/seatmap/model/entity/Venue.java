@@ -63,6 +63,10 @@ public class Venue {
     @Column
     private Double longitude;
 
+    @Column(name = "layout_version", nullable = false)
+    @Builder.Default
+    private Long layoutVersion = 0L;
+
     @Version
     @Column(nullable = false)
     private Long version;

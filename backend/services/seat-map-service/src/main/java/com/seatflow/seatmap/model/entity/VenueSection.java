@@ -1,11 +1,15 @@
 package com.seatflow.seatmap.model.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.Hibernate;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +55,34 @@ public class VenueSection {
     @ToString.Include
     private Integer colCount;
 
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
+
+    @Column(name = "position_x", nullable = false, precision = 12, scale = 3)
+    private BigDecimal positionX;
+
+    @Column(name = "position_y", nullable = false, precision = 12, scale = 3)
+    private BigDecimal positionY;
+
+    @Column(name = "width", nullable = false, precision = 12, scale = 3)
+    private BigDecimal width;
+
+    @Column(name = "height", nullable = false, precision = 12, scale = 3)
+    private BigDecimal height;
+
+    @Column(name = "rotation_deg", nullable = false, precision = 7, scale = 3)
+    @Builder.Default
+    private BigDecimal rotationDeg = BigDecimal.ZERO;
+
+    @Column(name = "z_index", nullable = false)
+    @Builder.Default
+    private Integer zIndex = 0;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "shape_metadata", columnDefinition = "jsonb")
+    private JsonNode shapeMetadata;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -62,6 +94,47 @@ public class VenueSection {
     @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<Seat> seats = new ArrayList<>();
+
+    @PrePersist
+    void prePersist() {
+        if (positionX == null) {
+            positionX = BigDecimal.ZERO.setScale(3);
+        }
+        if (positionY == null) {
+            positionY = BigDecimal.ZERO.setScale(3);
+        }
+        if (width == null) {
+            int cols = colCount != null ? Math.max(colCount, 1) : 1;
+            width = BigDecimal.valueOf(cols * 44L).setScale(3);
+        }
+        if (height == null) {
+            int rows = rowCount != null ? Math.max(rowCount, 1) : 1;
+            height = BigDecimal.valueOf(rows * 44L).setScale(3);
+        }
+        if (isActive == null) {
+            isActive = true;
+        }
+        if (rotationDeg == null) {
+            rotationDeg = BigDecimal.ZERO.setScale(3);
+        } else {
+            rotationDeg = rotationDeg.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+        if (zIndex == null) {
+            zIndex = 0;
+        }
+        if (positionX != null) {
+            positionX = positionX.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+        if (positionY != null) {
+            positionY = positionY.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+        if (width != null) {
+            width = width.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+        if (height != null) {
+            height = height.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+    }
 
     @Override
     public boolean equals(Object o) {
