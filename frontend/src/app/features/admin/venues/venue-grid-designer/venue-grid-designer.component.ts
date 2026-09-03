@@ -38,13 +38,7 @@ export interface GridMatrixRow {
 @Component({
   selector: 'app-venue-grid-designer',
   standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    FormsModule,
-    ReactiveFormsModule,
-    SkeletonLoaderComponent,
-  ],
+  imports: [CommonModule, RouterModule, FormsModule, ReactiveFormsModule, SkeletonLoaderComponent],
   templateUrl: './venue-grid-designer.component.html',
   styleUrl: './venue-grid-designer.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -173,17 +167,19 @@ export class VenueGridDesignerComponent implements OnInit {
         this.isLoading.set(false);
       },
       error: (err) => {
-        this.snackBar.open(
-          err?.error?.message || 'Failed to load venue layout.',
-          'Close',
-          { duration: 4000, panelClass: 'bg-rose-600' }
-        );
+        this.snackBar.open(err?.error?.message || 'Failed to load venue layout.', 'Close', {
+          duration: 4000,
+          panelClass: 'bg-rose-600',
+        });
         this.isLoading.set(false);
       },
     });
   }
 
-  selectSection(sectionId: string): void {
+  selectSection(sectionId: string | null): void {
+    if (!sectionId) {
+      return;
+    }
     this.selectedSectionId.set(sectionId);
     this.selectedBulkRow.set(0);
     this.selectedBulkCol.set(0);
@@ -223,7 +219,7 @@ export class VenueGridDesignerComponent implements OnInit {
         this.snackBar.open(
           `Section "${newSection.name}" created with ${newSection.rowCount * newSection.colCount} seats!`,
           'Close',
-          { duration: 4000, panelClass: 'snack-success' }
+          { duration: 4000, panelClass: 'snack-success' },
         );
         // Reload full venue layout and select the new section
         this.loadVenueLayout(this.venueId());
@@ -231,11 +227,10 @@ export class VenueGridDesignerComponent implements OnInit {
       },
       error: (err) => {
         this.isCreatingSection.set(false);
-        this.snackBar.open(
-          err?.error?.message || 'Failed to create section.',
-          'Close',
-          { duration: 4000, panelClass: 'snack-error' }
-        );
+        this.snackBar.open(err?.error?.message || 'Failed to create section.', 'Close', {
+          duration: 4000,
+          panelClass: 'snack-error',
+        });
       },
     });
   }
@@ -250,58 +245,56 @@ export class VenueGridDesignerComponent implements OnInit {
 
   confirmDeleteSection(): void {
     const sec = this.currentSection();
-    if (!sec || !this.venueId()) return;
+    if (!sec || !this.venueId() || !sec.sectionId) return;
 
     this.isDeletingSection.set(true);
     this.venueApi.deleteSection(this.venueId(), sec.sectionId).subscribe({
       next: () => {
         this.isDeletingSection.set(false);
         this.showDeleteSectionConfirm.set(false);
-        this.snackBar.open(
-          `Section "${sec.name}" deleted successfully!`,
-          'Close',
-          { duration: 4000, panelClass: 'snack-success' }
-        );
+        this.snackBar.open(`Section "${sec.name}" deleted successfully!`, 'Close', {
+          duration: 4000,
+          panelClass: 'snack-success',
+        });
         this.selectedSectionId.set(null);
         this.loadVenueLayout(this.venueId());
       },
       error: (err) => {
         this.isDeletingSection.set(false);
-        this.snackBar.open(
-          err?.error?.message || 'Failed to delete section.',
-          'Close',
-          { duration: 4000, panelClass: 'snack-error' }
-        );
+        this.snackBar.open(err?.error?.message || 'Failed to delete section.', 'Close', {
+          duration: 4000,
+          panelClass: 'snack-error',
+        });
       },
     });
   }
 
   toggleSeat(seat: VenueSectionSeat): void {
     const sec = this.currentSection();
-    if (!sec) return;
+    if (!sec || !sec.sectionId || !seat.seatId) return;
+    const sectionId = sec.sectionId;
+    const seatId = seat.seatId;
 
     const previousState = seat.isActive;
     const newState = !previousState;
 
     // Optimistic local update
-    this.updateSeatStateLocally(sec.sectionId, seat.seatId, newState);
+    this.updateSeatStateLocally(sectionId, seatId, newState);
 
-    this.venueApi
-      .toggleSeat(this.venueId(), sec.sectionId, seat.seatId, newState)
-      .subscribe({
-        next: () => {
-          // Success
-        },
-        error: (err) => {
-          // Rollback
-          this.updateSeatStateLocally(sec.sectionId, seat.seatId, previousState);
-          this.snackBar.open(
-            err?.error?.message || 'Failed to update seat status. Reverted.',
-            'Close',
-            { duration: 4000, panelClass: 'snack-error' }
-          );
-        },
-      });
+    this.venueApi.toggleSeat(this.venueId(), sectionId, seatId, newState).subscribe({
+      next: () => {
+        // Success
+      },
+      error: (err) => {
+        // Rollback
+        this.updateSeatStateLocally(sectionId, seatId, previousState);
+        this.snackBar.open(
+          err?.error?.message || 'Failed to update seat status. Reverted.',
+          'Close',
+          { duration: 4000, panelClass: 'snack-error' },
+        );
+      },
+    });
   }
 
   bulkToggleRow(rowIndex: number, targetState: boolean): void {
@@ -339,18 +332,14 @@ export class VenueGridDesignerComponent implements OnInit {
     }
   }
 
-  private updateSeatStateLocally(
-    sectionId: string,
-    seatId: string,
-    isActive: boolean
-  ): void {
+  private updateSeatStateLocally(sectionId: string, seatId: string, isActive: boolean): void {
     const currentVenue = this.venue();
     if (!currentVenue) return;
 
     const updatedSections = currentVenue.sections.map((sec) => {
       if (sec.sectionId !== sectionId) return sec;
       const updatedSeats = (sec.seats || []).map((s) =>
-        s.seatId === seatId ? { ...s, isActive } : s
+        s.seatId === seatId ? { ...s, isActive } : s,
       );
       return { ...sec, seats: updatedSeats };
     });

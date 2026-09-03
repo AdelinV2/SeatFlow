@@ -84,11 +84,36 @@ export class AdminPricingManagerComponent implements OnInit {
   ];
 
   readonly categoryTemplates: CustomerCategoryTemplate[] = [
-    { name: 'Standard', defaultPrice: 20.0, label: 'Standard Ticket', badgeClass: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
-    { name: 'Student', defaultPrice: 12.0, label: 'Student Discount', badgeClass: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
-    { name: 'Pensioner', defaultPrice: 15.0, label: 'Pensioner / Senior', badgeClass: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
-    { name: 'VIP', defaultPrice: 35.0, label: 'VIP Premium', badgeClass: 'bg-purple-500/10 text-purple-600 border-purple-500/20' },
-    { name: 'Child', defaultPrice: 10.0, label: 'Child (Under 12)', badgeClass: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20' },
+    {
+      name: 'Standard',
+      defaultPrice: 20.0,
+      label: 'Standard Ticket',
+      badgeClass: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+    },
+    {
+      name: 'Student',
+      defaultPrice: 12.0,
+      label: 'Student Discount',
+      badgeClass: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+    },
+    {
+      name: 'Pensioner',
+      defaultPrice: 15.0,
+      label: 'Pensioner / Senior',
+      badgeClass: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+    },
+    {
+      name: 'VIP',
+      defaultPrice: 35.0,
+      label: 'VIP Premium',
+      badgeClass: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+    },
+    {
+      name: 'Child',
+      defaultPrice: 10.0,
+      label: 'Child (Under 12)',
+      badgeClass: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
+    },
   ];
 
   readonly isLocked = computed(() => {
@@ -101,24 +126,26 @@ export class AdminPricingManagerComponent implements OnInit {
     if (!layout || !layout.sections) return [];
 
     const tiersMap = this.sectionTiers();
-    return layout.sections.map((sec: VenueSectionLayout) => {
-      const activeSeats = sec.seats
-        ? sec.seats.filter((s) => s.isActive).length
-        : sec.rowCount * sec.colCount;
+    return layout.sections
+      .filter((sec): sec is VenueSectionLayout & { sectionId: string } => sec.sectionId !== null)
+      .map((sec) => {
+        const activeSeats = sec.seats
+          ? sec.seats.filter((s) => s.isActive).length
+          : sec.rowCount * sec.colCount;
 
-      const currentTiers = tiersMap.get(sec.sectionId) || [
-        { id: `tier-${sec.sectionId}-standard`, categoryName: 'Standard', price: 20.0 },
-      ];
+        const currentTiers = tiersMap.get(sec.sectionId) || [
+          { id: `tier-${sec.sectionId}-standard`, categoryName: 'Standard', price: 20.0 },
+        ];
 
-      return {
-        sectionId: sec.sectionId,
-        name: sec.name,
-        rowCount: sec.rowCount,
-        colCount: sec.colCount,
-        totalSeats: activeSeats,
-        tiers: currentTiers,
-      };
-    });
+        return {
+          sectionId: sec.sectionId,
+          name: sec.name,
+          rowCount: sec.rowCount,
+          colCount: sec.colCount,
+          totalSeats: activeSeats,
+          tiers: currentTiers,
+        };
+      });
   });
 
   readonly allTiersFlat = computed<CustomerTierItem[]>(() => {
@@ -183,7 +210,9 @@ export class AdminPricingManagerComponent implements OnInit {
           for (const tier of event.pricingTiers) {
             const list = tiersMap.get(tier.sectionId) || [];
             list.push({
-              id: tier.id || `tier-${tier.sectionId}-${tier.categoryName || 'Standard'}-${Math.random()}`,
+              id:
+                tier.id ||
+                `tier-${tier.sectionId}-${tier.categoryName || 'Standard'}-${Math.random()}`,
               categoryName: tier.categoryName || 'Standard',
               price: tier.price,
             });
@@ -202,9 +231,13 @@ export class AdminPricingManagerComponent implements OnInit {
             // If some sections don't have tiers yet, create default Standard tier at $20
             if (layout.sections) {
               for (const sec of layout.sections) {
-                if (!tiersMap.has(sec.sectionId) || tiersMap.get(sec.sectionId)!.length === 0) {
-                  tiersMap.set(sec.sectionId, [
-                    { id: `tier-${sec.sectionId}-standard`, categoryName: 'Standard', price: 20.0 },
+                if (!sec.sectionId) {
+                  continue;
+                }
+                const sectionId = sec.sectionId;
+                if (!tiersMap.has(sectionId) || tiersMap.get(sectionId)!.length === 0) {
+                  tiersMap.set(sectionId, [
+                    { id: `tier-${sectionId}-standard`, categoryName: 'Standard', price: 20.0 },
                   ]);
                 }
               }
@@ -263,7 +296,13 @@ export class AdminPricingManagerComponent implements OnInit {
 
   allSectionsHaveTemplate(template: CustomerCategoryTemplate): boolean {
     const sections = this.venueLayout()?.sections;
-    return !!sections?.length && sections.every((section) => this.hasTemplateTier(section.sectionId, template));
+    return (
+      !!sections?.length &&
+      sections.every(
+        (section) =>
+          section.sectionId !== null && this.hasTemplateTier(section.sectionId, template),
+      )
+    );
   }
 
   addTierToSection(sectionId: string, template?: CustomerCategoryTemplate): void {
@@ -293,7 +332,9 @@ export class AdminPricingManagerComponent implements OnInit {
       const updated = new Map(curr);
       const list = updated.get(sectionId) ? [...updated.get(sectionId)!] : [];
       if (list.length <= 1) {
-        this.snackBar.open('Each section must have at least one pricing tier.', 'Close', { duration: 3000 });
+        this.snackBar.open('Each section must have at least one pricing tier.', 'Close', {
+          duration: 3000,
+        });
         return curr;
       }
       const filtered = list.filter((t) => t.id !== tierId);
@@ -312,23 +353,31 @@ export class AdminPricingManagerComponent implements OnInit {
     this.sectionTiers.update((curr) => {
       const updated = new Map(curr);
       for (const sec of layout.sections) {
-        const list = updated.get(sec.sectionId) ? [...updated.get(sec.sectionId)!] : [];
+        if (!sec.sectionId) {
+          continue;
+        }
+        const sectionId = sec.sectionId;
+        const list = updated.get(sectionId) ? [...updated.get(sectionId)!] : [];
         const stdTier = list.find((t) => t.categoryName.toLowerCase() === 'standard');
         if (stdTier) {
           stdTier.price = price;
         } else if (list.length > 0) {
           list[0].price = price;
         } else {
-          list.push({ id: `tier-${sec.sectionId}-std`, categoryName: 'Standard', price });
+          list.push({ id: `tier-${sectionId}-std`, categoryName: 'Standard', price });
         }
-        updated.set(sec.sectionId, list);
+        updated.set(sectionId, list);
       }
       return updated;
     });
 
-    this.snackBar.open(`Applied ${this.currency()} ${price.toFixed(2)} standard price across all sections.`, 'Close', {
-      duration: 3000,
-    });
+    this.snackBar.open(
+      `Applied ${this.currency()} ${price.toFixed(2)} standard price across all sections.`,
+      'Close',
+      {
+        duration: 3000,
+      },
+    );
   }
 
   addTemplateToAllSections(template: CustomerCategoryTemplate): void {
@@ -340,25 +389,30 @@ export class AdminPricingManagerComponent implements OnInit {
     this.sectionTiers.update((curr) => {
       const updated = new Map(curr);
       for (const sec of layout.sections) {
-        const list = updated.get(sec.sectionId) ? [...updated.get(sec.sectionId)!] : [];
+        if (!sec.sectionId) {
+          continue;
+        }
+        const sectionId = sec.sectionId;
+        const list = updated.get(sectionId) ? [...updated.get(sectionId)!] : [];
         if (list.some((tier) => this.isTemplateCategoryName(tier.categoryName, template.name))) {
           continue;
         }
 
         list.push({
-          id: this.createTierId(sec.sectionId),
+          id: this.createTierId(sectionId),
           categoryName: template.name,
           price: template.defaultPrice,
         });
-        updated.set(sec.sectionId, list);
+        updated.set(sectionId, list);
         addedCount++;
       }
       return updated;
     });
 
-    const message = addedCount > 0
-      ? `Added "${template.name}" tier (${this.currency()} ${template.defaultPrice.toFixed(2)}) to ${addedCount === 1 ? '1 section' : `${addedCount} sections`}.`
-      : `All sections already have a "${template.name}" tier.`;
+    const message =
+      addedCount > 0
+        ? `Added "${template.name}" tier (${this.currency()} ${template.defaultPrice.toFixed(2)}) to ${addedCount === 1 ? '1 section' : `${addedCount} sections`}.`
+        : `All sections already have a "${template.name}" tier.`;
     this.snackBar.open(message, 'Close', {
       duration: 3000,
     });
@@ -451,11 +505,9 @@ export class AdminPricingManagerComponent implements OnInit {
       },
       error: (err) => {
         this.isPublishing.set(false);
-        this.snackBar.open(
-          err?.error?.message || 'Failed to publish event.',
-          'Close',
-          { duration: 4000 }
-        );
+        this.snackBar.open(err?.error?.message || 'Failed to publish event.', 'Close', {
+          duration: 4000,
+        });
       },
     });
   }
