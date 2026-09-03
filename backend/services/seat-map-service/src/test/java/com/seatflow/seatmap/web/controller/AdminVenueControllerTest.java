@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.security.SecurityRoles;
 import com.seatflow.common.security.converter.JwtRoleConverter;
 import com.seatflow.seatmap.config.SecurityConfig;
+import com.seatflow.seatmap.service.VenueLayoutService;
 import com.seatflow.seatmap.service.VenueSectionService;
 import com.seatflow.seatmap.service.VenueService;
 import com.seatflow.seatmap.web.dto.request.CreateVenueRequest;
 import com.seatflow.seatmap.web.dto.request.CreateVenueSectionRequest;
+import com.seatflow.seatmap.web.dto.request.SaveVenueLayoutRequest;
 import com.seatflow.seatmap.web.dto.response.VenueResponse;
+import com.seatflow.seatmap.web.dto.response.VenueSeatMapLayoutResponse;
 import com.seatflow.seatmap.web.dto.response.VenueSectionResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -44,6 +48,9 @@ class AdminVenueControllerTest {
 
     @MockitoBean
     private VenueSectionService sectionService;
+
+    @MockitoBean
+    private VenueLayoutService layoutService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;
@@ -119,5 +126,118 @@ class AdminVenueControllerTest {
                 .andExpect(status().isNoContent());
 
         org.mockito.Mockito.verify(sectionService).deleteSection(venueId, sectionId);
+    }
+
+    private SaveVenueLayoutRequest emptyLayoutRequest(long version) {
+        return new SaveVenueLayoutRequest(version, List.of(), List.of());
+    }
+
+    private VenueSeatMapLayoutResponse layoutResponse(UUID venueId, long version) {
+        return new VenueSeatMapLayoutResponse(venueId, "Hall", 100, 0L, List.of(), version, List.of());
+    }
+
+    @Test
+    void shouldGetEditableLayoutForAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+        when(layoutService.getEditableLayout(venueId)).thenReturn(layoutResponse(venueId, 7L));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.venueId").value(venueId.toString()))
+                .andExpect(jsonPath("$.layoutVersion").value(7));
+    }
+
+    @Test
+    void shouldReject403OnLayoutReadForNonAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .with(user("customer").roles(SecurityRoles.CUSTOMER)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReject401OnLayoutReadWhenUnauthenticated() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/api/admin/venues/{venueId}/layout", venueId))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldValidateLayoutForAdminWith204() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/admin/venues/{venueId}/layout/validation", venueId)
+                        .with(user("admin").roles(SecurityRoles.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(3L))))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(layoutService)
+                .validateLayout(eq(venueId), any(SaveVenueLayoutRequest.class));
+    }
+
+    @Test
+    void shouldReject403OnLayoutValidationForNonAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/admin/venues/{venueId}/layout/validation", venueId)
+                        .with(user("customer").roles(SecurityRoles.CUSTOMER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(3L))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReject401OnLayoutValidationWhenUnauthenticated() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/admin/venues/{venueId}/layout/validation", venueId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(3L))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldSaveLayoutForAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+        when(layoutService.saveLayout(eq(venueId), any(SaveVenueLayoutRequest.class)))
+                .thenReturn(layoutResponse(venueId, 8L));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .with(user("admin").roles(SecurityRoles.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(7L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.layoutVersion").value(8));
+    }
+
+    @Test
+    void shouldReject403OnLayoutSaveForNonAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .with(user("customer").roles(SecurityRoles.CUSTOMER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(7L))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldReject401OnLayoutSaveWhenUnauthenticated() throws Exception {
+        UUID venueId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(emptyLayoutRequest(7L))))
+                .andExpect(status().isUnauthorized());
     }
 }

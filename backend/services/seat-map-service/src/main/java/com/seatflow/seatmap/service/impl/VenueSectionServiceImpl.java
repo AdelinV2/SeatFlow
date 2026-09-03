@@ -54,8 +54,8 @@ public class VenueSectionServiceImpl implements VenueSectionService {
     @Override
     @Transactional
     public VenueSectionResponse createSection(UUID venueId, CreateVenueSectionRequest request) {
-        // 1. Validate venue exists
-        Venue venue = venueRepository.findById(venueId)
+        // 1. Validate venue exists under the layout pessimistic-write lock.
+        Venue venue = venueRepository.findByIdForLayoutUpdate(venueId)
                 .orElseThrow(() -> new ResourceNotFoundException("Venue not found: " + venueId));
 
         // 2. Check for duplicate section name
@@ -90,8 +90,12 @@ public class VenueSectionServiceImpl implements VenueSectionService {
         seatRepository.saveAll(seats);
         int totalSeats = seats.size();
 
-        log.info("Section created with seat grid. venueId={}, sectionId={}, name={}, rows={}, cols={}, totalSeats={}",
-                venueId, section.getId(), section.getName(), request.rowCount(), request.colCount(), totalSeats);
+        venue.setLayoutVersion(venue.getLayoutVersion() + 1);
+        venueRepository.save(venue);
+
+        log.info("Section created with seat grid. venueId={}, sectionId={}, name={}, rows={}, cols={}, totalSeats={}, newLayoutVersion={}",
+                venueId, section.getId(), section.getName(), request.rowCount(), request.colCount(), totalSeats,
+                venue.getLayoutVersion());
 
         // 6. Write outbox event
         Instant createdAt = section.getCreatedAt() != null ? section.getCreatedAt() : Instant.now();
@@ -107,16 +111,20 @@ public class VenueSectionServiceImpl implements VenueSectionService {
     @Override
     @Transactional
     public SeatResponse updateSeatStatus(UUID venueId, UUID sectionId, UUID seatId, UpdateSeatStatusRequest request) {
-        // 1. Validate venue exists
-        if (!venueRepository.existsById(venueId)) {
-            throw new ResourceNotFoundException("Venue not found: " + venueId);
-        }
+        // 1. Validate venue exists under the layout pessimistic-write lock.
+        Venue venue = venueRepository.findByIdForLayoutUpdate(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Venue not found: " + venueId));
 
         // 2. Validate section exists and belongs to venue
         VenueSection section = sectionRepository.findById(sectionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Section not found: " + sectionId));
         if (!section.getVenue().getId().equals(venueId)) {
             throw new ResourceNotFoundException("Section %s does not belong to venue %s".formatted(sectionId, venueId));
+        }
+        if (Boolean.TRUE.equals(request.isActive()) && !Boolean.TRUE.equals(section.getIsActive())) {
+            throw new ValidationException(
+                    "Cannot activate a seat under an inactive section: " + sectionId,
+                    ErrorCode.INVALID_REQUEST);
         }
 
         // 3. Find the seat within the section
@@ -127,8 +135,11 @@ public class VenueSectionServiceImpl implements VenueSectionService {
         seat.setIsActive(request.isActive());
         seat = seatRepository.save(seat);
 
-        log.info("Seat status updated. venueId={}, sectionId={}, seatId={}, isActive={}",
-                venueId, sectionId, seatId, seat.getIsActive());
+        venue.setLayoutVersion(venue.getLayoutVersion() + 1);
+        venueRepository.save(venue);
+
+        log.info("Seat status updated. venueId={}, sectionId={}, seatId={}, isActive={}, newLayoutVersion={}",
+                venueId, sectionId, seatId, seat.getIsActive(), venue.getLayoutVersion());
 
         return seatMapper.toResponse(seat);
     }
@@ -136,10 +147,15 @@ public class VenueSectionServiceImpl implements VenueSectionService {
     @Override
     @Transactional
     public void deleteSection(UUID venueId, UUID sectionId) {
-        // 1. Validate venue exists
-        if (!venueRepository.existsById(venueId)) {
-            throw new ResourceNotFoundException("Venue not found: " + venueId);
-        }
+        deactivateSection(venueId, sectionId);
+    }
+
+    @Override
+    @Transactional
+    public void deactivateSection(UUID venueId, UUID sectionId) {
+        // 1. Validate venue exists under the layout pessimistic-write lock.
+        Venue venue = venueRepository.findByIdForLayoutUpdate(venueId)
+                .orElseThrow(() -> new ResourceNotFoundException("Venue not found: " + venueId));
 
         // 2. Validate section exists and belongs to venue
         VenueSection section = sectionRepository.findById(sectionId)
@@ -148,9 +164,17 @@ public class VenueSectionServiceImpl implements VenueSectionService {
             throw new ResourceNotFoundException("Section %s does not belong to venue %s".formatted(sectionId, venueId));
         }
 
-        // 3. Delete section (cascades to seats)
-        sectionRepository.delete(section);
-        log.info("Section deleted. venueId={}, sectionId={}, name={}", venueId, sectionId, section.getName());
+        // 3. Soft-deactivate the section and all its seats; never hard-delete inventory rows.
+        section.setIsActive(false);
+        List<Seat> seats = seatRepository.findBySectionIdForEditor(sectionId);
+        for (Seat seat : seats) {
+            seat.setIsActive(false);
+        }
+
+        venue.setLayoutVersion(venue.getLayoutVersion() + 1);
+        venueRepository.save(venue);
+        log.info("Section deactivated. venueId={}, sectionId={}, name={}, deactivatedSeats={}, newLayoutVersion={}",
+                venueId, sectionId, section.getName(), seats.size(), venue.getLayoutVersion());
     }
 
     // ---- Private Helpers ----

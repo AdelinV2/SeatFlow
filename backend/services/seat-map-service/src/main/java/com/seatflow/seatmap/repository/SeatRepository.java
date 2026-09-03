@@ -36,6 +36,6 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
 
     long countBySectionIdAndIsActiveTrue(UUID sectionId);
 
-    @Query("SELECT COUNT(s) FROM Seat s WHERE s.section.venue.id = :venueId AND s.isActive = true")
+    @Query("SELECT COUNT(s) FROM Seat s WHERE s.section.venue.id = :venueId AND s.section.isActive = true AND s.isActive = true")
     long countActiveSeatsByVenueId(@Param("venueId") UUID venueId);
 }
