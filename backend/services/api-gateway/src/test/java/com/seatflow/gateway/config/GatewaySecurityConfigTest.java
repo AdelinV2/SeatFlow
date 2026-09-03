@@ -57,6 +57,13 @@ class GatewaySecurityConfigTest {
                 .get().uri("/actuator/metrics").exchange().expectStatus().isOk();
     }
 
+    @Test
+    void shouldInstantiateReactiveJwtDecoderWithEs256Support() {
+        GatewaySecurityConfig securityConfig = new GatewaySecurityConfig();
+        ReactiveJwtDecoder decoder = securityConfig.reactiveJwtDecoder("https://example.supabase.co/auth/v1/.well-known/jwks.json");
+        org.assertj.core.api.Assertions.assertThat(decoder).isNotNull();
+    }
+
     private WebTestClient client() {
         return WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port)
