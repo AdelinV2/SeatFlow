@@ -4,10 +4,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, ActivatedRoute } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
-import {
-  getRowLabel,
-  VenueGridDesignerComponent,
-} from './venue-grid-designer.component';
+import { getRowLabel, VenueGridDesignerComponent } from './venue-grid-designer.component';
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import { VenueLayout, VenueSectionLayout, VenueSectionSeat } from '../../../../models/venue.model';
 
@@ -18,10 +15,46 @@ describe('VenueGridDesignerComponent', () => {
   let snackBarSpy: jasmine.SpyObj<MatSnackBar>;
 
   const mockSeats: VenueSectionSeat[] = [
-    { seatId: 's-00', rowLabel: 'A', seatNumber: 1, gridX: 0, gridY: 0, isActive: true },
-    { seatId: 's-01', rowLabel: 'A', seatNumber: 2, gridX: 1, gridY: 0, isActive: true },
-    { seatId: 's-10', rowLabel: 'B', seatNumber: 1, gridX: 0, gridY: 1, isActive: true },
-    { seatId: 's-11', rowLabel: 'B', seatNumber: 2, gridX: 1, gridY: 1, isActive: false },
+    {
+      seatId: 's-00',
+      rowLabel: 'A',
+      seatNumber: 1,
+      gridX: 0,
+      gridY: 0,
+      positionX: 10,
+      positionY: 10,
+      isActive: true,
+    },
+    {
+      seatId: 's-01',
+      rowLabel: 'A',
+      seatNumber: 2,
+      gridX: 1,
+      gridY: 0,
+      positionX: 50,
+      positionY: 10,
+      isActive: true,
+    },
+    {
+      seatId: 's-10',
+      rowLabel: 'B',
+      seatNumber: 1,
+      gridX: 0,
+      gridY: 1,
+      positionX: 10,
+      positionY: 50,
+      isActive: true,
+    },
+    {
+      seatId: 's-11',
+      rowLabel: 'B',
+      seatNumber: 2,
+      gridX: 1,
+      gridY: 1,
+      positionX: 50,
+      positionY: 50,
+      isActive: false,
+    },
   ];
 
   const mockSection: VenueSectionLayout = {
@@ -29,6 +62,14 @@ describe('VenueGridDesignerComponent', () => {
     name: 'Orchestra',
     rowCount: 2,
     colCount: 2,
+    isActive: true,
+    positionX: 0,
+    positionY: 0,
+    width: 400,
+    height: 200,
+    rotationDeg: 0,
+    zIndex: 1,
+    shapeMetadata: null,
     seats: mockSeats,
   };
 
@@ -36,7 +77,10 @@ describe('VenueGridDesignerComponent', () => {
     venueId: 'v-100',
     name: 'National Opera',
     capacity: 1000,
+    totalConfiguredSeats: 4,
+    layoutVersion: 1,
     sections: [mockSection],
+    elements: [],
   };
 
   describe('getRowLabel algorithm unit test', () => {
@@ -129,7 +173,7 @@ describe('VenueGridDesignerComponent', () => {
     it('should rollback seat state if API call fails', () => {
       const targetSeat = mockSeats[0]; // active: true
       venueApiSpy.toggleSeat.and.returnValue(
-        throwError(() => ({ error: { message: 'Server error' } }))
+        throwError(() => ({ error: { message: 'Server error' } })),
       );
 
       component.toggleSeat(targetSeat);
@@ -175,6 +219,14 @@ describe('VenueGridDesignerComponent', () => {
         name: 'Balcony',
         rowCount: 3,
         colCount: 4,
+        isActive: true,
+        positionX: 0,
+        positionY: 200,
+        width: 500,
+        height: 250,
+        rotationDeg: 0,
+        zIndex: 1,
+        shapeMetadata: null,
         seats: [],
       };
 

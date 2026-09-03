@@ -5,6 +5,7 @@ import { PagedResult } from '../models/event.model';
 import {
   CreateSectionRequest,
   CreateVenueRequest,
+  SaveVenueLayoutRequest,
   UpdateSeatStatusRequest,
   UpdateVenueRequest,
   VenueLayout,
@@ -50,6 +51,18 @@ export class AdminVenueApiService {
     return this.http.get<VenueLayout>(`${this.publicVenuesUrl}/${venueId}/layout`);
   }
 
+  getEditableLayout(venueId: string): Observable<VenueLayout> {
+    return this.http.get<VenueLayout>(`${this.adminVenuesUrl}/${venueId}/layout`);
+  }
+
+  validateLayout(venueId: string, request: SaveVenueLayoutRequest): Observable<void> {
+    return this.http.post<void>(`${this.adminVenuesUrl}/${venueId}/layout/validation`, request);
+  }
+
+  saveLayout(venueId: string, request: SaveVenueLayoutRequest): Observable<VenueLayout> {
+    return this.http.put<VenueLayout>(`${this.adminVenuesUrl}/${venueId}/layout`, request);
+  }
+
   createVenue(req: CreateVenueRequest): Observable<VenueSummary> {
     return this.http.post<VenueSummary>(this.adminVenuesUrl, req);
   }
@@ -58,32 +71,24 @@ export class AdminVenueApiService {
     return this.http.put<VenueSummary>(`${this.adminVenuesUrl}/${venueId}`, req);
   }
 
-  createSection(
-    venueId: string,
-    req: CreateSectionRequest
-  ): Observable<VenueSectionLayout> {
-    return this.http.post<VenueSectionLayout>(
-      `${this.adminVenuesUrl}/${venueId}/sections`,
-      req
-    );
+  createSection(venueId: string, req: CreateSectionRequest): Observable<VenueSectionLayout> {
+    return this.http.post<VenueSectionLayout>(`${this.adminVenuesUrl}/${venueId}/sections`, req);
   }
 
   toggleSeat(
     venueId: string,
     sectionId: string,
     seatId: string,
-    isActive: boolean
+    isActive: boolean,
   ): Observable<VenueSectionSeat> {
     const payload: UpdateSeatStatusRequest = { isActive };
     return this.http.patch<VenueSectionSeat>(
       `${this.adminVenuesUrl}/${venueId}/sections/${sectionId}/seats/${seatId}`,
-      payload
+      payload,
     );
   }
 
   deleteSection(venueId: string, sectionId: string): Observable<void> {
-    return this.http.delete<void>(
-      `${this.adminVenuesUrl}/${venueId}/sections/${sectionId}`
-    );
+    return this.http.delete<void>(`${this.adminVenuesUrl}/${venueId}/sections/${sectionId}`);
   }
 }

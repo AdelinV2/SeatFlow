@@ -38,12 +38,22 @@ describe('AdminPricingManagerComponent', () => {
     venueId: 'ven-1',
     name: 'Grand Concert Hall',
     capacity: 1000,
+    totalConfiguredSeats: 0,
+    layoutVersion: 1,
     sections: [
       {
         sectionId: 'sec-1',
         name: 'Orchestra Main',
         rowCount: 10,
         colCount: 20,
+        isActive: true,
+        positionX: 0,
+        positionY: 0,
+        width: 800,
+        height: 400,
+        rotationDeg: 0,
+        zIndex: 1,
+        shapeMetadata: null,
         seats: [],
       },
       {
@@ -51,9 +61,18 @@ describe('AdminPricingManagerComponent', () => {
         name: 'Balcony Tier',
         rowCount: 5,
         colCount: 15,
+        isActive: true,
+        positionX: 0,
+        positionY: 450,
+        width: 800,
+        height: 250,
+        rotationDeg: 0,
+        zIndex: 2,
+        shapeMetadata: null,
         seats: [],
       },
     ],
+    elements: [],
   };
 
   beforeEach(async () => {
@@ -140,7 +159,10 @@ describe('AdminPricingManagerComponent', () => {
     const studentTpl = component.categoryTemplates.find((t) => t.name === 'Student')!;
 
     component.addTierToSection('sec-2', studentTpl);
-    const studentTier = component.sections().find((s) => s.sectionId === 'sec-2')!.tiers.find((t) => t.categoryName === 'Student')!;
+    const studentTier = component
+      .sections()
+      .find((s) => s.sectionId === 'sec-2')!
+      .tiers.find((t) => t.categoryName === 'Student')!;
     expect(component.hasTemplateTier('sec-2', studentTpl)).toBeTrue();
 
     component.removeTierFromSection('sec-2', studentTier.id);
@@ -151,7 +173,9 @@ describe('AdminPricingManagerComponent', () => {
   });
 
   it('should disable a section category button after clicking it and re-enable it after removal', () => {
-    const addStudentButton = fixture.nativeElement.querySelector('button[aria-label="Add Student tier"]') as HTMLButtonElement;
+    const addStudentButton = fixture.nativeElement.querySelector(
+      'button[aria-label="Add Student tier"]',
+    ) as HTMLButtonElement;
     expect(addStudentButton).toBeTruthy();
     expect(addStudentButton.disabled).toBeFalse();
 
@@ -160,7 +184,9 @@ describe('AdminPricingManagerComponent', () => {
 
     const sec2 = component.sections().find((s) => s.sectionId === 'sec-2')!;
     const studentTier = sec2.tiers.find((t) => t.categoryName === 'Student')!;
-    const disabledStudentButtons = fixture.nativeElement.querySelectorAll('button[aria-label="Student tier already added"]');
+    const disabledStudentButtons = fixture.nativeElement.querySelectorAll(
+      'button[aria-label="Student tier already added"]',
+    );
     expect(studentTier).toBeTruthy();
     expect(disabledStudentButtons.length).toBe(2);
     expect((disabledStudentButtons[1] as HTMLButtonElement).disabled).toBeTrue();
@@ -168,7 +194,9 @@ describe('AdminPricingManagerComponent', () => {
     component.removeTierFromSection('sec-2', studentTier.id);
     fixture.detectChanges();
 
-    const availableButton = fixture.nativeElement.querySelector('button[aria-label="Add Student tier"]') as HTMLButtonElement;
+    const availableButton = fixture.nativeElement.querySelector(
+      'button[aria-label="Add Student tier"]',
+    ) as HTMLButtonElement;
     expect(availableButton).toBeTruthy();
     expect(availableButton.disabled).toBeFalse();
   });
@@ -178,8 +206,14 @@ describe('AdminPricingManagerComponent', () => {
     component.applyUniformStandardPrice();
 
     const sections = component.sections();
-    expect(sections.every((s) => s.tiers.some((t) => t.categoryName === 'Standard' && t.price === 25))).toBeTrue();
-    expect(snackBar.open).toHaveBeenCalledWith('Applied USD 25.00 standard price across all sections.', 'Close', jasmine.any(Object));
+    expect(
+      sections.every((s) => s.tiers.some((t) => t.categoryName === 'Standard' && t.price === 25)),
+    ).toBeTrue();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Applied USD 25.00 standard price across all sections.',
+      'Close',
+      jasmine.any(Object),
+    );
   });
 
   it('should submit the selected currency for every pricing tier', () => {
@@ -196,7 +230,9 @@ describe('AdminPricingManagerComponent', () => {
     component.addTemplateToAllSections(studentTpl);
 
     const sections = component.sections();
-    expect(sections.every((s) => s.tiers.some((t) => t.categoryName === 'Student' && t.price === 12))).toBeTrue();
+    expect(
+      sections.every((s) => s.tiers.some((t) => t.categoryName === 'Student' && t.price === 12)),
+    ).toBeTrue();
   });
 
   it('should add a bulk customer category only to sections that do not have it', () => {
@@ -205,7 +241,9 @@ describe('AdminPricingManagerComponent', () => {
     component.addTemplateToAllSections(studentTpl);
     component.addTemplateToAllSections(studentTpl);
 
-    const studentTierCounts = component.sections().map((section) => section.tiers.filter((tier) => tier.categoryName === 'Student').length);
+    const studentTierCounts = component
+      .sections()
+      .map((section) => section.tiers.filter((tier) => tier.categoryName === 'Student').length);
     expect(studentTierCounts).toEqual([1, 1]);
     expect(component.allSectionsHaveTemplate(studentTpl)).toBeTrue();
   });
@@ -226,7 +264,7 @@ describe('AdminPricingManagerComponent', () => {
     expect(snackBar.open).toHaveBeenCalledWith(
       'Section pricing matrix updated successfully!',
       'Close',
-      jasmine.any(Object)
+      jasmine.any(Object),
     );
   });
 
@@ -240,7 +278,7 @@ describe('AdminPricingManagerComponent', () => {
 
   it('should handle pricing error gracefully', () => {
     adminEventApi.configurePricing.and.returnValue(
-      throwError(() => ({ error: { message: 'Invalid section tiers' } }))
+      throwError(() => ({ error: { message: 'Invalid section tiers' } })),
     );
 
     component.savePricing(false);
