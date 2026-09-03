@@ -8,7 +8,7 @@
 - **Phase:** `Phase 11 - Advanced Venue & Seat Map Designer`
 - **Related Specs:** `.ai/architecture/03-database-models.md` §1 and §2.2; `.ai/architecture/09-post-mvp-evolution.md` §3
 - **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`
-- **Status:** `READY FOR IMPLEMENTATION`
+- **Status:** `DONE`
 - **Complexity:** 4/5
 - **Failure Risk:** Critical
 - **Verification Strength:** Strong
