@@ -7,7 +7,7 @@
 - **Target Module:** `frontend/src/app/shared/components/seat-layout`, `frontend/src/app/shared/utils`
 - **Phase:** `Phase 11 - Advanced Venue & Seat Map Designer`
 - **Related Specs:** `.ai/architecture/07-frontend-specification.md` §1 and §4.5; `.ai/architecture/09-post-mvp-evolution.md` §3.4
-- **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`
+- **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`, `.ai/decisions/ADR-015-unified-seat-map-and-tier-color-rendering.md`
 - **Status:** `READY FOR IMPLEMENTATION`
 - **Complexity:** 4/5
 - **Failure Risk:** Medium
@@ -58,7 +58,7 @@ Pointer behavior:
 - Background drag pans; wheel/pinch zoom anchors at cursor/midpoint.
 - Section drag emits position; four corner handles emit width/height while keeping width/height `>0`; rotation handle emits degrees normalized to `[-180,180]`.
 - All handlers use pointer capture and clear interaction state on `pointerup`, `pointercancel`, and lost capture.
-- `editable=false` emits no mutation event.
+- `editable=false` emits no mutation event; in read-only mode, `LayoutCanvasComponent` acts as the shared unified venue canvas for both Admin Preview and Customer Seat Selection (`SeatMapComponent`), displaying all active sections, layout elements (`STAGE`, `AISLE`), and seats concurrently without section isolation or tabs (per ADR-015).
 
 ### 5.2 Section Node
 

@@ -111,13 +111,14 @@ The design system is crafted to provide a luxurious, modern, and tactile user ex
   3. 🔴 **INVALID / CANCELLED (Rose `#F43F5E`):** *Invalid / Revoked Ticket*. Low error buzz + alert vibration. Displays rejection reason.
 - **Manual Input Fallback:** Alphanumeric ticket code entry field for damaged or unreadable screens.
 
-### 4.5 Interactive SVG Seat Map Component (`SeatMapComponent`)
-- **Layout Engine:** Scalable SVG / CSS Grid seat matrix supporting pan, pinch-to-zoom, and section isolation on both desktop and mobile touch.
+### 4.5 Interactive SVG Seat Map Component (`SeatMapComponent`) (ADR-010, ADR-015)
+- **Layout Engine:** Scalable SVG seat matrix supporting pan, pinch-to-zoom on both desktop and mobile touch. Renders the complete venue layout simultaneously (stage, orchestra, loges, balconies) on a single unified 2D canvas without requiring section isolation or tabs.
+- **Top Pricing Category Legend:** Prominent top bar dynamically displaying active event pricing tiers (e.g. *Categoria A: 150 Lei*, *Categoria B: 120 Lei*, *Categoria C: 100 Lei*...) with distinct category color badges, price chips, and available seat counts. Clicking a category highlights that tier across the venue.
 - **Seat Status Visual Encoding:**
-  - `AVAILABLE` — Subtle slate pill with price tag on hover.
-  - `SELECTING` (Local user) — Electric Indigo with checkmark, spring bounce keyframe animation.
-  - `HELD` (Other users) — Muted Amber with lock badge.
-  - `SOLD / RESERVED` — Slate-300 / dark grayed-out with cross (disabled).
+  - `AVAILABLE` — Color-coded by pricing tier / category palette with full details (section, row, seat, category, price) on hover/focus tooltip.
+  - `SELECTING` (Local user) — Electric Indigo with spring bounce keyframe animation and selection ring.
+  - `HELD` (Other users) — Muted amber/slate with lock badge.
+  - `SOLD / RESERVED` — Uniform muted slate / dark grayed-out (disabled).
 - **Selection Engine:**
   - Strictly enforces client-side maximum limit of **10 seats**.
   - Recalculates total price instantly via `computed()`.

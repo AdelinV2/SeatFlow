@@ -7,7 +7,7 @@
 - **Target Module:** `frontend/src/app/features/booking`, `frontend/src/app/features/admin/venues`; compatibility verification across seat-map-service and event-service
 - **Phase:** `Phase 11 - Advanced Venue & Seat Map Designer`
 - **Related Specs:** `.ai/architecture/07-frontend-specification.md` §4.5-4.6; `.ai/architecture/09-post-mvp-evolution.md` §3.4-3.5
-- **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`
+- **Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`, `.ai/decisions/ADR-015-unified-seat-map-and-tier-color-rendering.md`
 - **Status:** `READY FOR IMPLEMENTATION`
 - **Complexity:** 5/5
 - **Failure Risk:** Critical
@@ -18,9 +18,12 @@
 
 ## 2. Objective & Critical Invariants
 
-Update the customer seat-selection renderer and admin preview to use the same shared layout canvas primitives, then run the Phase 11 compatibility gate across migration, APIs, event mapping, serialization, and legacy rendering.
+Update the customer seat-selection renderer and admin preview to use the same shared layout canvas primitives, rendering the complete venue layout simultaneously on a unified 2D canvas with color-coded pricing tiers (per ADR-015), then run the Phase 11 compatibility gate across migration, APIs, event mapping, serialization, and legacy rendering.
 
 - [ ] Selection, conflicts, WebSocket updates, holds, pricing, reservations, and tickets continue to key only by stable `seatId`/`sectionId`.
+- [ ] The customer renderer displays all active sections, layout elements (`STAGE`, `AISLE`), and seats simultaneously on one unified 2D canvas without requiring section isolation or tab switches.
+- [ ] Top bar renders a dynamic, color-coded pricing category legend (e.g. Categoria A, B, C...) with prices, replacing legacy section tabs.
+- [ ] Available seats are color-coded by their pricing tier category; selected seats use spring animation/accent; held/sold/unavailable seats are uniformly muted gray.
 - [ ] The customer renderer uses continuous seat/section geometry when present and the exact 44-unit grid fallback when absent.
 - [ ] Admin preview is read-only and uses the same section/seat/element rendering path as customers.
 - [ ] Layout elements are `aria-hidden` when decorative and never intercept seat pointer/keyboard events.
@@ -54,7 +57,11 @@ Extend `Seat`, `SeatMapSectionResponse`, and `EventSeatMapResponse` with TASK-P1
 
 ### 5.2 Customer Renderer
 
-Refactor `SeatMapComponent` to delegate spatial section/seat/element rendering to `LayoutCanvasComponent` in read-only mode while retaining its existing section tabs, price tiers, zoom controls, ARIA grid navigation, tooltips, selected/conflict animation, and seat-toggle output. Section rotation applies to visual seats, but keyboard navigation continues using `gridX/gridY`. Element layers use stable z-order and `pointer-events:none` in customer/preview mode.
+Refactor `SeatMapComponent` to delegate spatial section/seat/element rendering to `LayoutCanvasComponent` in read-only mode, rendering all active sections, layout elements (`STAGE`, `AISLE`, labels), and seats simultaneously on a single unified 2D canvas without requiring section isolation or tabs (per ADR-015).
+
+Replace legacy section tabs with a top **Pricing Category Legend bar** (e.g., *Categoria A: 150 Lei*, *Categoria B: 120 Lei*, *Categoria C: 100 Lei*, *Categoria D: 80 Lei*, *Categoria E: 70 Lei*) with distinct high-contrast color badges and available seat counts.
+
+Available seats are visually colored according to their pricing tier category palette; selected seats retain spring bounce animations and active selection borders; held/sold/unavailable seats are rendered in muted neutral gray. Clicking a category in the legend optionally focuses/highlights that tier across the entire venue without hiding other sections. Section rotation applies to visual seats, while keyboard navigation continues using `gridX/gridY`. Element layers use stable z-order and `pointer-events:none` in customer/preview mode.
 
 Inactive sections are absent; inactive/unpriced seats are unavailable and not focusable. Seat click output still returns the original `Seat` object keyed by ID. Live status updates change status only, never geometry.
 
@@ -64,9 +71,9 @@ Add an Edit/Preview toggle. Preview renders the current unsaved draft through `S
 
 ### 5.4 Responsive and Accessibility Contract
 
-- Pan/zoom and section isolation work on touch and desktop.
+- Pan/zoom and category highlight filtering work on touch and desktop.
 - Complex editor shows a desktop/tablet-landscape recommendation below 1024px but remains scrollable and exposes form controls.
-- Customer seats retain one roving tabindex per visible section, roles/labels, Enter/Space activation, arrow navigation, and 44px effective touch target.
+- Customer seats retain roving tabindex, roles/labels, Enter/Space activation, arrow navigation, and 44px effective touch target across the unified hall canvas.
 - Respect reduced motion.
 
 ## 6. Implementation Sequence

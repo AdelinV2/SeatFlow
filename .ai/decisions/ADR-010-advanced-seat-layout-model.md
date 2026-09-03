@@ -54,3 +54,5 @@ The Phase 11 contract is fixed as follows:
 - Existing `grid_x/grid_y` columns and seat UUIDs are retained. The compatibility backfill sets `position_x = grid_x * 44` and `position_y = grid_y * 44`; legacy sections are placed deterministically by `(name, id)` with an 80-unit vertical gap. Existing reservation, ticket, and payment references remain valid.
 - Existing sections and seats omitted from a full editor snapshot are soft-deactivated with `is_active = false`; persisted inventory rows are never hard-deleted when referenced. Non-bookable layout elements are rectangular typed primitives (`STAGE`, `AISLE`, `LABEL`, `BARRIER`, `DECORATION`) with JSONB limited to visual geometry/metadata.
 - Event-service and customer-renderer contracts remain additive and continue to identify inventory by stable seat and section UUIDs. Bézier curves, CAD/3D geometry, and free-form SVG path storage are explicitly out of scope.
+- Customer-facing seat selection presentation is governed by `ADR-015` (Unified Hall Seat Map and Color-Coded Pricing Tiers), eliminating section tabs in favor of a unified hall canvas with a top pricing tier legend.
+
