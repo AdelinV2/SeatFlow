@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.Hibernate;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -55,9 +57,37 @@ public class Seat {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "position_x", nullable = false, precision = 12, scale = 3)
+    private BigDecimal positionX;
+
+    @Column(name = "position_y", nullable = false, precision = 12, scale = 3)
+    private BigDecimal positionY;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        if (positionX == null && gridX != null) {
+            positionX = BigDecimal.valueOf(gridX * 44L).setScale(3);
+        }
+        if (positionY == null && gridY != null) {
+            positionY = BigDecimal.valueOf(gridY * 44L).setScale(3);
+        }
+        if (positionX == null) {
+            positionX = BigDecimal.ZERO.setScale(3);
+        }
+        if (positionY == null) {
+            positionY = BigDecimal.ZERO.setScale(3);
+        }
+        positionX = positionX.setScale(3, java.math.RoundingMode.HALF_UP);
+        positionY = positionY.setScale(3, java.math.RoundingMode.HALF_UP);
+    }
 
     @Override
     public boolean equals(Object o) {
