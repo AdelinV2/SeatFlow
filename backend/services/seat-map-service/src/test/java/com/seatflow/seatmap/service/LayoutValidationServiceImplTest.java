@@ -680,6 +680,122 @@ class LayoutValidationServiceImplTest {
     }
 
     // ------------------------------------------------------------------
+    // REV-001 regression: authoritative canonicalization before persistence/use
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("REV-001: surrounding whitespace is removed before persistence/use")
+    void rev001_whitespaceIsCanonicalizedBeforeUse() {
+        var sections = List.of(section("  Orchestra  ", null, 2, 2, "88", "88",
+                List.of(seat("  A  ", 1, 0, 0, "0", "0", true))));
+        var elements = List.of(
+                element(null, LayoutElementType.STAGE, "  Main Stage  ",
+                        geometry("0", "0", "10", "10", "0"), 0));
+        var req = request(sections, elements);
+        assertThat(req.sections().getFirst().name()).isEqualTo("Orchestra");
+        assertThat(req.sections().getFirst().seats().getFirst().rowLabel()).isEqualTo("A");
+        assertThat(req.elements().getFirst().label()).isEqualTo("Main Stage");
+        validationService.validate(venue, req, emptyIds());
+    }
+
+    @Test
+    @DisplayName("REV-001: blank-after-trim values are rejected after canonicalization")
+    void rev001_blankAfterTrimRejected() {
+        var blankSection = section("   ", null, 2, 2, "88", "88",
+                List.of(seat("A", 1, 0, 0, "0", "0", true)));
+        assertThat(blankSection.name()).isEmpty();
+        assertInvalid(request(List.of(blankSection), List.of()), emptyIds());
+
+        var blankSeatSection = section("Orchestra", null, 2, 2, "88", "88",
+                List.of(seat("   ", 1, 0, 0, "0", "0", true)));
+        assertThat(blankSeatSection.seats().getFirst().rowLabel()).isEmpty();
+        assertInvalid(request(List.of(blankSeatSection), List.of()), emptyIds());
+
+        var blankLabel = element(null, LayoutElementType.LABEL, "   ",
+                geometry("0", "0", "10", "10", "0"), 0);
+        assertThat(blankLabel.label()).isEmpty();
+        assertInvalid(request(List.of(), List.of(blankLabel)), emptyIds());
+    }
+
+    @Test
+    @DisplayName("REV-001: normalized duplicate identities remain rejected")
+    void rev001_normalizedDuplicatesRejected() {
+        var sections = List.of(
+                section("  Orchestra  ", null, 2, 5, "220", "88",
+                        List.of(seat("A", 1, 0, 0, "0", "0", true))),
+                section("orchestra", null, 2, 5, "220", "88",
+                        List.of(seat("A", 1, 0, 0, "0", "0", true))));
+        assertThat(sections.get(0).name()).isEqualTo("Orchestra");
+        assertThat(sections.get(1).name()).isEqualTo("orchestra");
+        assertInvalid(request(sections, List.of()), emptyIds());
+
+        var rowDup = List.of(section("Orchestra", null, 2, 5, "220", "88",
+                List.of(seat("a", 1, 0, 0, "0", "0", true),
+                        seat("  A ", 1, 1, 0, "44", "0", true))));
+        assertThat(rowDup.getFirst().seats().get(0).rowLabel()).isEqualTo("a");
+        assertThat(rowDup.getFirst().seats().get(1).rowLabel()).isEqualTo("A");
+        assertInvalid(request(rowDup, List.of()), emptyIds());
+    }
+
+    @Test
+    @DisplayName("REV-001: non-LABEL null/blank labels remain allowed with null preserved")
+    void rev001_nonLabelNullBlankAllowed() {
+        var nullLabel = element(null, LayoutElementType.STAGE, null,
+                geometry("0", "0", "10", "10", "0"), 0);
+        var blankLabel = element(null, LayoutElementType.STAGE, "  ",
+                geometry("20", "0", "10", "10", "0"), 1);
+        assertThat(nullLabel.label()).isNull();
+        assertThat(blankLabel.label()).isEmpty();
+        validationService.validate(venue, request(List.of(), List.of(nullLabel, blankLabel)), emptyIds());
+    }
+
+    @Test
+    @DisplayName("REV-001: JSON deserialization yields trimmed canonical values")
+    void rev001_jsonDeserializationTrims() throws Exception {
+        String json = """
+                {
+                  "layoutVersion": 7,
+                  "sections": [{
+                    "sectionId": null,
+                    "name": "  Orchestra  ",
+                    "rowCount": 2,
+                    "colCount": 2,
+                    "isActive": true,
+                    "positionX": 0,
+                    "positionY": 0,
+                    "width": 88,
+                    "height": 88,
+                    "rotationDeg": 0,
+                    "zIndex": 0,
+                    "shapeMetadata": null,
+                    "seats": [{
+                      "seatId": null,
+                      "rowLabel": "  A  ",
+                      "seatNumber": 1,
+                      "gridX": 0,
+                      "gridY": 0,
+                      "positionX": 0,
+                      "positionY": 0,
+                      "isActive": true
+                    }]
+                  }],
+                  "elements": [{
+                    "elementId": null,
+                    "type": "STAGE",
+                    "label": "  Main Stage  ",
+                    "geometry": {"x": 0, "y": 0, "width": 10, "height": 10, "rotationDeg": 0},
+                    "zIndex": 0
+                  }]
+                }
+                """;
+        SaveVenueLayoutRequest parsed = objectMapper.readValue(json, SaveVenueLayoutRequest.class);
+        assertThat(parsed.sections().getFirst().name()).isEqualTo("Orchestra");
+        assertThat(parsed.sections().getFirst().seats().getFirst().rowLabel()).isEqualTo("A");
+        assertThat(parsed.elements().getFirst().label()).isEqualTo("Main Stage");
+        validationService.validate(venue, parsed, emptyIds());
+    }
+
+    // ------------------------------------------------------------------
     // Additive JSON serialization round-trip
     // ------------------------------------------------------------------
 

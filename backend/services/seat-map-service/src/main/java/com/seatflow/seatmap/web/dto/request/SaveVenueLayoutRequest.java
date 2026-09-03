@@ -84,7 +84,21 @@ public record SaveVenueLayoutRequest(
         @Schema(description = "Seat upserts in this section")
         @NotNull(message = "Seats list is required")
         List<@Valid SeatUpsert> seats
-    ) {}
+    ) {
+        /**
+         * Authoritative canonicalization for TASK-P11-003 §5.3 rules 1-2 and 5.
+         * Trims the persisted business identifier so every construction path
+         * (Jackson deserialization, manual {@code new}, future TASK-P11-004 save flow)
+         * receives the canonical value. Null is preserved; blank-after-trim
+         * rejection stays in {@code LayoutValidationService} on the
+         * {@code ValidationException}/{@code INVALID_REQUEST} path.
+         */
+        public SectionUpsert {
+            if (name != null) {
+                name = name.trim();
+            }
+        }
+    }
 
     @Schema(description = "Seat create-or-update entry within a section")
     public record SeatUpsert(
@@ -122,7 +136,20 @@ public record SaveVenueLayoutRequest(
         @Schema(description = "Whether the seat is active/bookable")
         @NotNull(message = "Seat active flag is required")
         Boolean isActive
-    ) {}
+    ) {
+        /**
+         * Authoritative canonicalization for TASK-P11-003 §5.3 rules 1 and 5.
+         * Trims the persisted business identifier so every construction path
+         * receives the canonical value. Null is preserved; blank-after-trim
+         * rejection stays in {@code LayoutValidationService} on the
+         * {@code ValidationException}/{@code INVALID_REQUEST} path.
+         */
+        public SeatUpsert {
+            if (rowLabel != null) {
+                rowLabel = rowLabel.trim();
+            }
+        }
+    }
 
     @Schema(description = "Non-bookable layout element create-or-update entry")
     public record LayoutElementUpsert(
@@ -144,7 +171,22 @@ public record SaveVenueLayoutRequest(
         @Schema(description = "Element z-index (-1000..1000)")
         @NotNull(message = "Element z-index is required")
         Integer zIndex
-    ) {}
+    ) {
+        /**
+         * Authoritative canonicalization for TASK-P11-003 §5.3 rule 12.
+         * Trims the persisted display label so every construction path
+         * (Jackson deserialization, manual {@code new}, future TASK-P11-004 save flow)
+         * receives the canonical value. Null is preserved for non-LABEL types;
+         * blank-after-trim rejection for LABEL stays in
+         * {@code LayoutValidationService} on the
+         * {@code ValidationException}/{@code INVALID_REQUEST} path.
+         */
+        public LayoutElementUpsert {
+            if (label != null) {
+                label = label.trim();
+            }
+        }
+    }
 
     @Schema(description = "Typed rectangular geometry for layout elements")
     public record Geometry(
