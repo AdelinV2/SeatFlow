@@ -63,9 +63,11 @@ class SeatMapLayoutServiceImplTest {
         when(sectionRepository.findByVenueIdOrderByNameAsc(venueId)).thenReturn(List.of(section));
         when(seatRepository.findBySectionIdOrderByGridYAscGridXAsc(sectionId)).thenReturn(List.of(seat1, seat2));
         when(seatMapper.toResponse(seat1)).thenReturn(
-                new SeatResponse(seat1.getId(), "A", 1, 0, 0, true));
+                new SeatResponse(seat1.getId(), "A", 1, 0, 0, true,
+                        new java.math.BigDecimal("0.000"), new java.math.BigDecimal("0.000")));
         when(seatMapper.toResponse(seat2)).thenReturn(
-                new SeatResponse(seat2.getId(), "A", 2, 1, 0, false));
+                new SeatResponse(seat2.getId(), "A", 2, 1, 0, false,
+                        new java.math.BigDecimal("44.000"), new java.math.BigDecimal("0.000")));
 
         // When
         VenueSeatMapLayoutResponse result = layoutService.getVenueLayout(venueId);

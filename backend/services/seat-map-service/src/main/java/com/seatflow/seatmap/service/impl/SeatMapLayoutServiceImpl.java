@@ -48,7 +48,12 @@ public class SeatMapLayoutServiceImpl implements SeatMapLayoutService {
                     return new SectionLayoutResponse(
                             section.getId(), section.getName(),
                             section.getRowCount(), section.getColCount(),
-                            seatResponses
+                            seatResponses,
+                            section.getIsActive(),
+                            section.getPositionX(), section.getPositionY(),
+                            section.getWidth(), section.getHeight(),
+                            section.getRotationDeg(), section.getZIndex(),
+                            section.getShapeMetadata()
                     );
                 })
                 .toList();
@@ -62,7 +67,8 @@ public class SeatMapLayoutServiceImpl implements SeatMapLayoutService {
 
         return new VenueSeatMapLayoutResponse(
                 venue.getId(), venue.getName(),
-                venue.getCapacity(), totalConfiguredSeats, sectionLayouts
+                venue.getCapacity(), totalConfiguredSeats, sectionLayouts,
+                venue.getLayoutVersion(), List.of()
         );
     }
 }

@@ -158,7 +158,8 @@ class VenueSectionServiceImplTest {
         when(seatRepository.findByIdAndSectionId(seatId, sectionId)).thenReturn(Optional.of(seat));
         when(seatRepository.save(any(Seat.class))).thenReturn(seat);
         when(seatMapper.toResponse(seat)).thenReturn(
-                new SeatResponse(seatId, "A", 1, 0, 0, false));
+                new SeatResponse(seatId, "A", 1, 0, 0, false,
+                        new java.math.BigDecimal("0.000"), new java.math.BigDecimal("0.000")));
 
         // When
         SeatResponse result = sectionService.updateSeatStatus(venueId, sectionId, seatId, request);
