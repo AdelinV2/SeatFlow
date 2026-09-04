@@ -1,0 +1,158 @@
+.section-node {
+  outline: none;
+  transition: opacity 0.15s ease;
+
+  &.editable {
+    cursor: move;
+  }
+
+  &:not(.editable) {
+    cursor: default;
+  }
+
+  &.section-inactive {
+    opacity: 0.55;
+
+    .section-boundary {
+      stroke-dasharray: 6 4;
+      stroke: #64748b;
+    }
+  }
+
+  .section-boundary {
+    fill: rgba(30, 41, 59, 0.4);
+    stroke: rgba(148, 163, 184, 0.35);
+    stroke-width: 1.5px;
+    transition:
+      stroke 0.15s ease,
+      stroke-width 0.15s ease;
+  }
+
+  &.selected .section-boundary {
+    stroke: #6366f1;
+    stroke-width: 2.5px;
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.35));
+  }
+
+  .section-title {
+    fill: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  &.selected .section-title {
+    fill: #e0e7ff;
+  }
+
+  &:focus-visible .section-boundary {
+    stroke: #818cf8;
+    stroke-width: 3px;
+  }
+}
+
+.seats-layer {
+  .seat-item {
+    cursor: pointer;
+    outline: none;
+    transition: transform 0.1s ease;
+
+    .seat-circle {
+      fill: #3b82f6;
+      stroke: #1d4ed8;
+      stroke-width: 1.5px;
+      transition:
+        fill 0.15s ease,
+        stroke 0.15s ease;
+    }
+
+    .seat-number {
+      fill: #ffffff;
+      font-size: 10px;
+      font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    &:hover .seat-circle {
+      fill: #60a5fa;
+      stroke: #2563eb;
+    }
+
+    &:focus-visible .seat-circle {
+      stroke: #fbbf24;
+      stroke-width: 3px;
+    }
+
+    &.inactive {
+      opacity: 0.45;
+      cursor: not-allowed;
+
+      .seat-circle {
+        fill: #475569;
+        stroke: #334155;
+      }
+
+      .seat-number {
+        fill: #94a3b8;
+      }
+    }
+  }
+}
+
+.transform-handles {
+  .rotation-stem {
+    stroke: #6366f1;
+    stroke-width: 1.5px;
+    stroke-dasharray: 3 3;
+  }
+
+  .transform-handle {
+    outline: none;
+    stroke: #6366f1;
+    stroke-width: 2px;
+    fill: #ffffff;
+    transition:
+      transform 0.1s ease,
+      fill 0.15s ease;
+
+    &:hover {
+      fill: #e0e7ff;
+    }
+
+    &:focus-visible {
+      stroke: #fbbf24;
+      stroke-width: 3px;
+    }
+  }
+
+  .rotation-handle {
+    fill: #8b5cf6;
+    stroke: #ffffff;
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
+    }
+
+    &:hover {
+      fill: #a78bfa;
+    }
+  }
+
+  .corner-handle {
+    &.nw,
+    &.se {
+      cursor: nwse-resize;
+    }
+
+    &.ne,
+    &.sw {
+      cursor: nesw-resize;
+    }
+  }
+}

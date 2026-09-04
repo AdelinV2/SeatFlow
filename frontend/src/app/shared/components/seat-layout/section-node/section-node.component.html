@@ -1,0 +1,139 @@
+<svg:g
+  class="section-node"
+  [class.selected]="selected()"
+  [class.section-inactive]="!section().isActive"
+  [class.editable]="editable()"
+  [attr.transform]="transformString()"
+  (pointerdown)="onSectionPointerDown($event)"
+  (click)="onSectionClick($event)"
+  [attr.tabindex]="isSelectable() ? 0 : -1"
+  [attr.role]="'group'"
+  [attr.aria-label]="section().name + (section().isActive ? '' : ' (inactive)')"
+>
+  <!-- Section Boundary Box -->
+  <svg:rect
+    class="section-boundary"
+    x="0"
+    y="0"
+    [attr.width]="section().width"
+    [attr.height]="section().height"
+    rx="6"
+    ry="6"
+  />
+
+  <!-- Section Name Badge / Title -->
+  <svg:text
+    class="section-title"
+    [attr.x]="section().width / 2"
+    y="18"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >
+    {{ section().name }}
+  </svg:text>
+
+  <!-- Seats Layer (Rendered in section-local coordinates) -->
+  <svg:g class="seats-layer" role="group" aria-label="Seats">
+    @for (
+      seat of section().seats;
+      track seat.seatId ?? $index + '-' + seat.rowLabel + '-' + seat.seatNumber
+    ) {
+      <svg:g
+        class="seat-item"
+        [class.inactive]="!seat.isActive"
+        [attr.transform]="'translate(' + seat.positionX + ' ' + seat.positionY + ')'"
+        (click)="onSeatClick($event, seat)"
+        tabindex="0"
+        role="button"
+        [attr.aria-label]="
+          'Row ' +
+          seat.rowLabel +
+          ', Seat ' +
+          seat.seatNumber +
+          (seat.isActive ? '' : ' (inactive)')
+        "
+      >
+        <svg:circle class="seat-circle" cx="0" cy="0" r="14" />
+        <svg:text class="seat-number" x="0" y="0" text-anchor="middle" dominant-baseline="central">
+          {{ seat.seatNumber }}
+        </svg:text>
+      </svg:g>
+    }
+  </svg:g>
+
+  <!-- Transform Handles: Only visible when selected and editable -->
+  @if (editable() && selected()) {
+    <svg:g class="transform-handles" role="group" aria-label="Transform Handles">
+      <!-- Rotation Stem Line & Rotation Handle -->
+      <svg:line
+        class="rotation-stem"
+        [attr.x1]="section().width / 2"
+        y1="0"
+        [attr.x2]="section().width / 2"
+        y2="-24"
+      />
+      <svg:circle
+        class="transform-handle rotation-handle"
+        [attr.cx]="section().width / 2"
+        cy="-24"
+        r="7"
+        role="button"
+        tabindex="0"
+        aria-label="Rotate section"
+        (pointerdown)="onHandlePointerDown($event, 'rotate')"
+      />
+
+      <!-- Corner Handle: NW -->
+      <svg:rect
+        class="transform-handle corner-handle nw"
+        [attr.x]="-halfHandle"
+        [attr.y]="-halfHandle"
+        [attr.width]="handleSize"
+        [attr.height]="handleSize"
+        role="button"
+        tabindex="0"
+        aria-label="Resize north-west"
+        (pointerdown)="onHandlePointerDown($event, 'nw')"
+      />
+
+      <!-- Corner Handle: NE -->
+      <svg:rect
+        class="transform-handle corner-handle ne"
+        [attr.x]="section().width - halfHandle"
+        [attr.y]="-halfHandle"
+        [attr.width]="handleSize"
+        [attr.height]="handleSize"
+        role="button"
+        tabindex="0"
+        aria-label="Resize north-east"
+        (pointerdown)="onHandlePointerDown($event, 'ne')"
+      />
+
+      <!-- Corner Handle: SE -->
+      <svg:rect
+        class="transform-handle corner-handle se"
+        [attr.x]="section().width - halfHandle"
+        [attr.y]="section().height - halfHandle"
+        [attr.width]="handleSize"
+        [attr.height]="handleSize"
+        role="button"
+        tabindex="0"
+        aria-label="Resize south-east"
+        (pointerdown)="onHandlePointerDown($event, 'se')"
+      />
+
+      <!-- Corner Handle: SW -->
+      <svg:rect
+        class="transform-handle corner-handle sw"
+        [attr.x]="-halfHandle"
+        [attr.y]="section().height - halfHandle"
+        [attr.width]="handleSize"
+        [attr.height]="handleSize"
+        role="button"
+        tabindex="0"
+        aria-label="Resize south-west"
+        (pointerdown)="onHandlePointerDown($event, 'sw')"
+      />
+    </svg:g>
+  }
+</svg:g>
