@@ -362,6 +362,40 @@ describe('LayoutCanvasComponent', () => {
       expect(change.height).toBe(190);
     });
 
+    it('correctly scales delta and emits resized dimensions under canvas zoom (2.0)', () => {
+      component.zoomLevel.set(2.0);
+      component.panX.set(100);
+      component.panY.set(50);
+
+      let emittedEvent: SectionTransformChangeEvent | null = null;
+      component.sectionTransformChanged.subscribe((change) => {
+        emittedEvent = change;
+      });
+
+      // Start resize on SE handle of Orchestra (w=200, h=150)
+      component.onHandlePointerDown({
+        event: new PointerEvent('pointerdown', { pointerId: 1, clientX: 300, clientY: 250 }),
+        section: mockSections[0],
+        handle: 'se',
+      });
+
+      // Move by (+100, +80) in client space
+      // At zoom 2.0, worldDelta = (+100/2, +80/2) = (+50, +40)
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          clientX: 400,
+          clientY: 330,
+          bubbles: true,
+        }),
+      );
+
+      const change = emittedEvent as unknown as SectionTransformChangeEvent;
+      expect(change.width).toBe(250);
+      expect(change.height).toBe(190);
+    });
+
     it('emits normalized degrees when dragging rotation handle', () => {
       let emittedEvent: SectionTransformChangeEvent | null = null;
       component.sectionTransformChanged.subscribe((change) => {
@@ -469,6 +503,330 @@ describe('LayoutCanvasComponent', () => {
 
       expect(emitted).toBeFalse();
       expect(component.isDragging()).toBeFalse();
+    });
+
+    it('does NOT emit seatSelected or mutate selection when clicking a seat in an inactive section (REV-003)', () => {
+      const inactiveSection: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-inactive',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-in-inactive-sec',
+            rowLabel: 'Z',
+            seatNumber: 99,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: true,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('sections', [inactiveSection]);
+      fixture.detectChanges();
+
+      let seatSelectedEmitted = false;
+      component.seatSelected.subscribe(() => {
+        seatSelectedEmitted = true;
+      });
+
+      let selectionChangedEmitted = false;
+      component.selectionChanged.subscribe(() => {
+        selectionChangedEmitted = true;
+      });
+
+      // Click seat in inactive section
+      component.onSeatClick({
+        event: new MouseEvent('click'),
+        seat: inactiveSection.seats[0],
+        section: inactiveSection,
+      });
+
+      expect(seatSelectedEmitted).toBeFalse();
+      expect(selectionChangedEmitted).toBeFalse();
+    });
+
+    it('does NOT emit seatSelected or mutate selection on keyboard activation of a seat in an inactive section (REV-003)', () => {
+      const inactiveSection: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-inactive',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-in-inactive-sec',
+            rowLabel: 'Z',
+            seatNumber: 99,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: true,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('sections', [inactiveSection]);
+      fixture.detectChanges();
+
+      let seatSelectedEmitted = false;
+      component.seatSelected.subscribe(() => {
+        seatSelectedEmitted = true;
+      });
+
+      let selectionChangedEmitted = false;
+      component.selectionChanged.subscribe(() => {
+        selectionChangedEmitted = true;
+      });
+
+      component.onSeatClick({
+        event: new KeyboardEvent('keydown', { key: 'Enter' }),
+        seat: inactiveSection.seats[0],
+        section: inactiveSection,
+      });
+
+      expect(seatSelectedEmitted).toBeFalse();
+      expect(selectionChangedEmitted).toBeFalse();
+    });
+
+    it('does NOT emit seatSelected when clicking an inactive seat inside an active section (REV-003)', () => {
+      const activeSectionWithInactiveSeat: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-active',
+        isActive: true,
+        seats: [
+          {
+            seatId: 'seat-inactive',
+            rowLabel: 'B',
+            seatNumber: 2,
+            gridX: 0,
+            gridY: 1,
+            positionX: 50,
+            positionY: 50,
+            isActive: false,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('sections', [activeSectionWithInactiveSeat]);
+      fixture.detectChanges();
+
+      let seatSelectedEmitted = false;
+      component.seatSelected.subscribe(() => {
+        seatSelectedEmitted = true;
+      });
+
+      component.onSeatClick({
+        event: new MouseEvent('click'),
+        seat: activeSectionWithInactiveSeat.seats[0],
+        section: activeSectionWithInactiveSeat,
+      });
+
+      expect(seatSelectedEmitted).toBeFalse();
+    });
+
+    it('does NOT emit seatSelected or selectionChanged via pointer/click path on inactive read-only section (REV-004)', () => {
+      const inactiveSection: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-inactive-path',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-in-inactive-path',
+            rowLabel: 'Z',
+            seatNumber: 99,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: true,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('sections', [inactiveSection]);
+      fixture.componentRef.setInput('selectedSectionIds', new Set(['sec-orchestra']));
+      fixture.detectChanges();
+
+      let seatSelectedCount = 0;
+      component.seatSelected.subscribe(() => {
+        seatSelectedCount++;
+      });
+
+      let selectionChangedCount = 0;
+      component.selectionChanged.subscribe(() => {
+        selectionChangedCount++;
+      });
+
+      const inactiveNode = fixture.nativeElement.querySelector(
+        '.section-node.section-inactive',
+      ) as Element;
+      expect(inactiveNode).not.toBeNull();
+      // REV-004: inactive geometry must stay hit-testable so guards run.
+      expect(getComputedStyle(inactiveNode).pointerEvents).not.toBe('none');
+
+      const target = inactiveNode.querySelector('.section-boundary') ?? inactiveNode;
+
+      target.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 7,
+          clientX: 120,
+          clientY: 120,
+          button: 0,
+          bubbles: true,
+        }),
+      );
+      target.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 7,
+          clientX: 120,
+          clientY: 120,
+          bubbles: true,
+        }),
+      );
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(seatSelectedCount).toBe(0);
+      expect(selectionChangedCount).toBe(0);
+    });
+
+    it('does NOT emit seatSelected or selectionChanged via pointer/click path on inactive seat in active read-only section (REV-004)', () => {
+      const activeSectionWithInactiveSeat: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-active-path',
+        isActive: true,
+        seats: [
+          {
+            seatId: 'seat-inactive-path',
+            rowLabel: 'B',
+            seatNumber: 2,
+            gridX: 0,
+            gridY: 1,
+            positionX: 50,
+            positionY: 50,
+            isActive: false,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('sections', [activeSectionWithInactiveSeat]);
+      fixture.componentRef.setInput('selectedSectionIds', new Set<string>());
+      fixture.detectChanges();
+
+      let seatSelectedCount = 0;
+      component.seatSelected.subscribe(() => {
+        seatSelectedCount++;
+      });
+
+      let selectionChangedCount = 0;
+      component.selectionChanged.subscribe(() => {
+        selectionChangedCount++;
+      });
+
+      const inactiveSeat = fixture.nativeElement.querySelector(
+        '.seat-item.non-interactive',
+      ) as Element;
+      expect(inactiveSeat).not.toBeNull();
+      // REV-004: inactive seats must stay hit-testable so the seat guard runs.
+      expect(getComputedStyle(inactiveSeat).pointerEvents).not.toBe('none');
+
+      const target = inactiveSeat.querySelector('.seat-circle') ?? inactiveSeat;
+
+      target.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 9,
+          clientX: 150,
+          clientY: 150,
+          button: 0,
+          bubbles: true,
+        }),
+      );
+      target.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerId: 9,
+          clientX: 150,
+          clientY: 150,
+          bubbles: true,
+        }),
+      );
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(seatSelectedCount).toBe(0);
+      expect(selectionChangedCount).toBe(0);
+    });
+
+    it('emits seatSelected when clicking an active seat in an active read-only section', () => {
+      fixture.componentRef.setInput('editable', false);
+      fixture.detectChanges();
+
+      let emittedSeat: any = null;
+      component.seatSelected.subscribe((data) => {
+        emittedSeat = data;
+      });
+
+      component.onSeatClick({
+        event: new MouseEvent('click'),
+        seat: mockSections[0].seats[0],
+        section: mockSections[0],
+      });
+
+      expect(emittedSeat).not.toBeNull();
+      expect(emittedSeat.seat.seatId).toBe('seat-1');
+      expect(emittedSeat.section.sectionId).toBe('sec-orchestra');
+    });
+
+    it('renders inactive sections and seats in editor DOM and permits editor seat selection (REV-003)', () => {
+      const inactiveSection: VenueSectionLayout = {
+        ...mockSections[0],
+        sectionId: 'sec-inactive-editor',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-in-inactive-editor',
+            rowLabel: 'A',
+            seatNumber: 1,
+            gridX: 0,
+            gridY: 0,
+            positionX: 30,
+            positionY: 30,
+            isActive: false,
+          },
+        ],
+      };
+
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('sections', [inactiveSection]);
+      fixture.detectChanges();
+
+      // Section and seat nodes remain represented in DOM
+      const sectionNode = fixture.nativeElement.querySelector('.section-node');
+      expect(sectionNode).not.toBeNull();
+      expect(sectionNode.classList.contains('section-inactive')).toBeTrue();
+
+      const seatItem = fixture.nativeElement.querySelector('.seat-item');
+      expect(seatItem).not.toBeNull();
+      expect(seatItem.classList.contains('inactive')).toBeTrue();
+
+      let emittedSeat: any = null;
+      component.seatSelected.subscribe((data) => {
+        emittedSeat = data;
+      });
+
+      // Emits in editor mode
+      component.onSeatClick({
+        event: new MouseEvent('click'),
+        seat: inactiveSection.seats[0],
+        section: inactiveSection,
+      });
+
+      expect(emittedSeat).not.toBeNull();
+      expect(emittedSeat.seat.seatId).toBe('seat-in-inactive-editor');
     });
   });
 

@@ -8,6 +8,8 @@
 
   &:not(.editable) {
     cursor: default;
+    // REV-004: keep inactive read-only geometry hit-testable so section guards
+    // run and stop propagation; pointer-events:none would retarget to canvas.
   }
 
   &.section-inactive {
@@ -78,14 +80,19 @@
       user-select: none;
     }
 
-    &:hover .seat-circle {
+    &:not(.non-interactive):hover .seat-circle {
       fill: #60a5fa;
       stroke: #2563eb;
     }
 
-    &:focus-visible .seat-circle {
+    &:not(.non-interactive):focus-visible .seat-circle {
       stroke: #fbbf24;
       stroke-width: 3px;
+    }
+
+    &.non-interactive {
+      cursor: default;
+      // REV-004: keep disabled seats hit-testable; onSeatClick guards + stops propagation.
     }
 
     &.inactive {

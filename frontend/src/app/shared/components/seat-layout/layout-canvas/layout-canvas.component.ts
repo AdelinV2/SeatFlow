@@ -507,11 +507,14 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeatClick(event: {
-    event: MouseEvent;
+    event: MouseEvent | KeyboardEvent;
     seat: VenueSectionSeat;
     section: VenueSectionLayout;
   }): void {
-    this.seatSelected.emit(event);
+    if (!this.editable() && (!event.section.isActive || !event.seat.isActive)) {
+      return;
+    }
+    this.seatSelected.emit({ seat: event.seat, section: event.section });
   }
 
   // --- Pinch-to-zoom helpers ---

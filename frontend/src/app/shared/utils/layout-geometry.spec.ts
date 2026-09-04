@@ -8,6 +8,7 @@ import {
   clampZoom,
   clientDeltaToWorld,
   clientPointToWorld,
+  CornerHandle,
   DEFAULT_LAYOUT_BOUNDS,
   layoutBounds,
   MAX_DIMENSION,
@@ -21,7 +22,9 @@ import {
   MIN_Z_INDEX,
   MIN_ZOOM,
   normalizeRotation,
+  Point,
   SectionTransform,
+  sectionLocalToWorld,
   snap,
   sortedLayoutItems,
 } from './layout-geometry';
@@ -57,6 +60,44 @@ describe('layout-geometry pure utilities', () => {
       expect(clientPointToWorld({ x: 150, y: 200 }, origin, pan, -2)).toEqual({ x: 150, y: 200 });
       expect(clientPointToWorld({ x: 150, y: 200 }, origin, pan, NaN)).toEqual({ x: 150, y: 200 });
       expect(clientDeltaToWorld({ x: 80, y: 40 }, 0)).toEqual({ x: 80, y: 40 });
+    });
+  });
+
+  describe('sectionLocalToWorld', () => {
+    it('maps local points directly in unrotated section', () => {
+      const section: SectionTransform = {
+        positionX: 100,
+        positionY: 200,
+        width: 300,
+        height: 150,
+        rotationDeg: 0,
+      };
+      expect(sectionLocalToWorld({ x: 0, y: 0 }, section)).toEqual({ x: 100, y: 200 });
+      expect(sectionLocalToWorld({ x: 300, y: 150 }, section)).toEqual({ x: 400, y: 350 });
+      expect(sectionLocalToWorld({ x: 50, y: 75 }, section)).toEqual({ x: 150, y: 275 });
+    });
+
+    it('maps local points correctly in 90-degree rotated section around center', () => {
+      const section: SectionTransform = {
+        positionX: 100,
+        positionY: 100,
+        width: 200,
+        height: 100,
+        rotationDeg: 90,
+      };
+      // Center is (200, 150)
+      // Local (200, 100) (SE): delta from center is (100, 50). Rotated by 90 deg: (-50, 100).
+      // World point: center + (-50, 100) = (150, 250).
+      expect(sectionLocalToWorld({ x: 200, y: 100 }, section)).toEqual({ x: 150, y: 250 });
+      // Local (0, 0) (NW): delta from center is (-100, -50). Rotated by 90 deg: (50, -100).
+      // World point: center + (50, -100) = (250, 50).
+      expect(sectionLocalToWorld({ x: 0, y: 0 }, section)).toEqual({ x: 250, y: 50 });
+      // Local (0, 100) (SW): delta (-100, 50). Rotated: (-50, -100).
+      // World point: (150, 50).
+      expect(sectionLocalToWorld({ x: 0, y: 100 }, section)).toEqual({ x: 150, y: 50 });
+      // Local (200, 0) (NE): delta (100, -50). Rotated: (50, 100).
+      // World point: (250, 250).
+      expect(sectionLocalToWorld({ x: 200, y: 0 }, section)).toEqual({ x: 250, y: 250 });
     });
   });
 
@@ -156,6 +197,55 @@ describe('layout-geometry pure utilities', () => {
       expect(clamped.height).toBe(MAX_DIMENSION);
       expect(clamped.rotationDeg).toBe(-160); // 200 normalized to -160, within [-180, 180]
       expect(clamped.zIndex).toBe(MAX_Z_INDEX);
+    });
+
+    it('preserves exact positive decimal dimensions 0.001 and 0.5 without coercing to 1 (REV-002)', () => {
+      const transformWithDecimals: SectionTransform = {
+        positionX: 50,
+        positionY: 50,
+        width: 0.001,
+        height: 0.5,
+        rotationDeg: 0,
+        zIndex: 0,
+      };
+      const clamped = clampSectionTransform(transformWithDecimals);
+      expect(clamped.width).toBe(0.001);
+      expect(clamped.height).toBe(0.5);
+    });
+
+    it('clamps zero and negative dimensions strictly to MIN_DIMENSION (0.001) (REV-002)', () => {
+      const zeroDims: SectionTransform = {
+        positionX: 10,
+        positionY: 10,
+        width: 0,
+        height: -5,
+        rotationDeg: 0,
+      };
+      const clamped = clampSectionTransform(zeroDims);
+      expect(clamped.width).toBe(0.001);
+      expect(clamped.height).toBe(0.001);
+    });
+
+    it('preserves exact upper bound 100000 and clamps dimensions exceeding 100000', () => {
+      const maxDims: SectionTransform = {
+        positionX: 0,
+        positionY: 0,
+        width: 100000,
+        height: 100000,
+        rotationDeg: 0,
+      };
+      expect(clampSectionTransform(maxDims).width).toBe(100000);
+      expect(clampSectionTransform(maxDims).height).toBe(100000);
+
+      const exceededDims: SectionTransform = {
+        positionX: 0,
+        positionY: 0,
+        width: 100001,
+        height: 150000,
+        rotationDeg: 0,
+      };
+      expect(clampSectionTransform(exceededDims).width).toBe(100000);
+      expect(clampSectionTransform(exceededDims).height).toBe(100000);
     });
 
     it('clamps negative zIndex below -1000 to -1000', () => {
@@ -444,6 +534,189 @@ describe('layout-geometry pure utilities', () => {
       const result = calculateCornerResize(rotated, 'se', { x: 0, y: 50 });
       expect(result.width).toBe(250);
       expect(result.height).toBe(100);
+      // NW corner at (0, 0) remains fixed at world point (250, 50)
+      expect(result.positionX).toBe(75);
+      expect(result.positionY).toBe(125);
+    });
+
+    describe('rotated corner resize opposite corner world preservation (REV-001)', () => {
+      const rotated90: SectionTransform = {
+        positionX: 100,
+        positionY: 100,
+        width: 200,
+        height: 100,
+        rotationDeg: 90,
+      };
+
+      it('preserves opposite SE world corner when dragging NW handle at 90 degrees', () => {
+        const oldSEWorld = sectionLocalToWorld({ x: 200, y: 100 }, rotated90);
+        expect(oldSEWorld).toEqual({ x: 150, y: 250 });
+
+        // Drag NW handle by worldDelta {-20, 40}, which corresponds to local {40, 20}
+        const result = calculateCornerResize(rotated90, 'nw', { x: -20, y: 40 });
+        expect(result.positionX).toBe(110);
+        expect(result.positionY).toBe(130);
+        expect(result.width).toBe(160);
+        expect(result.height).toBe(80);
+
+        const newSection: SectionTransform = { ...rotated90, ...result };
+        const newSEWorld = sectionLocalToWorld({ x: result.width, y: result.height }, newSection);
+        expect(newSEWorld).toEqual(oldSEWorld);
+      });
+
+      it('preserves opposite SW world corner when dragging NE handle at 90 degrees', () => {
+        const oldSWWorld = sectionLocalToWorld({ x: 0, y: 100 }, rotated90);
+        expect(oldSWWorld).toEqual({ x: 150, y: 50 });
+
+        // At 90 deg: localDx = worldDelta.y, localDy = -worldDelta.x
+        // To change width by +40 (localDx = 40) and height by -20 (localDy = -20):
+        // worldDelta.y = 40, -worldDelta.x = -20 => worldDelta.x = 20
+        const result = calculateCornerResize(rotated90, 'ne', { x: 20, y: 40 });
+        expect(result.width).toBe(240);
+        expect(result.height).toBe(120);
+
+        const newSection: SectionTransform = { ...rotated90, ...result };
+        const newSWWorld = sectionLocalToWorld({ x: 0, y: result.height }, newSection);
+        expect(newSWWorld).toEqual(oldSWWorld);
+      });
+
+      it('preserves opposite NE world corner when dragging SW handle at 90 degrees', () => {
+        const oldNEWorld = sectionLocalToWorld({ x: 200, y: 0 }, rotated90);
+        expect(oldNEWorld).toEqual({ x: 250, y: 250 });
+
+        // SW handle: localDx = worldDelta.y, localDy = -worldDelta.x
+        // To change width by -20 (localDx = 20) and height by +20 (localDy = 20):
+        // worldDelta.y = 20, -worldDelta.x = 20 => worldDelta.x = -20
+        const result = calculateCornerResize(rotated90, 'sw', { x: -20, y: 20 });
+        expect(result.width).toBe(180);
+        expect(result.height).toBe(120);
+
+        const newSection: SectionTransform = { ...rotated90, ...result };
+        const newNEWorld = sectionLocalToWorld({ x: result.width, y: 0 }, newSection);
+        expect(newNEWorld).toEqual(oldNEWorld);
+      });
+
+      it('preserves opposite NW world corner when dragging SE handle at 90 degrees', () => {
+        const oldNWWorld = sectionLocalToWorld({ x: 0, y: 0 }, rotated90);
+        expect(oldNWWorld).toEqual({ x: 250, y: 50 });
+
+        // At 90 deg: localDx = worldDelta.y, localDy = -worldDelta.x
+        // World delta { x: 0, y: 50 } -> localDx = 50, localDy = 0
+        const result = calculateCornerResize(rotated90, 'se', { x: 0, y: 50 });
+        expect(result.width).toBe(250);
+        expect(result.height).toBe(100);
+
+        const newSection: SectionTransform = { ...rotated90, ...result };
+        const newNWWorld = sectionLocalToWorld({ x: 0, y: 0 }, newSection);
+        expect(newNWWorld).toEqual(oldNWWorld);
+      });
+
+      it('preserves opposite world corner for arbitrary non-orthogonal rotation (45 degrees)', () => {
+        const rotated45: SectionTransform = {
+          positionX: 200,
+          positionY: 150,
+          width: 120,
+          height: 80,
+          rotationDeg: 45,
+        };
+
+        const handles: CornerHandle[] = ['nw', 'ne', 'sw', 'se'];
+        for (const h of handles) {
+          const result = calculateCornerResize(rotated45, h, { x: 15, y: -10 });
+          const newSection: SectionTransform = { ...rotated45, ...result };
+
+          let oldOppositeLocal: Point;
+          let newOppositeLocal: Point;
+          switch (h) {
+            case 'se':
+              oldOppositeLocal = { x: 0, y: 0 };
+              newOppositeLocal = { x: 0, y: 0 };
+              break;
+            case 'sw':
+              oldOppositeLocal = { x: rotated45.width, y: 0 };
+              newOppositeLocal = { x: result.width, y: 0 };
+              break;
+            case 'ne':
+              oldOppositeLocal = { x: 0, y: rotated45.height };
+              newOppositeLocal = { x: 0, y: result.height };
+              break;
+            case 'nw':
+              oldOppositeLocal = { x: rotated45.width, y: rotated45.height };
+              newOppositeLocal = { x: result.width, y: result.height };
+              break;
+          }
+
+          const oldWorld = sectionLocalToWorld(oldOppositeLocal, rotated45);
+          const newWorld = sectionLocalToWorld(newOppositeLocal, newSection);
+
+          expect(Math.abs(newWorld.x - oldWorld.x)).toBeLessThanOrEqual(0.005);
+          expect(Math.abs(newWorld.y - oldWorld.y)).toBeLessThanOrEqual(0.005);
+        }
+      });
+    });
+
+    describe('dimension boundaries across all corner handles (REV-002)', () => {
+      const handles: CornerHandle[] = ['nw', 'ne', 'se', 'sw'];
+
+      it('clamps to MIN_DIMENSION (0.001) when dragged past zero for all handles', () => {
+        for (const h of handles) {
+          const delta =
+            h === 'se'
+              ? { x: -500, y: -500 }
+              : h === 'nw'
+                ? { x: 500, y: 500 }
+                : h === 'ne'
+                  ? { x: -500, y: 500 }
+                  : { x: 500, y: -500 };
+          const result = calculateCornerResize(initial, h, delta);
+          expect(result.width).toBe(MIN_DIMENSION);
+          expect(result.height).toBe(MIN_DIMENSION);
+        }
+      });
+
+      it('preserves initial dimensions 0.001 and 0.5 without coercing to 1 for all handles', () => {
+        const smallInitial: SectionTransform = {
+          positionX: 50,
+          positionY: 50,
+          width: 0.001,
+          height: 0.5,
+          rotationDeg: 0,
+        };
+
+        for (const h of handles) {
+          const result = calculateCornerResize(smallInitial, h, { x: 0, y: 0 });
+          expect(result.width).toBe(0.001);
+          expect(result.height).toBe(0.5);
+        }
+      });
+
+      it('preserves upper bound 100000 and clamps excessive dimensions for all handles', () => {
+        const maxInitial: SectionTransform = {
+          positionX: 0,
+          positionY: 0,
+          width: 100000,
+          height: 100000,
+          rotationDeg: 0,
+        };
+
+        for (const h of handles) {
+          const preserved = calculateCornerResize(maxInitial, h, { x: 0, y: 0 });
+          expect(preserved.width).toBe(100000);
+          expect(preserved.height).toBe(100000);
+
+          const delta =
+            h === 'se'
+              ? { x: 500, y: 500 }
+              : h === 'nw'
+                ? { x: -500, y: -500 }
+                : h === 'ne'
+                  ? { x: 500, y: -500 }
+                  : { x: -500, y: 500 };
+          const clamped = calculateCornerResize(maxInitial, h, delta);
+          expect(clamped.width).toBe(100000);
+          expect(clamped.height).toBe(100000);
+        }
+      });
     });
   });
 

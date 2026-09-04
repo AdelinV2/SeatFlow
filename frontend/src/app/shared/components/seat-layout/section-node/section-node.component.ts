@@ -25,7 +25,7 @@ export class SectionNodeComponent {
     handle: CornerHandle | 'rotate';
   }>();
   readonly seatClick = output<{
-    event: MouseEvent;
+    event: MouseEvent | KeyboardEvent;
     seat: VenueSectionSeat;
     section: VenueSectionLayout;
   }>();
@@ -47,8 +47,18 @@ export class SectionNodeComponent {
     return this.editable() || this.section().isActive;
   });
 
+  isSeatInteractive(seat: VenueSectionSeat): boolean {
+    return this.editable() || (this.section().isActive && seat.isActive);
+  }
+
   onSectionPointerDown(event: PointerEvent): void {
     if ((event.target as Element)?.closest?.('.transform-handle')) {
+      return;
+    }
+    if (!this.editable()) {
+      // REV-004: keep read-only geometry hit-testable so this guard runs;
+      // stop propagation to prevent canvas background pan/clear.
+      event.stopPropagation();
       return;
     }
     this.sectionPointerDown.emit({ event, section: this.section() });
@@ -59,6 +69,8 @@ export class SectionNodeComponent {
       return;
     }
     if (!this.editable() && !this.section().isActive) {
+      // REV-004: suppress inactive read-only selection; stop bubbling toward canvas handlers.
+      event.stopPropagation();
       return;
     }
     this.sectionClick.emit({ event, section: this.section() });
@@ -72,6 +84,20 @@ export class SectionNodeComponent {
 
   onSeatClick(event: MouseEvent, seat: VenueSectionSeat): void {
     event.stopPropagation();
+    if (!this.isSeatInteractive(seat)) {
+      return;
+    }
     this.seatClick.emit({ event, seat, section: this.section() });
+  }
+
+  onSeatKeyDown(event: KeyboardEvent, seat: VenueSectionSeat): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!this.isSeatInteractive(seat)) {
+        return;
+      }
+      this.seatClick.emit({ event, seat, section: this.section() });
+    }
   }
 }

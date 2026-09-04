@@ -203,4 +203,85 @@ describe('SectionNodeComponent', () => {
 
     expect(clickedSeatId as string | null).toBe('seat-1');
   });
+
+  describe('read-only inactive sections and seats non-interactivity (REV-003)', () => {
+    it('does NOT emit seatClick on click or Enter/Space keyboard in inactive read-only section', () => {
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('section', { ...mockSection, isActive: false });
+      fixture.detectChanges();
+
+      let clicked = false;
+      component.seatClick.subscribe(() => {
+        clicked = true;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      expect(seatItems.length).toBe(2);
+
+      // Verify non-interactive attributes on seats
+      expect(seatItems[0].getAttribute('tabindex')).toBe('-1');
+      expect(seatItems[0].getAttribute('role')).toBeNull();
+      expect(seatItems[0].getAttribute('aria-disabled')).toBe('true');
+      expect(seatItems[0].classList.contains('non-interactive')).toBeTrue();
+
+      // Click seat
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clicked).toBeFalse();
+
+      // Keyboard Enter
+      seatItems[0].dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      expect(clicked).toBeFalse();
+
+      // Keyboard Space
+      seatItems[0].dispatchEvent(
+        new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }),
+      );
+      expect(clicked).toBeFalse();
+    });
+
+    it('does NOT emit seatClick for an inactive seat even inside an active read-only section', () => {
+      fixture.componentRef.setInput('editable', false);
+      fixture.componentRef.setInput('section', { ...mockSection, isActive: true });
+      fixture.detectChanges();
+
+      let clickedSeatId: string | null = null;
+      component.seatClick.subscribe((data) => {
+        clickedSeatId = data.seat.seatId;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      // Seat 2 is inactive in mockSection
+      expect(seatItems[1].getAttribute('tabindex')).toBe('-1');
+      expect(seatItems[1].classList.contains('non-interactive')).toBeTrue();
+
+      seatItems[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clickedSeatId).toBeNull();
+
+      // Active seat 1 still emits
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clickedSeatId as string | null).toBe('seat-1');
+    });
+
+    it('retains interactive seats in DOM with tabindex=0 and emits seatClick in editable mode for inactive section', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('section', { ...mockSection, isActive: false });
+      fixture.detectChanges();
+
+      let clickedSeatId: string | null = null;
+      component.seatClick.subscribe((data) => {
+        clickedSeatId = data.seat.seatId;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      expect(seatItems.length).toBe(2);
+      expect(seatItems[0].getAttribute('tabindex')).toBe('0');
+      expect(seatItems[0].getAttribute('role')).toBe('button');
+      expect(seatItems[0].classList.contains('non-interactive')).toBeFalse();
+
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clickedSeatId as string | null).toBe('seat-1');
+    });
+  });
 });

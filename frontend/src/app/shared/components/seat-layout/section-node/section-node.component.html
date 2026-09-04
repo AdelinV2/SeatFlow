@@ -41,10 +41,13 @@
       <svg:g
         class="seat-item"
         [class.inactive]="!seat.isActive"
+        [class.non-interactive]="!isSeatInteractive(seat)"
         [attr.transform]="'translate(' + seat.positionX + ' ' + seat.positionY + ')'"
         (click)="onSeatClick($event, seat)"
-        tabindex="0"
-        role="button"
+        (keydown)="onSeatKeyDown($event, seat)"
+        [attr.tabindex]="isSeatInteractive(seat) ? 0 : -1"
+        [attr.role]="isSeatInteractive(seat) ? 'button' : null"
+        [attr.aria-disabled]="!isSeatInteractive(seat) ? true : null"
         [attr.aria-label]="
           'Row ' +
           seat.rowLabel +

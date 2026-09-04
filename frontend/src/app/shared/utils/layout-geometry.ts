@@ -2,7 +2,7 @@ import { VenueLayoutElement, VenueSectionLayout } from '../../models/venue.model
 
 export const MIN_POSITION = 0;
 export const MAX_POSITION = 100000;
-export const MIN_DIMENSION = 1;
+export const MIN_DIMENSION = 0.001;
 export const MAX_DIMENSION = 100000;
 export const MIN_ROTATION = -180;
 export const MAX_ROTATION = 180;
@@ -157,7 +157,7 @@ export function clampZoom(zoom: number): number {
 /**
  * Clamps section transform attributes to strict TASK-P11-003 bounds:
  * positionX/Y: [0, 100000]
- * width/height: [1, 100000] (strictly > 0)
+ * width/height: [0.001, 100000] (strictly > 0)
  * rotationDeg: [-180, 180]
  * zIndex: [-1000, 1000]
  */
@@ -230,8 +230,8 @@ export function layoutBounds(
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)) {
       return;
     }
-    const safeW = Math.max(1, w);
-    const safeH = Math.max(1, h);
+    const safeW = Math.max(MIN_DIMENSION, w);
+    const safeH = Math.max(MIN_DIMENSION, h);
     const safeRot = Number.isFinite(rotationDeg) ? rotationDeg : 0;
 
     if (safeRot === 0) {
@@ -290,8 +290,8 @@ export function layoutBounds(
     return { ...DEFAULT_LAYOUT_BOUNDS };
   }
 
-  const width = Math.max(1, maxX - minX);
-  const height = Math.max(1, maxY - minY);
+  const width = Math.max(MIN_DIMENSION, maxX - minX);
+  const height = Math.max(MIN_DIMENSION, maxY - minY);
 
   return {
     minX: Number(minX.toFixed(3)),
@@ -364,8 +364,44 @@ export function sortedLayoutItems(first: readonly any[], second?: readonly any[]
 }
 
 /**
+ * Converts a section-local coordinate to world coordinate using the section's transform:
+ * translate(positionX positionY) rotate(rotationDeg width/2 height/2).
+ */
+export function sectionLocalToWorld(localPoint: Point, section: SectionTransform): Point {
+  const rot = Number.isFinite(section.rotationDeg) ? section.rotationDeg : 0;
+  const w = Number.isFinite(section.width) ? section.width : 0;
+  const h = Number.isFinite(section.height) ? section.height : 0;
+  const px = Number.isFinite(section.positionX) ? section.positionX : 0;
+  const py = Number.isFinite(section.positionY) ? section.positionY : 0;
+
+  if (rot === 0) {
+    return {
+      x: Number((px + localPoint.x).toFixed(3)),
+      y: Number((py + localPoint.y).toFixed(3)),
+    };
+  }
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const rad = (rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const dx = localPoint.x - cx;
+  const dy = localPoint.y - cy;
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+
+  return {
+    x: Number((px + cx + rx).toFixed(3)),
+    y: Number((py + cy + ry).toFixed(3)),
+  };
+}
+
+/**
  * Calculates new position and dimensions when dragging a corner handle ('nw', 'ne', 'se', 'sw')
  * taking into account section rotation, grid snap, and min/max bounds.
+ * Preserves the exact world coordinate of the nominally fixed opposite corner for all handles and rotations.
  */
 export function calculateCornerResize(
   initial: SectionTransform,
@@ -383,52 +419,77 @@ export function calculateCornerResize(
   const localDx = worldDelta.x * cos + worldDelta.y * sin;
   const localDy = -worldDelta.x * sin + worldDelta.y * cos;
 
+  let oldOppositeLocal: Point;
   let newW = initial.width;
   let newH = initial.height;
-  let shiftLocalX = 0;
-  let shiftLocalY = 0;
 
   switch (handle) {
     case 'se': {
+      oldOppositeLocal = { x: 0, y: 0 };
       newW = clampDimension(snap(initial.width + localDx, snapStep), minDimension, MAX_DIMENSION);
       newH = clampDimension(snap(initial.height + localDy, snapStep), minDimension, MAX_DIMENSION);
       break;
     }
     case 'sw': {
+      oldOppositeLocal = { x: initial.width, y: 0 };
       newW = clampDimension(snap(initial.width - localDx, snapStep), minDimension, MAX_DIMENSION);
       newH = clampDimension(snap(initial.height + localDy, snapStep), minDimension, MAX_DIMENSION);
-      shiftLocalX = initial.width - newW;
       break;
     }
     case 'ne': {
+      oldOppositeLocal = { x: 0, y: initial.height };
       newW = clampDimension(snap(initial.width + localDx, snapStep), minDimension, MAX_DIMENSION);
       newH = clampDimension(snap(initial.height - localDy, snapStep), minDimension, MAX_DIMENSION);
-      shiftLocalY = initial.height - newH;
       break;
     }
     case 'nw': {
+      oldOppositeLocal = { x: initial.width, y: initial.height };
       newW = clampDimension(snap(initial.width - localDx, snapStep), minDimension, MAX_DIMENSION);
       newH = clampDimension(snap(initial.height - localDy, snapStep), minDimension, MAX_DIMENSION);
-      shiftLocalX = initial.width - newW;
-      shiftLocalY = initial.height - newH;
       break;
     }
   }
 
-  // Rotate local shift back to world space
-  const worldShiftX = shiftLocalX * cos - shiftLocalY * sin;
-  const worldShiftY = shiftLocalX * sin + shiftLocalY * cos;
+  // Exact world coordinate of opposite corner in initial transform
+  const oldCx = initial.width / 2;
+  const oldCy = initial.height / 2;
+  const oldDx = oldOppositeLocal.x - oldCx;
+  const oldDy = oldOppositeLocal.y - oldCy;
+  const oldRotX = oldDx * cos - oldDy * sin;
+  const oldRotY = oldDx * sin + oldDy * cos;
+  const fixedWorldX = initial.positionX + oldCx + oldRotX;
+  const fixedWorldY = initial.positionY + oldCy + oldRotY;
 
-  const positionX = clampNumber(
-    Number((initial.positionX + worldShiftX).toFixed(3)),
-    MIN_POSITION,
-    MAX_POSITION,
-  );
-  const positionY = clampNumber(
-    Number((initial.positionY + worldShiftY).toFixed(3)),
-    MIN_POSITION,
-    MAX_POSITION,
-  );
+  // Local coordinate of opposite corner in the resized section
+  let newOppositeLocal: Point;
+  switch (handle) {
+    case 'se':
+      newOppositeLocal = { x: 0, y: 0 };
+      break;
+    case 'sw':
+      newOppositeLocal = { x: newW, y: 0 };
+      break;
+    case 'ne':
+      newOppositeLocal = { x: 0, y: newH };
+      break;
+    case 'nw':
+      newOppositeLocal = { x: newW, y: newH };
+      break;
+  }
+
+  // Derive new section origin (positionX, positionY) anchoring the fixed opposite corner
+  const newCx = newW / 2;
+  const newCy = newH / 2;
+  const newDx = newOppositeLocal.x - newCx;
+  const newDy = newOppositeLocal.y - newCy;
+  const newRotX = newDx * cos - newDy * sin;
+  const newRotY = newDx * sin + newDy * cos;
+
+  const rawNewPosX = fixedWorldX - (newCx + newRotX);
+  const rawNewPosY = fixedWorldY - (newCy + newRotY);
+
+  const positionX = clampNumber(Number(rawNewPosX.toFixed(3)), MIN_POSITION, MAX_POSITION);
+  const positionY = clampNumber(Number(rawNewPosY.toFixed(3)), MIN_POSITION, MAX_POSITION);
 
   return {
     positionX,
