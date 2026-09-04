@@ -6,186 +6,211 @@
 
 ## 1. Goal
 
-Improve structure, readability, duplication, modularity, or maintainability **without changing externally observable behavior**, unless the approved task explicitly defines a behavior change.
+Improve structure, readability, duplication, modularity, or maintainability **without changing externally observable behavior**, unless an approved task explicitly defines a behavior change.
 
-Refactoring is not a license to redesign unrelated architecture. Preserve contracts and make structural change incrementally so regressions remain diagnosable.
+Refactoring is not permission to redesign unrelated architecture.
+
+Model/provider/effort selection is centralized in `.ai/MODEL_ROUTER.md`.
 
 ---
 
 ## 2. Core Rules
 
-1. **Behavior preservation is the default contract.** API responses, event payloads, DB semantics, authorization, side effects, state transitions, and frontend behavior must remain unchanged unless the task explicitly says otherwise.
-2. **Characterize before changing weakly tested behavior.** If important existing behavior lacks adequate tests, add characterization/regression tests before structural edits.
-3. **Separate refactor from feature work.** Do not hide feature changes or bug fixes inside a large refactor. If a defect is discovered, use `.ai/workflows/03-bug-fixing.md` or create a separate task.
-4. **Small reversible steps.** Prefer a sequence of understandable transformations over a rewrite.
-5. **Preserve public contracts.** Do not casually rename endpoints, DTO fields, event fields, DB columns, environment variables, route paths, or shared APIs.
-6. **Do not weaken invariants for elegance.** Simpler-looking code is worse if it reduces transaction, locking, security, or validation guarantees.
-7. **Use established abstractions.** Consolidate onto existing shared modules/patterns instead of creating parallel frameworks.
-8. **Measure performance claims.** Performance refactors require a realistic reason or measurement; do not trade clarity/correctness for speculative speed.
+1. Behavior preservation is the default contract.
+2. Characterize weakly tested important behavior before structural changes.
+3. Do not hide features/bug fixes inside a broad refactor.
+4. Prefer small reversible transformations over rewrites.
+5. Preserve public API/event/DB/env/route contracts unless explicitly approved.
+6. Never weaken transaction/locking/security/validation invariants for elegance.
+7. Reuse established shared abstractions instead of creating parallel frameworks.
+8. Performance refactors require a concrete reason/measurement.
+9. Preserve unrelated user working-tree changes.
 
 ---
 
-## 3. Before Refactoring
+## 3. Pre-Refactor Contract
 
-Document or infer from an approved task:
+Before editing, establish:
 
 - exact scope;
 - structural problem being solved;
-- behavior that must remain unchanged;
+- behavior that must stay unchanged;
 - affected public/internal contracts;
 - critical invariants;
-- existing tests that protect behavior;
+- current tests that protect behavior;
 - missing characterization tests;
-- expected simplification or measurable benefit;
-- rollback boundary.
+- expected simplification/measurable benefit;
+- rollback boundary;
+- complexity/risk/verification metadata.
 
-For large cross-service or architectural refactors, use an approved planning task and ADR where required. Model selection is governed by `.ai/MODEL_ROUTER.md`.
+Large cross-service/architectural refactors require planning and an ADR when repository policy says so.
 
 ---
 
 ## 4. Safe Refactor Sequence
 
 ```text
-1. Read task, architecture, ADRs, and relevant AGENTS rules.
-2. Inspect callers, tests, persistence/events/contracts around the target.
+1. Read task, ADRs, architecture, AGENTS rules.
+2. Inspect callers/tests/persistence/events/contracts around target.
 3. Run current targeted tests to establish a green baseline.
 4. Add characterization tests for important unprotected behavior.
 5. Apply one coherent structural transformation.
-6. Run the narrow relevant tests.
-7. Repeat for the next transformation.
-8. Run broader affected module/integration checks.
+6. Run narrow relevant tests.
+7. Repeat incrementally.
+8. Run broader module/integration checks.
 9. Inspect the complete diff for accidental behavior changes.
-10. Send the final patch through `.ai/workflows/05-code-review.md`.
-11. Pass `.ai/workflows/04-testing-and-qa.md` before completion.
+10. Send patch through independent review.
+11. Resolve findings/re-review.
+12. Pass final QA.
 ```
 
-Do not wait until the end of a very large rewrite to discover which transformation broke behavior.
+Do not wait until the end of a large rewrite to discover which transformation changed behavior.
 
 ---
 
-## 5. Backend Refactoring Checks
+## 5. Backend Refactoring Risk Checks
 
-Pay special attention to accidental semantic changes in:
+Pay special attention to accidental changes in:
 
-- `@Transactional` placement/propagation/read-only flags;
-- JPA fetch behavior and entity lifecycle;
-- lock acquisition and ordering;
+- `@Transactional` placement/propagation/read-only behavior;
+- Spring proxy/self-invocation semantics;
+- JPA fetch/entity lifecycle;
+- lock acquisition/order;
 - repository query semantics;
-- exception types/error codes/HTTP mapping;
+- error/status mapping;
 - validation order;
-- idempotency key handling;
-- outbox/event creation timing;
+- idempotency handling;
+- outbox/event timing;
 - retry behavior;
 - serialization/record field names;
 - Flyway/entity alignment;
-- shared `common-*` abstractions.
+- shared `common-*` contracts.
 
-Moving code between methods/classes can change Spring proxy behavior. Refactoring a method call from inter-bean to self-invocation, or moving annotations, may silently change transaction/security semantics even when code looks equivalent.
+Moving code between methods/classes can change Spring proxy/transaction/security behavior even when logic looks equivalent.
 
 ---
 
-## 6. Frontend Refactoring Checks
+## 6. Frontend Refactoring Risk Checks
 
 Preserve:
 
-- Signal ownership and update semantics;
+- Signal ownership/update semantics;
 - `computed()` dependencies;
 - request timing/cancellation/reconciliation;
 - input/output contracts;
-- route behavior;
-- loading/error/empty states;
-- accessibility and keyboard interaction;
+- routes/guards;
+- loading/error/empty behavior;
+- accessibility/keyboard behavior;
 - WebSocket/subscription/timer lifecycle;
 - responsive behavior;
 - backend DTO compatibility.
 
-Do not replace a clear local state model with a broader shared store unless the task demonstrates why shared ownership is needed.
+Do not replace clear local state with a broader store without an approved architectural reason.
 
 ---
 
-## 7. Refactoring Tests
+## 7. Refactoring Evidence
 
 Useful evidence includes:
 
-- pre-existing regression tests passing before and after;
-- characterization tests added before touching fragile legacy behavior;
+- existing tests green before and after;
+- characterization tests added before fragile changes;
 - API/serialization contract tests when types/mapping move;
-- integration tests when repository/transaction/service boundaries change;
+- integration tests when repository/transaction/service boundaries move;
 - concurrency tests when lock/transaction code is reorganized;
-- frontend interaction/state tests when component/service responsibilities move.
+- frontend interaction/state tests when responsibilities move.
 
-Do not assert only internal structure. Tests should protect the behavior the refactor promises to preserve.
+Do not assert only internal structure. Protect the behavior the refactor promises to preserve.
 
 ---
 
 ## 8. Large Refactor Guardrails
 
-For repo-wide or large cross-file refactors:
+For large/repo-wide refactors:
 
-- plan the transformation in dependency order;
-- avoid simultaneous unrelated renames + logic movement + contract changes;
-- keep compatibility adapters temporarily when needed for safe migration;
-- verify each module before moving to the next;
-- keep commits/review units understandable where the workflow permits;
-- explicitly inspect deleted code to confirm no unique behavior was lost;
-- compare old/new public contracts and runtime configuration;
+- plan dependency order;
+- avoid mixing renames + logic movement + contract change at once;
+- keep compatibility adapters temporarily where useful;
+- verify each module before moving on;
+- keep review units understandable;
+- inspect deleted code for unique behavior;
+- compare old/new public contracts/configuration;
 - require substantive independent review.
 
-If the implementation becomes easier as a clean rewrite but correctness becomes harder to compare, prefer the safer incremental path.
+If a clean rewrite is easier to write but harder to prove equivalent, prefer the safer incremental path.
 
 ---
 
-## 9. Completion Criteria
+## 9. Model Routing Semantics
+
+Resolve through `.ai/MODEL_ROUTER.md`.
+
+Operational intent:
+
+- mechanical refactor execution -> Muse High (`Free -> Go`);
+- substantive/repo-wide deterministic refactor -> Muse xHigh (`Free -> Go`);
+- frontend/browser-heavy refactor -> Gemini High is a strong alternative/default when visual tooling dominates;
+- architecture-heavy planning -> Terra High or Gemini High according to dominant risk;
+- substantive independent review -> Terra High, Fast OFF;
+- critical-domain refactor review -> Sol High, Fast OFF.
+
+A failed refactor test is a quality/debugging event, not a reason to switch Muse Free -> Go unless Free is actually unavailable.
+
+---
+
+## 10. Completion Criteria
 
 A refactor is complete only when:
 
-- the stated structural problem is actually improved;
-- observable behavior is preserved except for explicitly approved changes;
+- stated structural problem is materially improved;
+- observable behavior is preserved except approved changes;
 - critical invariants remain intact;
-- characterization/regression coverage is adequate for changed boundaries;
-- targeted and broader relevant verification passes;
-- the final diff contains no unrelated feature work;
-- code review is complete and findings are resolved;
-- the final QA gate passes;
-- no temporary `.ai/tmp/review-*.md` ledger remains.
+- characterization/regression coverage is adequate;
+- targeted/broader verification passes;
+- no unrelated feature work entered the diff;
+- independent review completed;
+- accepted findings resolved/re-reviewed as required;
+- final QA passes;
+- no temporary review ledger remains.
 
-A refactor that is cleaner but less demonstrably correct is not an improvement.
+Cleaner code with weaker evidence of correctness is not an improvement.
 
 ---
 
-## 10. Next Stage Handoff: Independent Code Review
+## 11. Orchestrated Next Stage
 
-Once refactoring transformations and self-verification pass, hand off to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`).
+After refactor self-verification, supervisor routes to `.ai/workflows/05-code-review.md` using an independent reviewer selected by `.ai/MODEL_ROUTER.md`.
 
-### 10.1 AI Model & Reasoning Effort Selection
+Pass:
 
-Consult `.ai/MODEL_ROUTER.md`:
+- refactor objective;
+- behavior-preservation contract;
+- branch/worktree;
+- full diff;
+- before/after verification evidence;
+- characterization tests;
+- relevant backend/frontend risk checklist.
 
-| Refactoring Scope | Recommended Route | Alternative Route | Escalation / High Risk |
-|---|---|---|---|
-| **Substantive Architecture Refactor Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
-| **Mechanical / Low-Risk Refactor Review** | **GPT-5.6 Terra Medium** | **Gemini 3.8 Flash Medium** | **GPT-5.6 Terra High** |
-| **Critical Domain Refactor Review** (Holds, Locking, Payments, Security) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** |
+If findings exist, route through `.ai/workflows/03-bug-fixing.md`; then re-review as required and pass `.ai/workflows/04-testing-and-qa.md`.
 
-### 10.2 Next Stage Prompt Template
+### Manual fallback
 
-Copy and paste the following prompt to invoke the code reviewer:
+If delegation is unavailable, return a complete Next Stage Handoff with the router-derived reviewer model and a ready-to-run review prompt.
 
-```markdown
-You are the Independent Code Reviewer for SeatFlow reviewing a Refactoring change.
-Task/Scope: [Refactoring Scope / Task ID]
-Branch: `refactor/<scope>` (or `feat/p<XX>-<YYY>-<task-desc>`)
+---
 
-Instructions:
-1. Follow `.ai/workflows/05-code-review.md` and `.ai/workflows/06-refactoring.md`.
-2. Inspect the git diff against `develop`:
-   `git diff develop...HEAD`
-3. Verify that observable behavior is strictly preserved:
-   - No accidental contract changes (DTOs, REST endpoints, events, DB schema).
-   - Invariant guarantees remain intact.
-   - Spring proxy, `@Transactional`, JPA fetch types, and caching behavior are preserved.
-   - Angular Signals/computed reactivity semantics remain unchanged.
-4. Verify that characterization and existing regression tests pass.
-5. If behavioral drift, regressions, or contract breaks are found, create `.ai/tmp/review-<branch-or-task>.md`.
-6. Deliver verdict: `APPROVE`, `APPROVE WITH NON-BLOCKING P3 NOTES`, or `CHANGES REQUIRED`.
+## 12. Refactor Output
+
+```text
+STAGE: REFACTOR
+TASK/SCOPE: ...
+PROVIDER/MODEL/EFFORT: ...
+FAST MODE: ...
+BEHAVIOR CONTRACT: ...
+TRANSFORMATIONS: ...
+FILES TOUCHED: ...
+CHARACTERIZATION/REGRESSION TESTS: ...
+VERIFICATION: ...
+UNRESOLVED RISKS: ...
+NEXT STAGE: INDEPENDENT REVIEW
 ```
