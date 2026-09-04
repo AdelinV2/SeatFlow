@@ -7,12 +7,14 @@ import {
   computed,
   effect,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
+  LayoutGeometry,
   VenueLayoutElement,
   VenueSectionLayout,
   VenueSectionSeat,
@@ -20,25 +22,37 @@ import {
 import {
   CornerHandle,
   DEFAULT_LAYOUT_BOUNDS,
+  MAX_DIMENSION,
   MAX_POSITION,
+  MAX_ROTATION,
+  MAX_Z_INDEX,
+  MAX_ZOOM,
   MIN_DIMENSION,
   MIN_POSITION,
+  MIN_ROTATION,
+  MIN_Z_INDEX,
+  MIN_ZOOM,
   Point,
   SectionTransform,
   SortedCanvasItem,
   calculateCornerResize,
   calculateRotation,
+  clampDimension,
   clampNumber,
   clampZoom,
   clientDeltaToWorld,
   clientPointToWorld,
   layoutBounds,
-  MAX_ZOOM,
-  MIN_ZOOM,
+  normalizeRotation,
   snap,
   sortedLayoutItems,
 } from '../../../utils/layout-geometry';
 import { SectionNodeComponent } from '../section-node/section-node.component';
+import { LayoutElementNodeComponent } from '../layout-element-node/layout-element-node.component';
+import {
+  isValidLayoutElementType,
+  LayoutElementPaletteComponent,
+} from '../layout-element-palette/layout-element-palette.component';
 
 export interface SectionTransformChangeEvent {
   sectionId: string | null;
@@ -74,12 +88,25 @@ function isModifierPressed(event: MouseEvent | KeyboardEvent): boolean {
 }
 
 type InteractionMode =
-  'none' | 'pan' | 'pinch' | 'drag-section' | 'resize-section' | 'rotate-section';
+  | 'none'
+  | 'pan'
+  | 'pinch'
+  | 'drag-section'
+  | 'resize-section'
+  | 'rotate-section'
+  | 'drag-element'
+  | 'resize-element'
+  | 'rotate-element';
 
 @Component({
   selector: 'app-layout-canvas',
   standalone: true,
-  imports: [CommonModule, SectionNodeComponent],
+  imports: [
+    CommonModule,
+    SectionNodeComponent,
+    LayoutElementNodeComponent,
+    LayoutElementPaletteComponent,
+  ],
   templateUrl: './layout-canvas.component.html',
   styleUrl: './layout-canvas.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -130,17 +157,35 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   }>();
   readonly toolModeChange = output<'select' | 'toggle' | 'paint'>();
 
+  // Element Outputs
+  readonly elementsChange = output<VenueLayoutElement[]>();
+  readonly elementSelected = output<VenueLayoutElement | null>();
+  readonly elementTransformChanged = output<{
+    element: VenueLayoutElement;
+    index: number;
+  }>();
+  readonly elementUpdated = output<VenueLayoutElement>();
+  readonly elementRemoved = output<VenueLayoutElement>();
+  readonly elementDuplicated = output<VenueLayoutElement>();
+
   // Signals
   readonly zoomLevel = signal<number>(1.0);
   readonly panX = signal<number>(0);
   readonly panY = signal<number>(0);
   readonly isDragging = signal<boolean>(false);
 
+  // Internal draft elements linked to input elements
+  readonly internalElements = linkedSignal<VenueLayoutElement[]>(() => {
+    return [...(this.elements() ?? [])];
+  });
+  readonly selectedElementKey = signal<string | null>(null);
+  readonly elementValidationError = signal<string | null>(null);
+
   // Aliases for convenience/spec compliance
   readonly zoom = this.zoomLevel;
   readonly dragging = this.isDragging;
 
-  // Normalized selection set
+  // Normalized selection set for sections
   readonly selectedIdSet = computed<Set<string>>(() => {
     const raw = this.selectedSectionIds();
     if (raw instanceof Set) {
@@ -149,9 +194,24 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     return new Set(raw ?? []);
   });
 
+  // Selected element computed
+  readonly selectedElement = computed<VenueLayoutElement | null>(() => {
+    const key = this.selectedElementKey();
+    if (!key) {
+      return null;
+    }
+    const list = this.internalElements();
+    for (let i = 0; i < list.length; i++) {
+      if (this.getElementKey(list[i], i) === key) {
+        return list[i];
+      }
+    }
+    return null;
+  });
+
   // Rendering items ordered by (zIndex, stable tie-break)
   readonly sortedItems = computed<SortedCanvasItem[]>(() => {
-    return sortedLayoutItems(this.sections(), this.elements());
+    return sortedLayoutItems(this.sections(), this.internalElements());
   });
 
   // Signal for internal mode tracking (instantaneous local response)
@@ -182,6 +242,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   private totalDragDistance = 0;
   private activeSection: VenueSectionLayout | null = null;
   private initialTransform: SectionTransform | null = null;
+  private activeLayoutElement: VenueLayoutElement | null = null;
+  private initialElementGeometry: LayoutGeometry | null = null;
   private activeHandle: CornerHandle | 'rotate' | null = null;
 
   // Pinch zoom state
@@ -256,7 +318,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   fitToLayout(): void {
-    const bounds = layoutBounds(this.sections(), this.elements());
+    const bounds = layoutBounds(this.sections(), this.internalElements());
     const rect = this.getContainerRect();
     const viewW = rect.width > 0 ? rect.width : 1000;
     const viewH = rect.height > 0 ? rect.height : 800;
@@ -265,7 +327,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       bounds.width === DEFAULT_LAYOUT_BOUNDS.width &&
       bounds.height === DEFAULT_LAYOUT_BOUNDS.height &&
       this.sections().length === 0 &&
-      this.elements().length === 0
+      this.internalElements().length === 0
     ) {
       this.resetView();
       return;
@@ -301,14 +363,16 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   // --- Pointer Handlers on SVG Canvas ---
 
   onCanvasPointerDown(event: PointerEvent): void {
-    // Only primary button initiates canvas pan or selection
     if (event.button !== 0) {
       return;
     }
 
-    // Ignore if clicked on a section node or handle directly
     const target = event.target as Element;
-    if (target.closest('.section-node') || target.closest('.transform-handle')) {
+    if (
+      target.closest('.section-node') ||
+      target.closest('.layout-element-node') ||
+      target.closest('.transform-handle')
+    ) {
       return;
     }
 
@@ -339,7 +403,6 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
     this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
-    // Multi-touch pinch zoom
     if (this.activePointers.size >= 2) {
       this.handlePinchMove();
       return;
@@ -452,6 +515,134 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         });
         break;
       }
+      case 'drag-element': {
+        if (!this.editable() || !this.activeLayoutElement || !this.initialElementGeometry) {
+          return;
+        }
+        const clientDelta = {
+          x: event.clientX - this.dragStartClient.x,
+          y: event.clientY - this.dragStartClient.y,
+        };
+        const worldDelta = clientDeltaToWorld(clientDelta, this.zoomLevel());
+
+        let newX = this.initialElementGeometry.x + worldDelta.x;
+        let newY = this.initialElementGeometry.y + worldDelta.y;
+
+        const step = this.snapStep();
+        if (step > 0) {
+          newX = snap(newX, step);
+          newY = snap(newY, step);
+        }
+
+        newX = clampNumber(Number(newX.toFixed(3)), MIN_POSITION, MAX_POSITION);
+        newY = clampNumber(Number(newY.toFixed(3)), MIN_POSITION, MAX_POSITION);
+
+        const targetEl = this.activeLayoutElement;
+        const updated: VenueLayoutElement = {
+          ...targetEl,
+          geometry: {
+            ...targetEl.geometry,
+            x: newX,
+            y: newY,
+          },
+        };
+
+        this.activeLayoutElement = updated;
+        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
+        const idx = this.internalElements().indexOf(updated);
+        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.elementsChange.emit(this.internalElements());
+        break;
+      }
+      case 'resize-element': {
+        if (
+          !this.editable() ||
+          !this.activeLayoutElement ||
+          !this.initialElementGeometry ||
+          !this.activeHandle ||
+          this.activeHandle === 'rotate'
+        ) {
+          return;
+        }
+        const clientDelta = {
+          x: event.clientX - this.dragStartClient.x,
+          y: event.clientY - this.dragStartClient.y,
+        };
+        const worldDelta = clientDeltaToWorld(clientDelta, this.zoomLevel());
+
+        const resize = calculateCornerResize(
+          {
+            positionX: this.initialElementGeometry.x,
+            positionY: this.initialElementGeometry.y,
+            width: this.initialElementGeometry.width,
+            height: this.initialElementGeometry.height,
+            rotationDeg: this.initialElementGeometry.rotationDeg,
+          },
+          this.activeHandle as CornerHandle,
+          worldDelta,
+          this.snapStep(),
+          MIN_DIMENSION,
+        );
+
+        const targetEl = this.activeLayoutElement;
+        const updated: VenueLayoutElement = {
+          ...targetEl,
+          geometry: {
+            ...targetEl.geometry,
+            x: resize.positionX,
+            y: resize.positionY,
+            width: resize.width,
+            height: resize.height,
+          },
+        };
+
+        this.activeLayoutElement = updated;
+        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
+        const idx = this.internalElements().indexOf(updated);
+        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.elementsChange.emit(this.internalElements());
+        break;
+      }
+      case 'rotate-element': {
+        if (!this.editable() || !this.activeLayoutElement || !this.initialElementGeometry) {
+          return;
+        }
+        const containerRect = this.getContainerRect();
+        const currentWorld = clientPointToWorld(
+          { x: event.clientX, y: event.clientY },
+          containerRect,
+          { x: this.panX(), y: this.panY() },
+          this.zoomLevel(),
+        );
+
+        const newRot = calculateRotation(
+          {
+            positionX: this.initialElementGeometry.x,
+            positionY: this.initialElementGeometry.y,
+            width: this.initialElementGeometry.width,
+            height: this.initialElementGeometry.height,
+            rotationDeg: this.initialElementGeometry.rotationDeg,
+          },
+          currentWorld,
+          this.snapStep(),
+        );
+
+        const targetEl = this.activeLayoutElement;
+        const updated: VenueLayoutElement = {
+          ...targetEl,
+          geometry: {
+            ...targetEl.geometry,
+            rotationDeg: newRot,
+          },
+        };
+
+        this.activeLayoutElement = updated;
+        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
+        const idx = this.internalElements().indexOf(updated);
+        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.elementsChange.emit(this.internalElements());
+        break;
+      }
     }
   }
 
@@ -462,9 +653,10 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     this.releasePointer(event.pointerId);
     this.activePointers.delete(event.pointerId);
 
-    // Background primary click clears selection
+    // Background primary click clears section selection & element selection
     if (wasPan && distance < 4) {
       this.selectionChanged.emit(new Set());
+      this.deselectElement();
     }
 
     if (this.activePointers.size === 0) {
@@ -488,6 +680,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    this.deselectElement();
+
     const secId = getCanvasSectionKey(event.section);
     const isMultiSelect = event.event.ctrlKey || event.event.metaKey;
 
@@ -508,6 +702,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     if (!this.editable()) {
       return;
     }
+
+    this.deselectElement();
 
     const secId = getCanvasSectionKey(event.section);
     if (!this.selectedIdSet().has(secId) && !event.event.ctrlKey && !event.event.metaKey) {
@@ -550,6 +746,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    this.deselectElement();
+
     const viewport = this.svgViewport()?.nativeElement;
     if (viewport) {
       viewport.setPointerCapture(event.event.pointerId);
@@ -577,6 +775,348 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       y: event.event.clientY,
     });
   }
+
+  // --- Element Event Handlers from Child LayoutElementNodes ---
+
+  getElementKey(element: VenueLayoutElement, index?: number): string {
+    if (element.elementId) {
+      return `elem-${element.elementId}`;
+    }
+    const idx = index ?? this.internalElements().indexOf(element);
+    return `elem-idx-${idx >= 0 ? idx : 0}`;
+  }
+
+  isElementSelected(element: VenueLayoutElement, index?: number): boolean {
+    const key = this.selectedElementKey();
+    if (!key) {
+      return false;
+    }
+    return this.getElementKey(element, index) === key;
+  }
+
+  selectElement(element: VenueLayoutElement | null, index?: number): void {
+    if (!element) {
+      this.deselectElement();
+      return;
+    }
+    const key = this.getElementKey(element, index);
+    this.selectedElementKey.set(key);
+    this.elementValidationError.set(null);
+    this.selectionChanged.emit(new Set());
+    this.elementSelected.emit(element);
+  }
+
+  deselectElement(): void {
+    this.selectedElementKey.set(null);
+    this.elementValidationError.set(null);
+    this.elementSelected.emit(null);
+  }
+
+  onElementClick(event: { event: MouseEvent; element: VenueLayoutElement }): void {
+    if (!this.editable()) {
+      return;
+    }
+    const idx = this.internalElements().indexOf(event.element);
+    this.selectElement(event.element, idx);
+  }
+
+  onElementPointerDown(event: { event: PointerEvent; element: VenueLayoutElement }): void {
+    if (!this.editable()) {
+      return;
+    }
+
+    const idx = this.internalElements().indexOf(event.element);
+    this.selectElement(event.element, idx);
+
+    const viewport = this.svgViewport()?.nativeElement;
+    if (viewport) {
+      viewport.setPointerCapture(event.event.pointerId);
+      this.capturedElement = viewport;
+      this.capturedPointerId = event.event.pointerId;
+    }
+
+    this.mode = 'drag-element';
+    this.activeLayoutElement = event.element;
+    this.initialElementGeometry = { ...event.element.geometry };
+    this.dragStartClient = { x: event.event.clientX, y: event.event.clientY };
+    this.lastDragClient = { x: event.event.clientX, y: event.event.clientY };
+    this.totalDragDistance = 0;
+    this.isDragging.set(true);
+    this.activePointers.set(event.event.pointerId, {
+      x: event.event.clientX,
+      y: event.event.clientY,
+    });
+  }
+
+  onElementHandlePointerDown(event: {
+    event: PointerEvent;
+    element: VenueLayoutElement;
+    handle: CornerHandle | 'rotate';
+  }): void {
+    if (!this.editable()) {
+      return;
+    }
+
+    const viewport = this.svgViewport()?.nativeElement;
+    if (viewport) {
+      viewport.setPointerCapture(event.event.pointerId);
+      this.capturedElement = viewport;
+      this.capturedPointerId = event.event.pointerId;
+    }
+
+    this.activeLayoutElement = event.element;
+    this.activeHandle = event.handle;
+    this.initialElementGeometry = { ...event.element.geometry };
+    this.dragStartClient = { x: event.event.clientX, y: event.event.clientY };
+    this.lastDragClient = { x: event.event.clientX, y: event.event.clientY };
+    this.totalDragDistance = 0;
+    this.isDragging.set(true);
+    this.mode = event.handle === 'rotate' ? 'rotate-element' : 'resize-element';
+    this.activePointers.set(event.event.pointerId, {
+      x: event.event.clientX,
+      y: event.event.clientY,
+    });
+  }
+
+  onElementKeyDown(event: { event: KeyboardEvent; element: VenueLayoutElement }): void {
+    if (!this.editable()) {
+      return;
+    }
+    const ke = event.event;
+    const step = this.snapStep() > 0 ? this.snapStep() : 10;
+    if (ke.key === 'ArrowUp') {
+      ke.preventDefault();
+      this.updateSelectedElementGeometry({ y: event.element.geometry.y - step });
+    } else if (ke.key === 'ArrowDown') {
+      ke.preventDefault();
+      this.updateSelectedElementGeometry({ y: event.element.geometry.y + step });
+    } else if (ke.key === 'ArrowLeft') {
+      ke.preventDefault();
+      this.updateSelectedElementGeometry({ x: event.element.geometry.x - step });
+    } else if (ke.key === 'ArrowRight') {
+      ke.preventDefault();
+      this.updateSelectedElementGeometry({ x: event.element.geometry.x + step });
+    } else if (ke.key === 'Delete' || ke.key === 'Backspace') {
+      ke.preventDefault();
+      this.removeElement(event.element);
+    } else if ((ke.ctrlKey || ke.metaKey) && ke.key.toLowerCase() === 'd') {
+      ke.preventDefault();
+      this.duplicateElement(event.element);
+    }
+  }
+
+  onElementCreatedFromPalette(element: VenueLayoutElement): void {
+    if (!this.editable()) {
+      return;
+    }
+    if (!element || !isValidLayoutElementType(element.type)) {
+      this.elementValidationError.set(`Unsupported layout element type: ${element?.type}`);
+      return;
+    }
+    // Creation contract (TASK-P11-008 §5): new elements are always null-ID and
+    // LABEL requires visible non-blank text. Reject before any state mutation.
+    if (element.type === 'LABEL' && (!element.label || element.label.trim() === '')) {
+      this.elementValidationError.set('LABEL requires visible non-blank text');
+      return;
+    }
+    const g = element.geometry;
+    const coords = [g?.x, g?.y, g?.width, g?.height, g?.rotationDeg];
+    if (!g || !coords.every((v) => Number.isFinite(v))) {
+      this.elementValidationError.set('Invalid element geometry');
+      return;
+    }
+    const normalized: VenueLayoutElement = {
+      elementId: null,
+      type: element.type,
+      label: element.type === 'LABEL' ? element.label!.trim() : (element.label ?? null),
+      geometry: {
+        x: clampNumber(g.x, MIN_POSITION, MAX_POSITION),
+        y: clampNumber(g.y, MIN_POSITION, MAX_POSITION),
+        width: clampDimension(g.width, MIN_DIMENSION, MAX_DIMENSION),
+        height: clampDimension(g.height, MIN_DIMENSION, MAX_DIMENSION),
+        rotationDeg: clampNumber(normalizeRotation(g.rotationDeg), MIN_ROTATION, MAX_ROTATION),
+      },
+      zIndex: clampNumber(
+        Number.isFinite(element.zIndex) ? element.zIndex : 0,
+        MIN_Z_INDEX,
+        MAX_Z_INDEX,
+      ),
+    };
+    this.elementValidationError.set(null);
+    this.internalElements.update((list) => [...list, normalized]);
+    const idx = this.internalElements().length - 1;
+    this.selectElement(normalized, idx);
+    this.elementsChange.emit(this.internalElements());
+  }
+
+  duplicateSelectedElement(): VenueLayoutElement | null {
+    const selected = this.selectedElement();
+    if (!selected) {
+      return null;
+    }
+    return this.duplicateElement(selected);
+  }
+
+  duplicateElement(element: VenueLayoutElement): VenueLayoutElement | null {
+    if (!this.editable() || !element) {
+      return null;
+    }
+    const newX = clampNumber(element.geometry.x + 20, MIN_POSITION, MAX_POSITION);
+    const newY = clampNumber(element.geometry.y + 20, MIN_POSITION, MAX_POSITION);
+
+    let maxZ = -1;
+    for (const el of this.internalElements()) {
+      if (Number.isFinite(el?.zIndex) && el.zIndex > maxZ) {
+        maxZ = el.zIndex;
+      }
+    }
+    for (const s of this.sections()) {
+      if (Number.isFinite(s?.zIndex) && s.zIndex > maxZ) {
+        maxZ = s.zIndex;
+      }
+    }
+    const nextZ = clampNumber(maxZ + 1, MIN_Z_INDEX, MAX_Z_INDEX);
+
+    const copy: VenueLayoutElement = {
+      elementId: null,
+      type: element.type,
+      label: element.label,
+      geometry: {
+        x: newX,
+        y: newY,
+        width: element.geometry.width,
+        height: element.geometry.height,
+        rotationDeg: element.geometry.rotationDeg,
+      },
+      zIndex: nextZ,
+    };
+
+    this.internalElements.update((list) => [...list, copy]);
+    const newIdx = this.internalElements().length - 1;
+    this.selectElement(copy, newIdx);
+    this.elementDuplicated.emit(copy);
+    this.elementsChange.emit(this.internalElements());
+    return copy;
+  }
+
+  removeSelectedElement(): void {
+    const selected = this.selectedElement();
+    if (selected) {
+      this.removeElement(selected);
+    }
+  }
+
+  removeElement(element: VenueLayoutElement): void {
+    if (!this.editable() || !element) {
+      return;
+    }
+    this.internalElements.update((list) => list.filter((el) => el !== element));
+    if (this.selectedElement() === element) {
+      this.deselectElement();
+    }
+    this.elementRemoved.emit(element);
+    this.elementsChange.emit(this.internalElements());
+  }
+
+  updateSelectedElementLabel(newLabel: string): boolean {
+    const selected = this.selectedElement();
+    if (!this.editable() || !selected) {
+      return false;
+    }
+    if (selected.type === 'LABEL' && (!newLabel || newLabel.trim() === '')) {
+      this.elementValidationError.set('LABEL requires visible non-blank text');
+      return false;
+    }
+    this.elementValidationError.set(null);
+    const formattedLabel = selected.type === 'LABEL' ? newLabel.trim() : newLabel || null;
+    const updated: VenueLayoutElement = {
+      ...selected,
+      label: formattedLabel,
+    };
+    this.internalElements.update((list) => list.map((el) => (el === selected ? updated : el)));
+    this.elementUpdated.emit(updated);
+    this.elementsChange.emit(this.internalElements());
+    return true;
+  }
+
+  updateSelectedElementGeometry(geom: Partial<LayoutGeometry>): void {
+    const selected = this.selectedElement();
+    if (!this.editable() || !selected) {
+      return;
+    }
+    const current = selected.geometry;
+    const newX = geom.x !== undefined ? clampNumber(geom.x, MIN_POSITION, MAX_POSITION) : current.x;
+    const newY = geom.y !== undefined ? clampNumber(geom.y, MIN_POSITION, MAX_POSITION) : current.y;
+    const newW =
+      geom.width !== undefined
+        ? clampDimension(geom.width, MIN_DIMENSION, MAX_DIMENSION)
+        : current.width;
+    const newH =
+      geom.height !== undefined
+        ? clampDimension(geom.height, MIN_DIMENSION, MAX_DIMENSION)
+        : current.height;
+    const newRot =
+      geom.rotationDeg !== undefined
+        ? clampNumber(normalizeRotation(geom.rotationDeg), MIN_ROTATION, MAX_ROTATION)
+        : current.rotationDeg;
+
+    const updated: VenueLayoutElement = {
+      ...selected,
+      geometry: {
+        x: newX,
+        y: newY,
+        width: newW,
+        height: newH,
+        rotationDeg: newRot,
+      },
+    };
+    this.internalElements.update((list) => list.map((el) => (el === selected ? updated : el)));
+    this.elementUpdated.emit(updated);
+    this.elementsChange.emit(this.internalElements());
+  }
+
+  updateSelectedElementZIndex(newZ: number): void {
+    const selected = this.selectedElement();
+    if (!this.editable() || !selected) {
+      return;
+    }
+    const clampedZ = clampNumber(newZ, MIN_Z_INDEX, MAX_Z_INDEX);
+    const updated: VenueLayoutElement = {
+      ...selected,
+      zIndex: clampedZ,
+    };
+    this.internalElements.update((list) => list.map((el) => (el === selected ? updated : el)));
+    this.elementUpdated.emit(updated);
+    this.elementsChange.emit(this.internalElements());
+  }
+
+  onNumericParamChange(
+    param: 'x' | 'y' | 'width' | 'height' | 'rotationDeg' | 'zIndex',
+    event: Event,
+  ): void {
+    const input = event.target as HTMLInputElement;
+    const val = parseFloat(input.value);
+    if (!Number.isFinite(val)) {
+      return;
+    }
+    if (param === 'zIndex') {
+      this.updateSelectedElementZIndex(val);
+    } else {
+      this.updateSelectedElementGeometry({ [param]: val });
+    }
+  }
+
+  onLabelInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.updateSelectedElementLabel(input.value);
+  }
+
+  onLabelChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.updateSelectedElementLabel(input.value);
+  }
+
+  // --- Seat & Guide Handlers ---
 
   onSeatClick(event: {
     event: MouseEvent | KeyboardEvent;
@@ -693,6 +1233,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     this.activePointers.clear();
     this.activeSection = null;
     this.initialTransform = null;
+    this.activeLayoutElement = null;
+    this.initialElementGeometry = null;
     this.activeHandle = null;
     this.capturedElement = null;
     this.capturedPointerId = null;

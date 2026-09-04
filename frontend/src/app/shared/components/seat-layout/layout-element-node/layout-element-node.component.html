@@ -1,0 +1,210 @@
+<svg:g
+  class="layout-element layout-element-node"
+  [class]="
+    'layout-element layout-element-node element-' +
+    (isValidType() ? element().type.toLowerCase() : 'invalid')
+  "
+  [class.selected]="selected()"
+  [class.editable]="editable()"
+  [attr.transform]="transformString()"
+  (pointerdown)="onPointerDown($event)"
+  (click)="onClick($event)"
+  (keydown)="onKeyDown($event)"
+  [attr.tabindex]="editable() ? 0 : -1"
+  [attr.role]="editable() ? 'button' : 'img'"
+  [attr.aria-label]="(element().label || element().type) + (selected() ? ' (selected)' : '')"
+>
+  @if (isValidType()) {
+    @switch (element().type) {
+      @case ('STAGE') {
+        <svg:rect
+          class="stage-rect"
+          x="0"
+          y="0"
+          [attr.width]="element().geometry.width"
+          [attr.height]="element().geometry.height"
+          rx="10"
+          ry="10"
+        />
+        <svg:text
+          class="stage-title"
+          [attr.x]="element().geometry.width / 2"
+          [attr.y]="element().geometry.height / 2"
+          text-anchor="middle"
+          dominant-baseline="middle"
+        >
+          {{ element().label || 'STAGE' }}
+        </svg:text>
+      }
+      @case ('AISLE') {
+        <svg:rect
+          class="aisle-rect"
+          x="0"
+          y="0"
+          [attr.width]="element().geometry.width"
+          [attr.height]="element().geometry.height"
+          rx="4"
+          ry="4"
+        />
+        @if (element().label) {
+          <svg:text
+            class="aisle-title"
+            [attr.x]="element().geometry.width / 2"
+            [attr.y]="element().geometry.height / 2"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >
+            {{ element().label }}
+          </svg:text>
+        }
+      }
+      @case ('LABEL') {
+        <svg:rect
+          class="label-rect"
+          x="0"
+          y="0"
+          [attr.width]="element().geometry.width"
+          [attr.height]="element().geometry.height"
+          rx="4"
+          ry="4"
+        />
+        <svg:text
+          class="standalone-label"
+          [attr.x]="element().geometry.width / 2"
+          [attr.y]="element().geometry.height / 2"
+          text-anchor="middle"
+          dominant-baseline="middle"
+        >
+          {{ element().label }}
+        </svg:text>
+      }
+      @case ('BARRIER') {
+        <svg:rect
+          class="barrier-rect"
+          x="0"
+          y="0"
+          [attr.width]="element().geometry.width"
+          [attr.height]="element().geometry.height"
+        />
+      }
+      @case ('DECORATION') {
+        <svg:rect
+          class="decoration-rect"
+          x="0"
+          y="0"
+          [attr.width]="element().geometry.width"
+          [attr.height]="element().geometry.height"
+          rx="6"
+          ry="6"
+        />
+        @if (element().label) {
+          <svg:text
+            class="decoration-title"
+            [attr.x]="element().geometry.width / 2"
+            [attr.y]="element().geometry.height / 2"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >
+            {{ element().label }}
+          </svg:text>
+        }
+      }
+    }
+
+    <!-- Selection indicator & transform handles -->
+    @if (editable() && selected()) {
+      <svg:g class="transform-handles" role="group" aria-label="Transform Handles">
+        <!-- Rotation Stem Line & Rotation Handle -->
+        <svg:line
+          class="rotation-stem"
+          [attr.x1]="element().geometry.width / 2"
+          y1="0"
+          [attr.x2]="element().geometry.width / 2"
+          y2="-24"
+        />
+        <svg:circle
+          class="transform-handle rotation-handle"
+          [attr.cx]="element().geometry.width / 2"
+          cy="-24"
+          r="7"
+          role="button"
+          tabindex="0"
+          aria-label="Rotate element"
+          (pointerdown)="onHandlePointerDown($event, 'rotate')"
+        />
+
+        <!-- Corner Handle: NW -->
+        <svg:rect
+          class="transform-handle corner-handle nw"
+          [attr.x]="-halfHandle"
+          [attr.y]="-halfHandle"
+          [attr.width]="handleSize"
+          [attr.height]="handleSize"
+          role="button"
+          tabindex="0"
+          aria-label="Resize north-west"
+          (pointerdown)="onHandlePointerDown($event, 'nw')"
+        />
+
+        <!-- Corner Handle: NE -->
+        <svg:rect
+          class="transform-handle corner-handle ne"
+          [attr.x]="element().geometry.width - halfHandle"
+          [attr.y]="-halfHandle"
+          [attr.width]="handleSize"
+          [attr.height]="handleSize"
+          role="button"
+          tabindex="0"
+          aria-label="Resize north-east"
+          (pointerdown)="onHandlePointerDown($event, 'ne')"
+        />
+
+        <!-- Corner Handle: SE -->
+        <svg:rect
+          class="transform-handle corner-handle se"
+          [attr.x]="element().geometry.width - halfHandle"
+          [attr.y]="element().geometry.height - halfHandle"
+          [attr.width]="handleSize"
+          [attr.height]="handleSize"
+          role="button"
+          tabindex="0"
+          aria-label="Resize south-east"
+          (pointerdown)="onHandlePointerDown($event, 'se')"
+        />
+
+        <!-- Corner Handle: SW -->
+        <svg:rect
+          class="transform-handle corner-handle sw"
+          [attr.x]="-halfHandle"
+          [attr.y]="element().geometry.height - halfHandle"
+          [attr.width]="handleSize"
+          [attr.height]="handleSize"
+          role="button"
+          tabindex="0"
+          aria-label="Resize south-west"
+          (pointerdown)="onHandlePointerDown($event, 'sw')"
+        />
+      </svg:g>
+    }
+  } @else {
+    <!-- Non-editable validation placeholder for unknown/unsupported runtime type -->
+    <svg:g class="invalid-element-node" role="alert">
+      <svg:rect
+        class="invalid-rect"
+        x="0"
+        y="0"
+        [attr.width]="element().geometry?.width || 120"
+        [attr.height]="element().geometry?.height || 40"
+      />
+      <svg:text
+        class="element-validation-message"
+        [attr.x]="(element().geometry?.width || 120) / 2"
+        [attr.y]="(element().geometry?.height || 40) / 2"
+        text-anchor="middle"
+        dominant-baseline="middle"
+      >
+        Invalid: {{ element().type }}
+      </svg:text>
+    </svg:g>
+  }
+</svg:g>

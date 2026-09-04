@@ -35,10 +35,9 @@
   user-select: none;
 }
 
-/* Layout Elements Visual Design */
+/* Layout Elements Visual Design (applies to canvas-rendered element chrome;
+   element nodes themselves are styled by LayoutElementNodeComponent) */
 .layout-element {
-  pointer-events: none;
-
   &.element-stage {
     .stage-rect {
       fill: #1e1b4b;

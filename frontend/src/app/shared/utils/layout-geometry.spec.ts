@@ -478,6 +478,23 @@ describe('layout-geometry pure utilities', () => {
       expect(sorted[3].kind).toBe('section');
       expect((sorted[3].data as VenueSectionLayout).name).toBe('Balcony');
     });
+
+    it('preserves numeric array-index tie-break for 12+ null-ID elements at equal z (REV-003)', () => {
+      const elements: VenueLayoutElement[] = Array.from({ length: 12 }, (_, i) => ({
+        elementId: null,
+        type: 'DECORATION',
+        label: null,
+        geometry: { x: i * 10, y: 0, width: 10, height: 10, rotationDeg: 0 },
+        zIndex: 0,
+      }));
+
+      const sorted = sortedLayoutItems([], elements);
+      expect(sorted.length).toBe(12);
+      // Lexicographic keys would order idx-10/idx-11 before idx-2; padded keys keep input order.
+      expect(sorted.map((item) => (item.data as VenueLayoutElement).geometry.x)).toEqual(
+        elements.map((e) => e.geometry.x),
+      );
+    });
   });
 
   describe('calculateCornerResize', () => {

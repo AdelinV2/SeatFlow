@@ -2,70 +2,296 @@
   #svgContainer
   class="layout-canvas-container relative w-full h-full overflow-hidden select-none"
 >
-  <!-- Top-Left Tool Mode Toolbar (Select, Quick Toggle, Paint) -->
+  <!-- Top-Left Toolbars (Tools & Layout Element Palette) -->
   @if (editable()) {
     <div
-      class="canvas-mode-toolbar absolute top-4 left-4 z-20 flex items-center gap-1 p-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-700/70 shadow-xl"
-      role="toolbar"
-      aria-label="Canvas Editing Tools"
+      class="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 max-w-[calc(100%-2rem)]"
     >
-      <!-- Select / Transform Tool -->
-      <button
-        type="button"
-        (click)="setToolMode('select')"
-        [class.active-mode]="currentMode() === 'select'"
-        [class.bg-indigo-600]="currentMode() === 'select'"
-        [class.text-white]="currentMode() === 'select'"
-        [class.text-slate-300]="currentMode() !== 'select'"
-        class="mode-btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800"
-        title="Select & Transform Mode (Click to select, double-click to toggle)"
-        aria-label="Select mode"
+      <!-- Section & Seat Tools (Select, Quick Toggle, Paint) -->
+      <div
+        class="canvas-mode-toolbar flex items-center gap-1 p-1.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-700/70 shadow-xl"
+        role="toolbar"
+        aria-label="Canvas Editing Tools"
       >
-        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-          <path d="m13 13 6 6" />
-        </svg>
-        <span>Select</span>
-      </button>
+        <!-- Select / Transform Tool -->
+        <button
+          type="button"
+          (click)="setToolMode('select')"
+          [class.active-mode]="currentMode() === 'select'"
+          [class.bg-indigo-600]="currentMode() === 'select'"
+          [class.text-white]="currentMode() === 'select'"
+          [class.text-slate-300]="currentMode() !== 'select'"
+          class="mode-btn min-h-[44px] min-w-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          title="Select & Transform Mode (Click to select, double-click to toggle)"
+          aria-label="Select mode"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+            <path d="m13 13 6 6" />
+          </svg>
+          <span class="hidden sm:inline">Select</span>
+        </button>
 
-      <!-- Quick Toggle Tool (Active <-> Aisle) -->
-      <button
-        type="button"
-        (click)="setToolMode('toggle')"
-        [class.active-mode]="currentMode() === 'toggle'"
-        [class.bg-amber-600]="currentMode() === 'toggle'"
-        [class.text-white]="currentMode() === 'toggle'"
-        [class.text-slate-300]="currentMode() !== 'toggle'"
-        class="mode-btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800"
-        title="Quick Toggle Mode (Click any seat to toggle Active ↔ Aisle)"
-        aria-label="Quick toggle mode"
-      >
-        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-        </svg>
-        <span>Quick Toggle</span>
-      </button>
+        <!-- Quick Toggle Tool (Active <-> Aisle) -->
+        <button
+          type="button"
+          (click)="setToolMode('toggle')"
+          [class.active-mode]="currentMode() === 'toggle'"
+          [class.bg-amber-600]="currentMode() === 'toggle'"
+          [class.text-white]="currentMode() === 'toggle'"
+          [class.text-slate-300]="currentMode() !== 'toggle'"
+          class="mode-btn min-h-[44px] min-w-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          title="Quick Toggle Mode (Click any seat to toggle Active ↔ Aisle)"
+          aria-label="Quick toggle mode"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          <span class="hidden sm:inline">Toggle</span>
+        </button>
 
-      <!-- Paint Tool -->
-      <button
-        type="button"
-        (click)="setToolMode('paint')"
-        [class.active-mode]="currentMode() === 'paint'"
-        [class.bg-violet-600]="currentMode() === 'paint'"
-        [class.text-white]="currentMode() === 'paint'"
-        [class.text-slate-300]="currentMode() !== 'paint'"
-        class="mode-btn flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800"
-        title="Color Paintbrush Mode (Click seats to apply selected color)"
-        aria-label="Paint mode"
-      >
-        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="m14 12 4 4" />
-          <path d="M18 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3" />
-          <path d="M4 14a2 2 0 0 0 2 2h4" />
-          <path d="M4 4h10v10H4z" />
-        </svg>
-        <span>Paint</span>
-      </button>
+        <!-- Paint Tool -->
+        <button
+          type="button"
+          (click)="setToolMode('paint')"
+          [class.active-mode]="currentMode() === 'paint'"
+          [class.bg-violet-600]="currentMode() === 'paint'"
+          [class.text-white]="currentMode() === 'paint'"
+          [class.text-slate-300]="currentMode() !== 'paint'"
+          class="mode-btn min-h-[44px] min-w-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:text-white hover:bg-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          title="Color Paintbrush Mode (Click seats to apply selected color)"
+          aria-label="Paint mode"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="m14 12 4 4" />
+            <path d="M18 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3" />
+            <path d="M4 14a2 2 0 0 0 2 2h4" />
+            <path d="M4 4h10v10H4z" />
+          </svg>
+          <span class="hidden sm:inline">Paint</span>
+        </button>
+      </div>
+
+      <!-- Layout Element Palette -->
+      <app-layout-element-palette
+        [existingElements]="internalElements()"
+        [existingSections]="sections()"
+        (elementCreated)="onElementCreatedFromPalette($event)"
+      />
+    </div>
+  }
+
+  <!-- Floating Inspector Panel for Selected Layout Element (Accessible form alternatives) -->
+  @if (editable() && selectedElement(); as selElem) {
+    <div
+      class="element-inspector-panel absolute top-20 right-4 z-20 flex flex-col gap-2.5 p-3.5 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700/70 shadow-2xl text-xs text-slate-200 w-72"
+      role="region"
+      aria-label="Element Properties"
+    >
+      <!-- Header: Type & Close -->
+      <div class="flex items-center justify-between gap-2 border-b border-slate-700/60 pb-2">
+        <span
+          class="font-bold tracking-wider text-indigo-400 uppercase text-[11px] flex items-center gap-1.5"
+        >
+          <span class="size-2 rounded-full bg-indigo-400"></span>
+          {{ selElem.type }} ELEMENT
+        </span>
+        <button
+          type="button"
+          (click)="deselectElement()"
+          class="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          aria-label="Close element inspector"
+        >
+          <svg
+            class="size-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Validation Error Banner -->
+      @if (elementValidationError()) {
+        <div
+          role="alert"
+          class="element-validation-error px-2.5 py-1.5 rounded-lg bg-rose-950/80 border border-rose-500/60 text-rose-300 text-[11px] font-medium"
+        >
+          {{ elementValidationError() }}
+        </div>
+      }
+
+      <!-- Label Input Form Alternative -->
+      <div class="flex flex-col gap-1">
+        <label
+          for="element-label-input"
+          class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider"
+        >
+          Label {{ selElem.type === 'LABEL' ? '(Required)' : '(Optional)' }}
+        </label>
+        <input
+          id="element-label-input"
+          type="text"
+          [value]="selElem.label || ''"
+          (input)="onLabelInput($event)"
+          (change)="onLabelChange($event)"
+          placeholder="Enter element label..."
+          class="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-600/60 text-white text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+        />
+      </div>
+
+      <!-- Numeric Form Alternatives (X, Y, Width, Height, Rotation, Z-Index) -->
+      <div class="grid grid-cols-2 gap-2">
+        <div class="flex flex-col gap-0.5">
+          <label for="element-x-input" class="text-[10px] text-slate-400 font-mono"
+            >X Position</label
+          >
+          <input
+            id="element-x-input"
+            type="number"
+            min="0"
+            max="100000"
+            [value]="selElem.geometry.x"
+            (change)="onNumericParamChange('x', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element X Position"
+          />
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <label for="element-y-input" class="text-[10px] text-slate-400 font-mono"
+            >Y Position</label
+          >
+          <input
+            id="element-y-input"
+            type="number"
+            min="0"
+            max="100000"
+            [value]="selElem.geometry.y"
+            (change)="onNumericParamChange('y', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element Y Position"
+          />
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <label for="element-w-input" class="text-[10px] text-slate-400 font-mono">Width</label>
+          <input
+            id="element-w-input"
+            type="number"
+            min="0.001"
+            max="100000"
+            [value]="selElem.geometry.width"
+            (change)="onNumericParamChange('width', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element Width"
+          />
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <label for="element-h-input" class="text-[10px] text-slate-400 font-mono">Height</label>
+          <input
+            id="element-h-input"
+            type="number"
+            min="0.001"
+            max="100000"
+            [value]="selElem.geometry.height"
+            (change)="onNumericParamChange('height', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element Height"
+          />
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <label for="element-rot-input" class="text-[10px] text-slate-400 font-mono"
+            >Rotation (°)</label
+          >
+          <input
+            id="element-rot-input"
+            type="number"
+            min="-180"
+            max="180"
+            [value]="selElem.geometry.rotationDeg"
+            (change)="onNumericParamChange('rotationDeg', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element Rotation Degrees"
+          />
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <label for="element-z-input" class="text-[10px] text-slate-400 font-mono">Z-Index</label>
+          <input
+            id="element-z-input"
+            type="number"
+            min="-1000"
+            max="1000"
+            [value]="selElem.zIndex"
+            (change)="onNumericParamChange('zIndex', $event)"
+            class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:border-indigo-500 outline-none"
+            aria-label="Element Z-Index"
+          />
+        </div>
+      </div>
+
+      <!-- Action Buttons (Min 44x44px Targets) -->
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-700/60">
+        <button
+          type="button"
+          (click)="duplicateSelectedElement()"
+          class="min-w-[44px] min-h-[44px] flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          aria-label="Duplicate element"
+          title="Duplicate element (creates copy with 20-unit clamped offset and null ID)"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          <span>Duplicate</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="removeSelectedElement()"
+          class="min-w-[44px] min-h-[44px] flex items-center justify-center px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white font-semibold text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          aria-label="Remove element from draft"
+          title="Remove element from draft"
+        >
+          <svg
+            class="size-4 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   }
 
@@ -166,7 +392,7 @@
     aria-label="Venue Seat Map Canvas"
   >
     <defs>
-      <!-- Modern Dot/Grid pattern for aesthetic background -->
+      <!-- Modern Dot/Grid pattern for background -->
       <pattern id="canvas-grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
         <circle cx="20" cy="20" r="1" fill="rgba(255, 255, 255, 0.08)" />
         <path
@@ -206,89 +432,18 @@
             (colDblClick)="onColDblClick($event)"
           ></g>
         } @else {
-          <!-- Layout Elements: STAGE, AISLE, LABEL, BARRIER, DECORATION -->
+          <!-- Layout Elements rendered via standalone OnPush LayoutElementNodeComponent -->
           <g
-            class="layout-element"
-            [class]="'element-' + item.data.type.toLowerCase()"
-            [attr.transform]="getElementTransform(item.data)"
-            role="img"
-            [attr.aria-label]="item.data.label || item.data.type"
-          >
-            @switch (item.data.type) {
-              @case ('STAGE') {
-                <rect
-                  class="stage-rect"
-                  x="0"
-                  y="0"
-                  [attr.width]="item.data.geometry.width"
-                  [attr.height]="item.data.geometry.height"
-                  rx="10"
-                  ry="10"
-                />
-                <text
-                  class="stage-title"
-                  [attr.x]="item.data.geometry.width / 2"
-                  [attr.y]="item.data.geometry.height / 2"
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                >
-                  {{ item.data.label || 'STAGE' }}
-                </text>
-              }
-              @case ('AISLE') {
-                <rect
-                  class="aisle-rect"
-                  x="0"
-                  y="0"
-                  [attr.width]="item.data.geometry.width"
-                  [attr.height]="item.data.geometry.height"
-                  rx="4"
-                  ry="4"
-                />
-                @if (item.data.label) {
-                  <text
-                    class="aisle-title"
-                    [attr.x]="item.data.geometry.width / 2"
-                    [attr.y]="item.data.geometry.height / 2"
-                    text-anchor="middle"
-                    dominant-baseline="middle"
-                  >
-                    {{ item.data.label }}
-                  </text>
-                }
-              }
-              @case ('LABEL') {
-                <text
-                  class="standalone-label"
-                  [attr.x]="item.data.geometry.width / 2"
-                  [attr.y]="item.data.geometry.height / 2"
-                  text-anchor="middle"
-                  dominant-baseline="middle"
-                >
-                  {{ item.data.label }}
-                </text>
-              }
-              @case ('BARRIER') {
-                <rect
-                  class="barrier-rect"
-                  x="0"
-                  y="0"
-                  [attr.width]="item.data.geometry.width"
-                  [attr.height]="item.data.geometry.height"
-                />
-              }
-              @default {
-                <rect
-                  class="decoration-rect"
-                  x="0"
-                  y="0"
-                  [attr.width]="item.data.geometry.width"
-                  [attr.height]="item.data.geometry.height"
-                  rx="4"
-                />
-              }
-            }
-          </g>
+            app-layout-element-node
+            [element]="$any(item.data)"
+            [selected]="isElementSelected($any(item.data))"
+            [editable]="editable()"
+            [snapStep]="snapStep()"
+            (elementClick)="onElementClick($event)"
+            (elementPointerDown)="onElementPointerDown($event)"
+            (handlePointerDown)="onElementHandlePointerDown($event)"
+            (elementKeyDown)="onElementKeyDown($event)"
+          ></g>
         }
       }
     </g>
