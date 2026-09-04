@@ -1168,6 +1168,156 @@ describe('LayoutCanvasComponent', () => {
       expect(getComputedStyle(inert).pointerEvents).toBe('none');
     });
 
+    it('retains element edits when the parent feeds the draft back into the input', () => {
+      const before = component.internalElements().length;
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'STAGE',
+        label: 'Feedback Stage',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 7,
+      });
+      expect(component.internalElements().length).toBe(before + 1);
+
+      // Simulate the designer persisting elementsChange into the editor draft:
+      // the draft round-trips back through the input as fresh object identities.
+      const fedBack = component.internalElements().map((el) => ({
+        ...el,
+        geometry: { ...el.geometry },
+      }));
+      fixture.componentRef.setInput('elements', fedBack);
+      fixture.detectChanges();
+
+      expect(component.internalElements().length).toBe(before + 1);
+      expect(component.internalElements()[component.internalElements().length - 1].label).toBe(
+        'Feedback Stage',
+      );
+      expect(component.selectedElement()?.label).toBe('Feedback Stage');
+    });
+
+    it('deselects when the deleted element was selected (null-ID index-key staleness)', () => {
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'STAGE',
+        label: 'First Draft',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 7,
+      });
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'LABEL',
+        label: 'Second Draft',
+        geometry: { x: 100, y: 240, width: 200, height: 44, rotationDeg: 0 },
+        zIndex: 8,
+      });
+      const first = component.internalElements().find((el) => el.label === 'First Draft')!;
+      component.selectElement(first, component.internalElements().indexOf(first));
+      expect(component.selectedElement()).toBe(first);
+
+      component.removeElement(first);
+
+      expect(component.selectedElement()).toBeNull();
+      // Round-trip through the parent input like the designer feedback loop:
+      // no selection may reappear on the element that shifted into the freed index.
+      const fedBack = component.internalElements().map((el) => ({
+        ...el,
+        geometry: { ...el.geometry },
+      }));
+      fixture.componentRef.setInput('elements', fedBack);
+      fixture.detectChanges();
+
+      expect(component.selectedElement()).toBeNull();
+      expect(component.internalElements().some((el) => el.label === 'First Draft')).toBeFalse();
+      expect(component.internalElements().some((el) => el.label === 'Second Draft')).toBeTrue();
+    });
+
+    it('continues element drag across parent feedback round-trips (reference freeze)', () => {
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'STAGE',
+        label: 'Drag Me',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 7,
+      });
+      const created = component.internalElements().find((el) => el.label === 'Drag Me')!;
+      component.onElementPointerDown({
+        event: new PointerEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 40 }),
+        element: created,
+      });
+
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 150, clientY: 40, bubbles: true }),
+      );
+      const afterFirst = component.internalElements().find((el) => el.label === 'Drag Me')!.geometry
+        .x;
+      expect(afterFirst).toBe(150);
+
+      // Designer persists elementsChange and feeds the draft back as fresh clones,
+      // detaching every previously captured object reference mid-gesture.
+      const fedBack = component.internalElements().map((el) => ({
+        ...el,
+        geometry: { ...el.geometry },
+      }));
+      fixture.componentRef.setInput('elements', fedBack);
+      fixture.detectChanges();
+
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 200, clientY: 40, bubbles: true }),
+      );
+      const afterSecond = component.internalElements().find((el) => el.label === 'Drag Me')!
+        .geometry.x;
+      expect(afterSecond).toBe(200);
+    });
+
+    it('continues element resize across parent feedback round-trips', () => {
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'DECORATION',
+        label: 'Resize Me',
+        geometry: { x: 100, y: 380, width: 100, height: 100, rotationDeg: 0 },
+        zIndex: 7,
+      });
+      const created = component.internalElements().find((el) => el.label === 'Resize Me')!;
+      component.onElementHandlePointerDown({
+        event: new PointerEvent('pointerdown', { pointerId: 1, clientX: 200, clientY: 480 }),
+        element: created,
+        handle: 'se',
+      });
+
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          clientX: 220,
+          clientY: 480,
+          bubbles: true,
+        }),
+      );
+      const widthFirst = component.internalElements().find((el) => el.label === 'Resize Me')!
+        .geometry.width;
+      expect(widthFirst).toBe(120);
+
+      const fedBack = component.internalElements().map((el) => ({
+        ...el,
+        geometry: { ...el.geometry },
+      }));
+      fixture.componentRef.setInput('elements', fedBack);
+      fixture.detectChanges();
+
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          clientX: 250,
+          clientY: 480,
+          bubbles: true,
+        }),
+      );
+      const widthSecond = component.internalElements().find((el) => el.label === 'Resize Me')!
+        .geometry.width;
+      expect(widthSecond).toBe(150);
+    });
+
     it('mutually excludes section and element selection and clears both on background click', () => {
       // Simulate the parent designer: emitted section selection flows back into the input.
       component.selectionChanged.subscribe((sel) =>

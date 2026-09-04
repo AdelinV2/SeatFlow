@@ -279,7 +279,7 @@
 
         <!-- Canvas Container -->
         <div
-          class="canvas-wrapper relative w-full h-[650px] min-h-[500px] rounded-3xl border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-md overflow-hidden"
+          class="canvas-wrapper relative w-full h-[clamp(560px,78vh,1020px)] rounded-3xl border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-md overflow-hidden"
         >
           <!-- Shared Layout Canvas Component -->
           <app-layout-canvas
@@ -296,6 +296,7 @@
             (selectionChanged)="onCanvasSelectionChanged($event)"
             (seatSelected)="onCanvasSeatSelected($event)"
             (seatToggle)="onCanvasSeatToggle($event)"
+            (elementsChange)="onCanvasElementsChanged($event)"
             (seatPaint)="onCanvasSeatPaint($event)"
             (rowClick)="onCanvasRowClick($event)"
             (rowDblClick)="onCanvasRowDblClick($event)"

@@ -425,6 +425,26 @@ export class VenueGridDesignerComponent implements OnInit {
     }
   }
 
+  /**
+   * Persists canvas layout-element mutations (create/move/resize/rotate/
+   * duplicate/label-edit/z-order/remove) into the authoritative editor draft.
+   * Without this feedback the canvas-local element list is reset by its input
+   * binding on the next draft update (e.g. seat toggle), making added elements
+   * vanish and dropping them from the save payload.
+   */
+  onCanvasElementsChanged(elements: VenueLayoutElement[]): void {
+    this.validationError.set(null);
+    try {
+      this.editorState.replaceDraft((draft) => {
+        draft.elements = [...(elements || [])];
+        return draft;
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update layout elements';
+      this.validationError.set(msg);
+    }
+  }
+
   onCanvasSeatSelected(event: CanvasSeatSelectedEvent): void {
     const eventKey = getCanvasSectionKey(event.section);
     const currentKey = this.currentSection() ? getSectionDraftKey(this.currentSection()!) : null;

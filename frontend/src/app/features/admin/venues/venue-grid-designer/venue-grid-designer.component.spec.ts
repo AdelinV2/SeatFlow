@@ -6,7 +6,12 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
 import { getRowLabel, VenueGridDesignerComponent } from './venue-grid-designer.component';
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
-import { VenueLayout, VenueSectionLayout, VenueSectionSeat } from '../../../../models/venue.model';
+import {
+  VenueLayout,
+  VenueLayoutElement,
+  VenueSectionLayout,
+  VenueSectionSeat,
+} from '../../../../models/venue.model';
 import { VenueLayoutEditorStateService } from '../../../../services/venue-layout-editor-state.service';
 import {
   getSectionDraftKey,
@@ -556,6 +561,36 @@ describe('VenueGridDesignerComponent', () => {
 
         expect(component.validationError()).toContain('out of section bounds');
         expect(JSON.stringify(component.sections())).toBe(before);
+      });
+    });
+
+    describe('Layout elements draft feedback (canvas elementsChange)', () => {
+      const stageElement: VenueLayoutElement = {
+        elementId: null,
+        type: 'STAGE',
+        label: 'Stage',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 10,
+      };
+
+      it('should persist canvas element changes into the editor draft and mark dirty', () => {
+        expect(component.elements().length).toBe(0);
+
+        component.onCanvasElementsChanged([stageElement]);
+
+        expect(component.elements().length).toBe(1);
+        expect(component.elements()[0].label).toBe('Stage');
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should retain draft elements across subsequent seat-toggle draft updates', () => {
+        component.onCanvasElementsChanged([stageElement]);
+
+        const sec = component.sections()[0];
+        component.onCanvasSeatToggle({ seat: sec.seats[0], section: sec });
+
+        expect(component.elements().length).toBe(1);
+        expect(component.elements()[0].type).toBe('STAGE');
       });
     });
 
