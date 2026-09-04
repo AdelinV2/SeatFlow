@@ -8,7 +8,10 @@ import { getRowLabel, VenueGridDesignerComponent } from './venue-grid-designer.c
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import { VenueLayout, VenueSectionLayout, VenueSectionSeat } from '../../../../models/venue.model';
 import { VenueLayoutEditorStateService } from '../../../../services/venue-layout-editor-state.service';
-import { SeatLayoutGeneratorService } from '../../../../services/seat-layout-generator.service';
+import {
+  getSectionDraftKey,
+  SeatLayoutGeneratorService,
+} from '../../../../services/seat-layout-generator.service';
 
 describe('VenueGridDesignerComponent', () => {
   let component: VenueGridDesignerComponent;
@@ -286,7 +289,18 @@ describe('VenueGridDesignerComponent', () => {
       });
 
       it('should leave draft unchanged when seat generation exceeds capacity', () => {
-        const preUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+        // Capacity validation runs against a never-saved draft section so the
+        // loaded-ID guard (REV-001) does not mask the capacity rule.
+        component.sectionForm.patchValue({
+          name: 'Capacity Probe',
+          rowCount: 2,
+          colCount: 2,
+          generateSeats: false,
+        });
+        component.createSection();
+        const draftSec = component.sections().find((s) => s.name === 'Capacity Probe')!;
+        component.selectSection(draftSec);
+        const preUpdate = JSON.stringify(component.currentSection());
 
         // Request generating 2000 seats when venue capacity is 1000
         component.onGenerateSeats({
@@ -304,8 +318,7 @@ describe('VenueGridDesignerComponent', () => {
         });
 
         expect(component.validationError()).toContain('exceeds venue capacity');
-        const postUpdateSeats = JSON.stringify(component.currentSection()?.seats);
-        expect(postUpdateSeats).toBe(preUpdateSeats);
+        expect(JSON.stringify(component.currentSection())).toBe(preUpdate);
       });
     });
 
@@ -343,6 +356,209 @@ describe('VenueGridDesignerComponent', () => {
       });
     });
 
+    describe('REV-001: generation never destroys persisted seat identities', () => {
+      it('should reject generation on a loaded section and retain every ID', () => {
+        const before = JSON.stringify(component.sections());
+        component.onGenerateSeats({
+          rowCount: 2,
+          colCount: 2,
+          pitchX: 40,
+          pitchY: 40,
+          originX: 20,
+          originY: 20,
+          isActive: true,
+          sectionWidth: 400,
+          sectionHeight: 300,
+          venueCapacity: 1000,
+          totalOtherActiveSeats: 0,
+        });
+
+        expect(component.validationError()).toContain('stable seat identities');
+        expect(JSON.stringify(component.sections())).toBe(before);
+        const ids = component.currentSection()?.seats.map((s) => s.seatId);
+        expect(ids).toEqual(['s-00', 's-01', 's-10', 's-11']);
+      });
+
+      it('should allow generation on a null-ID draft section with null seat IDs', () => {
+        component.sectionForm.patchValue({
+          name: 'Draft Gen',
+          rowCount: 2,
+          colCount: 2,
+          generateSeats: false,
+        });
+        component.createSection();
+        const draft = component.sections().find((s) => s.name === 'Draft Gen')!;
+        component.selectSection(draft);
+
+        component.onGenerateSeats({
+          rowCount: 2,
+          colCount: 2,
+          pitchX: 40,
+          pitchY: 40,
+          originX: 20,
+          originY: 20,
+          isActive: true,
+          sectionWidth: draft.width,
+          sectionHeight: draft.height,
+        });
+
+        expect(component.validationError()).toBeNull();
+        const generated = component.currentSection()?.seats ?? [];
+        expect(generated.length).toBe(4);
+        expect(generated.every((s) => s.seatId === null)).toBeTrue();
+        // Loaded section untouched
+        expect(component.sections()[0].seats[0].seatId).toBe('s-00');
+      });
+    });
+
+    describe('REV-002: multiple null-ID draft sections stay independently targetable', () => {
+      function createDraft(name: string): VenueSectionLayout {
+        component.sectionForm.patchValue({
+          name,
+          rowCount: 2,
+          colCount: 2,
+          generateSeats: true,
+        });
+        component.createSection();
+        return component.sections().find((s) => s.name === name)!;
+      }
+
+      it('should isolate property edits, generate, deactivate/reactivate to the selected draft', () => {
+        const draftA = createDraft('Draft A');
+        const draftB = createDraft('Draft B');
+        expect(draftA.sectionId).toBeNull();
+        expect(draftB.sectionId).toBeNull();
+        const beforeA = JSON.stringify(component.sections().find((s) => s.name === 'Draft A'));
+
+        component.selectSection(component.sections().find((s) => s.name === 'Draft B')!);
+        component.updateSectionProperties({ width: 999 });
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Draft A'))).toBe(
+          beforeA,
+        );
+        expect(component.sections().find((s) => s.name === 'Draft B')?.width).toBe(999);
+
+        component.deactivateSection();
+        expect(component.sections().find((s) => s.name === 'Draft A')?.isActive).toBeTrue();
+        expect(component.sections().find((s) => s.name === 'Draft B')?.isActive).toBeFalse();
+
+        component.reactivateSection();
+        expect(component.sections().find((s) => s.name === 'Draft B')?.isActive).toBeTrue();
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Draft A'))).toBe(
+          beforeA,
+        );
+      });
+
+      it('should isolate each bulk operation to the selected null-ID draft', () => {
+        createDraft('Bulk A');
+        createDraft('Bulk B');
+        const bulkB = component.sections().find((s) => s.name === 'Bulk B')!;
+        component.selectSection(bulkB);
+
+        const seatKeys = new Set(
+          (component.currentSection()?.seats.slice(0, 2) ?? []).map((s) => `${s.gridY}_${s.gridX}`),
+        );
+        const beforeA = JSON.stringify(component.sections().find((s) => s.name === 'Bulk A'));
+
+        component.onSeatSelectionChanged(seatKeys);
+        component.onBulkActivate(false);
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Bulk A'))).toBe(beforeA);
+
+        component.onBulkTranslate({ deltaX: 5, deltaY: 0 });
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Bulk A'))).toBe(beforeA);
+
+        component.onBulkSetRowLabel('VIPB');
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Bulk A'))).toBe(beforeA);
+        expect(
+          component
+            .currentSection()
+            ?.seats.filter((s) => seatKeys.has(`${s.gridY}_${s.gridX}`))
+            .every((s) => s.rowLabel === 'VIPB'),
+        ).toBeTrue();
+
+        component.onBulkRenumber(50);
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Bulk A'))).toBe(beforeA);
+      });
+
+      it('should isolate canvas transform events to the selected null-ID draft', () => {
+        createDraft('Transform A');
+        const draftB = createDraft('Transform B');
+        component.selectSection(component.sections().find((s) => s.name === 'Transform B')!);
+        const beforeA = JSON.stringify(component.sections().find((s) => s.name === 'Transform A'));
+
+        const targetB = component.sections().find((s) => s.name === 'Transform B')!;
+        const draftKeyB = getSectionDraftKey(targetB);
+        component.onSectionTransformChanged({
+          sectionId: targetB.sectionId,
+          draftKey: draftKeyB,
+          positionX: targetB.positionX + 10,
+          positionY: targetB.positionY,
+          width: targetB.width,
+          height: targetB.height,
+          rotationDeg: 0,
+        });
+
+        expect(JSON.stringify(component.sections().find((s) => s.name === 'Transform A'))).toBe(
+          beforeA,
+        );
+        expect(component.sections().find((s) => s.name === 'Transform B')?.positionX).toBe(
+          draftB.positionX + 10,
+        );
+      });
+    });
+
+    describe('REV-004: modifier canvas selection', () => {
+      it('should accumulate seats across two additive canvas clicks', () => {
+        const sec = component.currentSection()!;
+        const [seatA, seatB] = sec.seats;
+        component.onCanvasSeatSelected({ seat: seatA, section: sec, additive: false });
+        expect([...component.selectedSeatKeys()].length).toBe(1);
+
+        component.onCanvasSeatSelected({ seat: seatB, section: sec, additive: true });
+        expect(component.selectedSeatKeys().has(seatA.seatId!)).toBeTrue();
+        expect(component.selectedSeatKeys().has(seatB.seatId!)).toBeTrue();
+        expect(component.selectedSeatKeys().size).toBe(2);
+      });
+
+      it('should replace selection on a plain canvas click', () => {
+        const sec = component.currentSection()!;
+        const [seatA, seatB] = sec.seats;
+        component.onCanvasSeatSelected({ seat: seatA, section: sec, additive: false });
+        component.onCanvasSeatSelected({ seat: seatB, section: sec, additive: true });
+        expect(component.selectedSeatKeys().size).toBe(2);
+
+        component.onCanvasSeatSelected({ seat: seatB, section: sec, additive: false });
+        expect(component.selectedSeatKeys().size).toBe(1);
+        expect(component.selectedSeatKeys().has(seatB.seatId!)).toBeTrue();
+      });
+    });
+
+    describe('REV-005: invalid geometry leaves the draft unchanged', () => {
+      it('should reject an out-of-bounds resize without calling replaceDraft', () => {
+        const before = JSON.stringify(component.sections());
+        const sec = component.currentSection()!;
+        component.onSectionTransformChanged({
+          sectionId: sec.sectionId,
+          draftKey: sec.draftKey ?? sec.sectionId,
+          positionX: sec.positionX,
+          positionY: sec.positionY,
+          width: 1,
+          height: sec.height,
+          rotationDeg: 0,
+        });
+
+        expect(component.validationError()).toContain('out of section bounds');
+        expect(JSON.stringify(component.sections())).toBe(before);
+      });
+
+      it('should reject an out-of-bounds properties-panel width without mutation', () => {
+        const before = JSON.stringify(component.sections());
+        component.updateSectionProperties({ width: 1 });
+
+        expect(component.validationError()).toContain('out of section bounds');
+        expect(JSON.stringify(component.sections())).toBe(before);
+      });
+    });
+
     describe('Save and Discard workflow', () => {
       it('should save layout draft and display success notification', () => {
         component.onSeatSelectionChanged(new Set(['s-00']));
@@ -367,6 +583,252 @@ describe('VenueGridDesignerComponent', () => {
         component.discardChanges();
         expect(component.isDirty()).toBeFalse();
         expect(component.currentSection()?.seats[0].isActive).toBeTrue();
+      });
+    });
+
+    describe('Interactive Seat Canvas Features & Aesthetic Overhaul', () => {
+      it('should toggle seat active state via onCanvasSeatToggle', () => {
+        const sec = component.currentSection()!;
+        const seat = sec.seats[0]; // s-00, initially active: true
+        expect(seat.isActive).toBeTrue();
+
+        component.onCanvasSeatToggle({ seat, section: sec });
+
+        const updatedSeat = component.currentSection()?.seats.find((s) => s.seatId === 's-00');
+        expect(updatedSeat?.isActive).toBeFalse();
+        expect(component.isDirty()).toBeTrue();
+
+        // Toggle back to active
+        component.onCanvasSeatToggle({ seat: updatedSeat!, section: sec });
+        const toggledBackSeat = component.currentSection()?.seats.find((s) => s.seatId === 's-00');
+        expect(toggledBackSeat?.isActive).toBeTrue();
+      });
+
+      it('should paint seat color via onCanvasSeatPaint without affecting backend schema', () => {
+        const sec = component.currentSection()!;
+        const seat = sec.seats[0]; // s-00, row A, seat 1
+
+        component.onCanvasSeatPaint({ seat, section: sec, color: '#F59E0B' });
+
+        const updatedSec = component.currentSection();
+        expect(updatedSec?.shapeMetadata).toBeDefined();
+        const seatColors = (updatedSec?.shapeMetadata as any)?.seatColors;
+        expect(seatColors).toBeDefined();
+        // REV-001: exactly one stable entry per paint (seatId), no triplicated keys.
+        expect(seatColors['s-00']).toBe('#F59E0B');
+        expect(Object.keys(seatColors)).toEqual(['s-00']);
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should prune legacy label color keys on bulk rename while keeping color via stable key', () => {
+        const sec = component.currentSection()!;
+        const seat = sec.seats[0]; // s-00, row A, seat 1
+
+        // Seed a legacy `RowLabel_Number` key plus the stable paint entry.
+        component.onSeatColorAssigned({ seatKeys: ['A_1'], color: '#F59E0B' });
+        component.onCanvasSeatPaint({ seat, section: sec, color: '#F59E0B' });
+        expect(Object.keys((component.currentSection()?.shapeMetadata as any)?.seatColors)).toEqual(
+          jasmine.arrayWithExactContents(['A_1', 's-00']),
+        );
+
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkSetRowLabel('VIP');
+
+        const seatColors = (component.currentSection()?.shapeMetadata as any)?.seatColors;
+        expect(seatColors['A_1']).toBeUndefined();
+        expect(seatColors['s-00']).toBe('#F59E0B');
+        expect(component.currentSection()?.seats[0].rowLabel).toBe('VIP');
+      });
+
+      it('should prune legacy label color keys on bulk renumber', () => {
+        const sec = component.currentSection()!;
+        const seat = sec.seats[0]; // s-00, row A, seat 1
+
+        component.onSeatColorAssigned({ seatKeys: ['A_1'], color: '#F59E0B' });
+        component.onCanvasSeatPaint({ seat, section: sec, color: '#F59E0B' });
+
+        // Renumber only s-00 (row A) to 10: no collision with A/2.
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkRenumber(10);
+
+        const seatColors = (component.currentSection()?.shapeMetadata as any)?.seatColors;
+        expect(seatColors['A_1']).toBeUndefined();
+        expect(seatColors['s-00']).toBe('#F59E0B');
+        expect(component.currentSection()?.seats[0].seatNumber).toBe(10);
+      });
+
+      it('should update section color via onSectionColorChanged in shapeMetadata', () => {
+        component.onSectionColorChanged('#8B5CF6');
+
+        const updatedSec = component.currentSection();
+        expect((updatedSec?.shapeMetadata as any)?.color).toBe('#8B5CF6');
+        expect(component.getSectionColor(updatedSec!)).toBe('#8B5CF6');
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should deactivate center column when onCenterAisleCreated is called', () => {
+        // Col count is 2: center column is Math.floor(2 / 2) = 1
+        component.onCenterAisleCreated();
+
+        const sec = component.currentSection();
+        const col1Seats = sec?.seats.filter((s) => s.gridX === 1);
+        expect(col1Seats?.length).toBeGreaterThan(0);
+        expect(col1Seats?.every((s) => !s.isActive)).toBeTrue();
+      });
+
+      it('should reset all seats to active when onAllSeatsActivated is called', () => {
+        // First deactivate some seats
+        component.onCenterAisleCreated();
+        expect(component.currentSection()?.seats.some((s) => !s.isActive)).toBeTrue();
+
+        // Reset
+        component.onAllSeatsActivated();
+        expect(component.currentSection()?.seats.every((s) => s.isActive)).toBeTrue();
+      });
+
+      it('should append a new row and update rowCount and seats', () => {
+        const initialRowCount = component.currentSection()?.rowCount ?? 0;
+        const initialSeatCount = component.currentSection()?.seats.length ?? 0;
+
+        component.onRowAppended();
+
+        const updatedSec = component.currentSection();
+        expect(updatedSec?.rowCount).toBe(initialRowCount + 1);
+        expect(updatedSec?.seats.length).toBe(initialSeatCount + (updatedSec?.colCount ?? 0));
+      });
+
+      it('should append a new column and update colCount and seats', () => {
+        const initialColCount = component.currentSection()?.colCount ?? 0;
+        const initialSeatCount = component.currentSection()?.seats.length ?? 0;
+
+        component.onColAppended();
+
+        const updatedSec = component.currentSection();
+        expect(updatedSec?.colCount).toBe(initialColCount + 1);
+        expect(updatedSec?.seats.length).toBe(initialSeatCount + (updatedSec?.rowCount ?? 0));
+      });
+
+      it('should reject appending a row on duplicate row/number without mutating the draft', () => {
+        // Relabel B/2 to C/2 so the appended row C collides on C/2.
+        component.onSeatSelectionChanged(new Set(['s-11']));
+        component.onBulkSetRowLabel('C');
+        expect(component.validationError()).toBeNull();
+
+        const before = JSON.stringify(component.currentSection());
+        component.onRowAppended();
+
+        expect(component.validationError()).toMatch(/duplicates row\/number/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+
+      it('should reject appending a column on duplicate row/number without mutating the draft', () => {
+        // Renumber B/1 to B/3 so the appended column (seat #3) collides on B/3.
+        component.onSeatSelectionChanged(new Set(['s-10']));
+        component.onBulkRenumber(3);
+        expect(component.validationError()).toBeNull();
+
+        const before = JSON.stringify(component.currentSection());
+        component.onColAppended();
+
+        expect(component.validationError()).toMatch(/duplicates row\/number/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+
+      it('should reject appending a row that would push height past MAX_POSITION', () => {
+        editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) => ({
+            ...s,
+            height: 100000,
+            seats: (s.seats || []).map((st) =>
+              st.gridY === s.rowCount - 1 ? { ...st, positionY: 99990 } : st,
+            ),
+          }));
+          return draft;
+        });
+
+        const before = JSON.stringify(component.currentSection());
+        component.onRowAppended();
+
+        expect(component.validationError()).toMatch(/exceeds maximum/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+
+      it('should reject appending a column that would push width past MAX_POSITION', () => {
+        editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) => ({
+            ...s,
+            width: 100000,
+            seats: (s.seats || []).map((st) =>
+              st.gridX === s.colCount - 1 ? { ...st, positionX: 99990 } : st,
+            ),
+          }));
+          return draft;
+        });
+
+        const before = JSON.stringify(component.currentSection());
+        component.onColAppended();
+
+        expect(component.validationError()).toMatch(/exceeds maximum/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+
+      it('should derive section counts from seats rather than grid capacity', () => {
+        expect(component.currentSectionTotalCount()).toBe(4);
+        expect(component.currentSectionInactiveCount()).toBe(1);
+
+        editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) => ({ ...s, seats: [] }));
+          return draft;
+        });
+
+        expect(component.currentSectionTotalCount()).toBe(0);
+        expect(component.currentSectionInactiveCount()).toBe(0);
+      });
+
+      it('should label grid matrix rows with actual seat row labels after rename', () => {
+        expect(component.gridMatrix()[0].rowLabel).toBe('A');
+
+        component.onSeatSelectionChanged(new Set(['s-00', 's-01']));
+        component.onBulkSetRowLabel('VIP');
+
+        const matrix = component.gridMatrix();
+        expect(matrix[0].rowLabel).toBe('VIP');
+        expect(matrix[1].rowLabel).toBe('B');
+      });
+
+      it('should reject renaming a section to a duplicate name without mutating the draft', () => {
+        editorState.replaceDraft((draft) => {
+          const copy = {
+            ...draft.sections[0],
+            sectionId: null,
+            draftKey: 'draft-balcony',
+            name: 'Balcony',
+          };
+          draft.sections = [...draft.sections, copy];
+          return draft;
+        });
+
+        const before = JSON.stringify(component.currentSection());
+        component.updateSectionProperties({ name: 'balcony' });
+
+        expect(component.validationError()).toMatch(/already exists/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+
+      it('should reject transform changes past position bounds without mutating the draft', () => {
+        const before = JSON.stringify(component.currentSection());
+        component.onSectionTransformChanged({
+          sectionId: 'sec-1',
+          draftKey: getSectionDraftKey(component.currentSection()!),
+          positionX: 100001,
+          positionY: 20,
+          width: 400,
+          height: 300,
+          rotationDeg: 0,
+        });
+
+        expect(component.validationError()).toMatch(/between 0 and 100000/);
+        expect(JSON.stringify(component.currentSection())).toBe(before);
       });
     });
   });

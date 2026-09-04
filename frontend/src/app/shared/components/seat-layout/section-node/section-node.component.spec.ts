@@ -284,4 +284,186 @@ describe('SectionNodeComponent', () => {
       expect(clickedSeatId as string | null).toBe('seat-1');
     });
   });
+
+  describe('Interactive Seat Canvas Tools and Color Themes', () => {
+    it('emits seatToggle when toolMode is "toggle" and a seat is clicked in editable mode', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('toolMode', 'toggle');
+      fixture.detectChanges();
+
+      let emittedSeat: any = null;
+      component.seatToggle.subscribe((data) => {
+        emittedSeat = data.seat;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(emittedSeat).not.toBeNull();
+      expect(emittedSeat.seatId).toBe('seat-1');
+    });
+
+    it('emits seatPaint with paintColor when toolMode is "paint" and a seat is clicked', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('toolMode', 'paint');
+      fixture.componentRef.setInput('paintColor', '#8B5CF6');
+      fixture.detectChanges();
+
+      let emittedColor: string | null = null;
+      component.seatPaint.subscribe((data) => {
+        emittedColor = data.color;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(emittedColor as string | null).toBe('#8B5CF6');
+    });
+
+    it('emits seatPaint on Enter in paint mode like the pointer path (keyboard parity)', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('toolMode', 'paint');
+      fixture.componentRef.setInput('paintColor', '#8B5CF6');
+      fixture.detectChanges();
+
+      let emittedColor: string | null = null;
+      let clicked = false;
+      component.seatPaint.subscribe((data) => {
+        emittedColor = data.color;
+      });
+      component.seatClick.subscribe(() => {
+        clicked = true;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      seatItems[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      expect(emittedColor as string | null).toBe('#8B5CF6');
+      expect(clicked).toBeFalse();
+    });
+
+    it('emits seatToggle when a seat is double-clicked in select mode', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('toolMode', 'select');
+      fixture.detectChanges();
+
+      let toggledSeat: any = null;
+      component.seatToggle.subscribe((data) => {
+        toggledSeat = data.seat;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      seatItems[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+      expect(toggledSeat).not.toBeNull();
+      expect(toggledSeat.seatId).toBe('seat-1');
+    });
+
+    it('emits seatToggle when a seat is Alt-clicked in select mode', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('toolMode', 'select');
+      fixture.detectChanges();
+
+      let toggledSeat: any = null;
+      component.seatToggle.subscribe((data) => {
+        toggledSeat = data.seat;
+      });
+
+      const seatItems = fixture.nativeElement.querySelectorAll('.seat-item');
+      seatItems[0].dispatchEvent(new MouseEvent('click', { bubbles: true, altKey: true }));
+
+      expect(toggledSeat).not.toBeNull();
+      expect(toggledSeat.seatId).toBe('seat-1');
+    });
+
+    it('resolves dynamic seat colors from section shapeMetadata', () => {
+      const sectionWithColors: VenueSectionLayout = {
+        ...mockSection,
+        shapeMetadata: {
+          color: '#10B981',
+          seatColors: {
+            '0_0': '#EC4899',
+          },
+        },
+      };
+
+      fixture.componentRef.setInput('section', sectionWithColors);
+      fixture.detectChanges();
+
+      expect(component.getSectionColor()).toBe('#10B981');
+      expect(component.getSeatColor(sectionWithColors.seats[0])).toBe('#EC4899'); // custom seat color
+      expect(component.getSeatColor(sectionWithColors.seats[1])).toBe('#10B981'); // fallback to section color
+    });
+
+    it('emits rowClick and rowDblClick when row guide badges are clicked', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('selected', true);
+      fixture.detectChanges();
+
+      let clickedRow: string | null = null;
+      let dblClickedRow: string | null = null;
+
+      component.rowClick.subscribe((data) => {
+        clickedRow = data.rowLabel;
+      });
+      component.rowDblClick.subscribe((data) => {
+        dblClickedRow = data.rowLabel;
+      });
+
+      const rowBadges = fixture.nativeElement.querySelectorAll('.row-guide-badge');
+      expect(rowBadges.length).toBeGreaterThan(0);
+
+      rowBadges[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clickedRow as string | null).toBe('A');
+
+      rowBadges[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      expect(dblClickedRow as string | null).toBe('A');
+    });
+
+    it('emits colClick and colDblClick when column guide badges are clicked', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.componentRef.setInput('selected', true);
+      fixture.detectChanges();
+
+      let clickedCol: number | null = null;
+      let dblClickedCol: number | null = null;
+
+      component.colClick.subscribe((data) => {
+        clickedCol = data.colIndex;
+      });
+      component.colDblClick.subscribe((data) => {
+        dblClickedCol = data.colIndex;
+      });
+
+      const colBadges = fixture.nativeElement.querySelectorAll('.col-guide-badge');
+      expect(colBadges.length).toBeGreaterThan(0);
+
+      colBadges[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(clickedCol as number | null).toBe(0);
+
+      colBadges[0].dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      expect(dblClickedCol as number | null).toBe(0);
+    });
+
+    it('calculates color luminance and assigns seat-number-dark for light seat colors', () => {
+      expect(component.isColorLight('#f59e0b')).toBeTrue(); // Amber is light
+      expect(component.isColorLight('#fbbf24')).toBeTrue(); // Yellow is light
+      expect(component.isColorLight('#ffffff')).toBeTrue(); // White is light
+      expect(component.isColorLight('#6366f1')).toBeFalse(); // Indigo is dark
+      expect(component.isColorLight('#10b981')).toBeFalse(); // Emerald is dark
+
+      const sectionWithAmber: VenueSectionLayout = {
+        ...mockSection,
+        shapeMetadata: {
+          color: '#f59e0b',
+        },
+      };
+      fixture.componentRef.setInput('section', sectionWithAmber);
+      fixture.detectChanges();
+
+      const seatTexts = fixture.nativeElement.querySelectorAll('.seat-number');
+      // Seat 1 is active, should have .seat-number-dark
+      expect(seatTexts[0].classList.contains('seat-number-dark')).toBeTrue();
+    });
+  });
 });

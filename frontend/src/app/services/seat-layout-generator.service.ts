@@ -38,6 +38,9 @@ export interface GenerateSeatsOptions {
   sectionHeight: number; // section bounds height
   existingSeats?: VenueSectionSeat[]; // optional retained seats
   venueCapacity?: number; // venue capacity limit
+  // Active seats OUTSIDE the generated set (other-only). Contrast with
+  // `bulkSetActive`, whose capacity argument is the venue-wide total INCLUDING
+  // the target section.
   totalOtherActiveSeats?: number; // active seats in other sections or retained
 }
 
@@ -50,6 +53,44 @@ export interface BulkTranslateOptions {
 
 export function getSeatKey(seat: VenueSectionSeat): string {
   return `${seat.gridY}_${seat.gridX}`;
+}
+
+/**
+ * Stable single key for per-seat visual color overrides stored in
+ * `shapeMetadata.seatColors`. Prefers the persisted `seatId` (survives
+ * rename/renumber) and falls back to the grid coordinate key for null-ID
+ * draft seats. Exactly one entry per seat must be written; readers keep
+ * backward-compatible fallback to legacy `RowLabel_Number` keys.
+ */
+export function getSeatColorKey(seat: VenueSectionSeat): string {
+  return seat.seatId || getSeatKey(seat);
+}
+
+/**
+ * Stable client-side identity for draft targeting (REV-002).
+ * Prefers the generated `draftKey`, falls back to persisted `sectionId`,
+ * then to the section name for legacy snapshots without either.
+ */
+export function getSectionDraftKey(section: VenueSectionLayout): string {
+  if (section.draftKey) {
+    return section.draftKey;
+  }
+  if (section.sectionId) {
+    return section.sectionId;
+  }
+  return `name:${section.name}`;
+}
+
+function newDraftKey(): string {
+  try {
+    const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+    if (cryptoRef?.randomUUID) {
+      return cryptoRef.randomUUID();
+    }
+  } catch {
+    // fall through to Math.random fallback below
+  }
+  return `draft-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffffff).toString(36)}`;
 }
 
 export function isSeatSelected(seat: VenueSectionSeat, selectedKeys: Set<string>): boolean {
@@ -297,6 +338,7 @@ export class SeatLayoutGeneratorService {
 
     return {
       sectionId: null,
+      draftKey: newDraftKey(),
       name: trimmed,
       rowCount,
       colCount,
@@ -310,6 +352,68 @@ export class SeatLayoutGeneratorService {
       shapeMetadata: null,
       seats,
     };
+  }
+
+  /**
+   * Validates that every retained seat lies within the projected section bounds.
+   * Returns null when valid, otherwise a message identifying the bounds rule.
+   */
+  validateSectionBounds(section: VenueSectionLayout): string | null {
+    if (
+      !Number.isFinite(section.width) ||
+      section.width <= 0 ||
+      !Number.isFinite(section.height) ||
+      section.height <= 0
+    ) {
+      return `Section "${section.name}" width and height must be positive numbers within section bounds`;
+    }
+    for (const seat of section.seats || []) {
+      if (
+        !Number.isFinite(seat.positionX) ||
+        !Number.isFinite(seat.positionY) ||
+        seat.positionX < 0 ||
+        seat.positionX > section.width ||
+        seat.positionY < 0 ||
+        seat.positionY > section.height
+      ) {
+        return (
+          `Seat Row ${seat.rowLabel} Seat ${seat.seatNumber} would be out of section bounds ` +
+          `(${seat.positionX}, ${seat.positionY}) for section "${section.name}" ` +
+          `(${section.width} x ${section.height})`
+        );
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Validates seats appended by row/column expansion against the retained seats.
+   * Returns null when valid, otherwise a message identifying the exact rule.
+   * Checks case-insensitive (rowLabel, seatNumber) and grid-coordinate
+   * collisions both against retained seats and within the appended batch.
+   */
+  validateSeatAppend(section: VenueSectionLayout, newSeats: VenueSectionSeat[]): string | null {
+    const existingRowKeys = new Set<string>();
+    const existingGridKeys = new Set<string>();
+    for (const s of section.seats || []) {
+      existingRowKeys.add(`${s.rowLabel.trim().toUpperCase()}|${s.seatNumber}`);
+      existingGridKeys.add(`${s.gridX},${s.gridY}`);
+    }
+    const batchRowKeys = new Set<string>();
+    const batchGridKeys = new Set<string>();
+    for (const s of newSeats) {
+      const rowKey = `${s.rowLabel.trim().toUpperCase()}|${s.seatNumber}`;
+      if (existingRowKeys.has(rowKey) || batchRowKeys.has(rowKey)) {
+        return `Appended seat duplicates row/number (${s.rowLabel}, ${s.seatNumber})`;
+      }
+      batchRowKeys.add(rowKey);
+      const gridKey = `${s.gridX},${s.gridY}`;
+      if (existingGridKeys.has(gridKey) || batchGridKeys.has(gridKey)) {
+        return `Appended seat duplicates grid coordinates (${s.gridX}, ${s.gridY})`;
+      }
+      batchGridKeys.add(gridKey);
+    }
+    return null;
   }
 
   /**
@@ -363,6 +467,7 @@ export class SeatLayoutGeneratorService {
 
     return {
       sectionId: null,
+      draftKey: newDraftKey(),
       name: candidateName,
       rowCount: source.rowCount,
       colCount: source.colCount,
@@ -394,8 +499,12 @@ export class SeatLayoutGeneratorService {
   }
 
   /**
-   * Reactivates an inactive section if name uniqueness and venue capacity permit.
-   * Retains existing sectionId and all seatIds!
+   * Reactivates an inactive section if name uniqueness, venue capacity, and
+   * duplicate rules permit. Restoration semantics: the section becomes active
+   * and every retained seat is restored to active (inverse of deactivateSection),
+   * preserving the existing sectionId, draftKey, and all seatIds.
+   * `totalOtherActiveSeats` is the active-seat count in OTHER sections
+   * (excluding this section). Throws without mutating the input on violation.
    */
   reactivateSection(
     section: VenueSectionLayout,
@@ -403,10 +512,11 @@ export class SeatLayoutGeneratorService {
     venueCapacity?: number,
     totalOtherActiveSeats?: number,
   ): VenueSectionLayout {
-    // Check name uniqueness among other active sections
+    const targetKey = getSectionDraftKey(section);
+    // Check name uniqueness among other active sections (stable draft-key identity)
     const activeNames = new Set(
       existingSections
-        .filter((s) => s !== section && s.isActive)
+        .filter((s) => getSectionDraftKey(s) !== targetKey && s.isActive)
         .map((s) => s.name.trim().toLowerCase()),
     );
     if (activeNames.has(section.name.trim().toLowerCase())) {
@@ -415,9 +525,35 @@ export class SeatLayoutGeneratorService {
       );
     }
 
+    const projectedSeats: VenueSectionSeat[] = (section.seats || []).map((seat) => ({
+      ...seat,
+      isActive: true,
+    }));
+    const projectedActiveCount = projectedSeats.length;
+
+    if (venueCapacity !== undefined && totalOtherActiveSeats !== undefined) {
+      if (totalOtherActiveSeats + projectedActiveCount > venueCapacity) {
+        throw new Error(
+          `Reactivating section "${section.name}" would exceed venue capacity of ${venueCapacity} active seats`,
+        );
+      }
+    }
+
+    const activePositions = new Set<string>();
+    for (const seat of projectedSeats) {
+      const key = `${Number(seat.positionX.toFixed(3))},${Number(seat.positionY.toFixed(3))}`;
+      if (activePositions.has(key)) {
+        throw new Error(
+          `Reactivating section "${section.name}" creates duplicate active position (${seat.positionX}, ${seat.positionY})`,
+        );
+      }
+      activePositions.add(key);
+    }
+
     return {
       ...section,
       isActive: true,
+      seats: projectedSeats,
     };
   }
 
@@ -442,20 +578,24 @@ export class SeatLayoutGeneratorService {
         'Saved sections cannot be removed; use deactivate instead to preserve booking history',
       );
     }
-    return allSections.filter((s) => s !== section);
+    const targetKey = getSectionDraftKey(section);
+    return allSections.filter((s) => getSectionDraftKey(s) !== targetKey);
   }
 
   /**
    * Bulk activates or deactivates selected seats.
    * Preserves loaded seatIds.
    * Atomic: fails with Error if capacity exceeded or if activating inside an inactive section.
+   * `totalConfiguredActiveSeats` must be the venue-wide configured total INCLUDING
+   * this section (contrast with `reactivateSection`, whose `totalOtherActiveSeats`
+   * excludes it). Passing an other-only count would undercount and allow overflow.
    */
   bulkSetActive(
     section: VenueSectionLayout,
     selectedKeys: Set<string>,
     targetActive: boolean,
     venueCapacity?: number,
-    totalOtherActiveSeats?: number,
+    totalConfiguredActiveSeats?: number,
   ): VenueSectionLayout {
     if (selectedKeys.size === 0) {
       return section;
@@ -476,8 +616,8 @@ export class SeatLayoutGeneratorService {
       }
     }
 
-    if (targetActive && venueCapacity !== undefined && totalOtherActiveSeats !== undefined) {
-      if (totalOtherActiveSeats + newlyActivatedCount > venueCapacity) {
+    if (targetActive && venueCapacity !== undefined && totalConfiguredActiveSeats !== undefined) {
+      if (totalConfiguredActiveSeats + newlyActivatedCount > venueCapacity) {
         throw new Error(
           `Activating ${newlyActivatedCount} seats would exceed venue capacity of ${venueCapacity} active seats`,
         );

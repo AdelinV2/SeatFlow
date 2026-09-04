@@ -3,6 +3,7 @@ import {
   getRowLabel,
   SeatLayoutGeneratorService,
   GenerateSeatsOptions,
+  getSeatColorKey,
   getSeatKey,
   isSeatSelected,
 } from './seat-layout-generator.service';
@@ -317,6 +318,150 @@ describe('SeatLayoutGeneratorService', () => {
       expect(reactivated.seats[0].seatId).toBe('seat-101');
     });
 
+    it('should reactivate at exact capacity while preserving loaded IDs', () => {
+      const inactiveSec: VenueSectionLayout = {
+        ...mockExistingSection,
+        draftKey: 'sec-existing-1',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-101',
+            rowLabel: 'A',
+            seatNumber: 1,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: false,
+          },
+          {
+            seatId: 'seat-102',
+            rowLabel: 'A',
+            seatNumber: 2,
+            gridX: 1,
+            gridY: 0,
+            positionX: 60,
+            positionY: 20,
+            isActive: false,
+          },
+        ],
+      };
+      // Other sections hold 3 actives; 3 + 2 restored = 5 exact fit succeeds.
+      const reactivated = service.reactivateSection(inactiveSec, [inactiveSec], 5, 3);
+      expect(reactivated.isActive).toBeTrue();
+      expect(reactivated.seats[0].seatId).toBe('seat-101');
+      expect(reactivated.seats[1].seatId).toBe('seat-102');
+      expect(reactivated.seats.every((s) => s.isActive)).toBeTrue();
+    });
+
+    it('should reject reactivation one over capacity without mutating input', () => {
+      const inactiveSec: VenueSectionLayout = {
+        ...mockExistingSection,
+        draftKey: 'sec-existing-1',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-101',
+            rowLabel: 'A',
+            seatNumber: 1,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: false,
+          },
+          {
+            seatId: 'seat-102',
+            rowLabel: 'A',
+            seatNumber: 2,
+            gridX: 1,
+            gridY: 0,
+            positionX: 60,
+            positionY: 20,
+            isActive: false,
+          },
+        ],
+      };
+      const before = JSON.stringify(inactiveSec);
+      expect(() => service.reactivateSection(inactiveSec, [inactiveSec], 5, 4)).toThrowError(
+        /would exceed venue capacity/,
+      );
+      expect(JSON.stringify(inactiveSec)).toBe(before);
+    });
+
+    it('should reject reactivation on duplicate active coordinates without mutating input', () => {
+      const inactiveSec: VenueSectionLayout = {
+        ...mockExistingSection,
+        draftKey: 'sec-existing-1',
+        isActive: false,
+        seats: [
+          {
+            seatId: 'seat-101',
+            rowLabel: 'A',
+            seatNumber: 1,
+            gridX: 0,
+            gridY: 0,
+            positionX: 20,
+            positionY: 20,
+            isActive: false,
+          },
+          {
+            seatId: 'seat-102',
+            rowLabel: 'B',
+            seatNumber: 1,
+            gridX: 0,
+            gridY: 1,
+            positionX: 20,
+            positionY: 20,
+            isActive: false,
+          },
+        ],
+      };
+      const before = JSON.stringify(inactiveSec);
+      expect(() => service.reactivateSection(inactiveSec, [inactiveSec], 100, 0)).toThrowError(
+        /duplicate active position/,
+      );
+      expect(JSON.stringify(inactiveSec)).toBe(before);
+    });
+
+    it('should validate section bounds for retained seats', () => {
+      const inBounds: VenueSectionLayout = {
+        ...mockExistingSection,
+        width: 400,
+        height: 300,
+      };
+      expect(service.validateSectionBounds(inBounds)).toBeNull();
+
+      const outOfBounds: VenueSectionLayout = {
+        ...mockExistingSection,
+        width: 1,
+        height: 300,
+      };
+      expect(service.validateSectionBounds(outOfBounds)).toContain('out of section bounds');
+    });
+
+    it('should validate appended seats against retained seats', () => {
+      const base = mockExistingSection.seats[0];
+      const cleanAppend = [
+        { ...base, seatId: null, rowLabel: 'C', seatNumber: 1, gridX: 0, gridY: 2 },
+      ];
+      expect(service.validateSeatAppend(mockExistingSection, cleanAppend)).toBeNull();
+
+      const rowCollision = [
+        { ...base, seatId: null, rowLabel: 'a', seatNumber: 1, gridX: 5, gridY: 5 },
+      ];
+      expect(service.validateSeatAppend(mockExistingSection, rowCollision)).toContain(
+        'duplicates row/number',
+      );
+
+      const gridCollision = [
+        { ...base, seatId: null, rowLabel: 'Z', seatNumber: 9, gridX: 0, gridY: 0 },
+      ];
+      expect(service.validateSeatAppend(mockExistingSection, gridCollision)).toContain(
+        'duplicates grid coordinates',
+      );
+    });
+
     it('should reject removing a saved section (non-null sectionId)', () => {
       expect(service.canRemoveSection(mockExistingSection)).toBeFalse();
       expect(() => service.removeSection(mockExistingSection, [mockExistingSection])).toThrowError(
@@ -423,6 +568,21 @@ describe('SeatLayoutGeneratorService', () => {
       );
     });
 
+    it('should document the total-including capacity contract (exact fit ok, over-by-one fails)', () => {
+      // testSection has 2 active seats (s-00, s-01); activating s-10 + s-11.
+      const selected = new Set(['s-10', 's-11']);
+      // Venue-wide total INCLUDING this section is 2; 2 + 2 fits exactly in 4.
+      const exactFit = service.bulkSetActive(testSection, selected, true, 4, 2);
+      expect(exactFit.seats[2].isActive).toBeTrue();
+      expect(exactFit.seats[3].isActive).toBeTrue();
+
+      const before = JSON.stringify(testSection);
+      expect(() => service.bulkSetActive(testSection, selected, true, 3, 2)).toThrowError(
+        /would exceed venue capacity/,
+      );
+      expect(JSON.stringify(testSection)).toBe(before);
+    });
+
     it('should bulk translate selected seats and preserve loaded seatIds', () => {
       const selected = new Set(['s-00', 's-01']);
       const translated = service.bulkTranslate(testSection, selected, {
@@ -512,6 +672,23 @@ describe('SeatLayoutGeneratorService', () => {
       expect(isSeatSelected(seat, new Set(['xyz']))).toBeTrue();
       expect(isSeatSelected(seat, new Set(['2_3']))).toBeTrue();
       expect(isSeatSelected(seat, new Set(['other']))).toBeFalse();
+    });
+
+    it('should resolve the stable seat color key (seatId preferred, grid fallback)', () => {
+      const persisted: VenueSectionSeat = {
+        seatId: 's-99',
+        rowLabel: 'A',
+        seatNumber: 1,
+        gridX: 4,
+        gridY: 7,
+        positionX: 50,
+        positionY: 50,
+        isActive: true,
+      };
+      expect(getSeatColorKey(persisted)).toBe('s-99');
+
+      const draft: VenueSectionSeat = { ...persisted, seatId: null };
+      expect(getSeatColorKey(draft)).toBe('7_4');
     });
   });
 });

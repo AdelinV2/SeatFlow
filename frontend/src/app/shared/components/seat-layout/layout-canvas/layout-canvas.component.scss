@@ -22,6 +22,19 @@
   }
 }
 
+.canvas-mode-toolbar {
+  user-select: none;
+
+  .mode-btn {
+    cursor: pointer;
+    user-select: none;
+  }
+}
+
+.canvas-legend {
+  user-select: none;
+}
+
 /* Layout Elements Visual Design */
 .layout-element {
   pointer-events: none;

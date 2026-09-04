@@ -187,4 +187,64 @@ describe('SectionPropertiesPanelComponent', () => {
     expect(alert.attributes['aria-live']).toBe('polite');
     expect(alert.nativeElement.textContent).toContain('Active seat count exceeds venue capacity');
   });
+
+  describe('Color themes and seat coloring', () => {
+    it('should emit sectionColorChanged when a preset color swatch is chosen', () => {
+      spyOn(component.sectionColorChanged, 'emit');
+      component.selectSectionColor('#8B5CF6');
+      expect(component.sectionColorChanged.emit).toHaveBeenCalledWith('#8B5CF6');
+    });
+
+    it('should emit seatColorAssigned when assigning color to selected seats', () => {
+      fixture.componentRef.setInput('selectedSeatKeys', new Set(['seat-1']));
+      fixture.detectChanges();
+
+      spyOn(component.seatColorAssigned, 'emit');
+      component.assignColorToSelectedSeats('#EF4444');
+      expect(component.seatColorAssigned.emit).toHaveBeenCalledWith({
+        seatKeys: ['seat-1'],
+        color: '#EF4444',
+      });
+    });
+  });
+
+  describe('Row and Column Aisle and Quick Operations', () => {
+    it('should emit rowToggled with row and desired active state', () => {
+      spyOn(component.rowToggled, 'emit');
+      component.triggerRowToggle('A', false);
+      expect(component.rowToggled.emit).toHaveBeenCalledWith({ rowLabel: 'A', active: false });
+    });
+
+    it('should emit colToggled with column index and desired active state', () => {
+      spyOn(component.colToggled, 'emit');
+      component.triggerColToggle(1, false);
+      expect(component.colToggled.emit).toHaveBeenCalledWith({ colIndex: 1, active: false });
+    });
+
+    it('should emit centerAisleCreated, dualAislesCreated, and allSeatsActivated', () => {
+      spyOn(component.centerAisleCreated, 'emit');
+      spyOn(component.dualAislesCreated, 'emit');
+      spyOn(component.allSeatsActivated, 'emit');
+
+      component.triggerCenterAisle();
+      expect(component.centerAisleCreated.emit).toHaveBeenCalled();
+
+      component.triggerDualAisles();
+      expect(component.dualAislesCreated.emit).toHaveBeenCalled();
+
+      component.triggerActivateAllSeats();
+      expect(component.allSeatsActivated.emit).toHaveBeenCalled();
+    });
+
+    it('should emit rowAppended and colAppended', () => {
+      spyOn(component.rowAppended, 'emit');
+      spyOn(component.colAppended, 'emit');
+
+      component.triggerAppendRow();
+      expect(component.rowAppended.emit).toHaveBeenCalled();
+
+      component.triggerAppendCol();
+      expect(component.colAppended.emit).toHaveBeenCalled();
+    });
+  });
 });

@@ -781,6 +781,31 @@ describe('LayoutCanvasComponent', () => {
       expect(emittedSeat.section.sectionId).toBe('sec-orchestra');
     });
 
+    it('propagates modifier state as additive on Ctrl/Cmd seat clicks (REV-004)', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.detectChanges();
+
+      const emitted: any[] = [];
+      component.seatSelected.subscribe((data) => {
+        emitted.push(data);
+      });
+
+      component.onSeatClick({
+        event: new MouseEvent('click'),
+        seat: mockSections[0].seats[0],
+        section: mockSections[0],
+      });
+      component.onSeatClick({
+        event: new MouseEvent('click', { ctrlKey: true }),
+        seat: mockSections[0].seats[0],
+        section: mockSections[0],
+      });
+
+      expect(emitted.length).toBe(2);
+      expect(emitted[0].additive).toBeFalse();
+      expect(emitted[1].additive).toBeTrue();
+    });
+
     it('renders inactive sections and seats in editor DOM and permits editor seat selection (REV-003)', () => {
       const inactiveSection: VenueSectionLayout = {
         ...mockSections[0],

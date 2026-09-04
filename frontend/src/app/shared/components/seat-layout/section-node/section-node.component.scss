@@ -8,8 +8,6 @@
 
   &:not(.editable) {
     cursor: default;
-    // REV-004: keep inactive read-only geometry hit-testable so section guards
-    // run and stop propagation; pointer-events:none would retarget to canvas.
   }
 
   &.section-inactive {
@@ -22,32 +20,33 @@
   }
 
   .section-boundary {
-    fill: rgba(30, 41, 59, 0.4);
-    stroke: rgba(148, 163, 184, 0.35);
+    fill: rgba(15, 23, 42, 0.5);
+    stroke: var(--section-color, rgba(148, 163, 184, 0.4));
     stroke-width: 1.5px;
     transition:
-      stroke 0.15s ease,
-      stroke-width 0.15s ease;
+      stroke 0.2s ease,
+      stroke-width 0.2s ease,
+      filter 0.2s ease;
   }
 
   &.selected .section-boundary {
-    stroke: #6366f1;
+    stroke: var(--section-color, #6366f1);
     stroke-width: 2.5px;
-    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.35));
+    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.35));
   }
 
   .section-title {
-    fill: #94a3b8;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    fill: rgba(148, 163, 184, 0.25);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     pointer-events: none;
     user-select: none;
   }
 
   &.selected .section-title {
-    fill: #e0e7ff;
+    fill: rgba(165, 180, 252, 0.35);
   }
 
   &:focus-visible .section-boundary {
@@ -60,29 +59,86 @@
   .seat-item {
     cursor: pointer;
     outline: none;
-    transition: transform 0.1s ease;
 
     .seat-circle {
-      fill: #3b82f6;
-      stroke: #1d4ed8;
+      fill: var(--seat-color, #6366f1);
+      stroke: rgba(255, 255, 255, 0.35);
       stroke-width: 1.5px;
       transition:
         fill 0.15s ease,
-        stroke 0.15s ease;
+        stroke 0.15s ease,
+        stroke-width 0.15s ease,
+        filter 0.15s ease;
     }
 
     .seat-number {
       fill: #ffffff;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        Roboto,
+        'Inter',
+        sans-serif;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
       pointer-events: none;
       user-select: none;
+      paint-order: stroke fill;
+      stroke: rgba(15, 23, 42, 0.45);
+      stroke-width: 1px;
+      stroke-linejoin: round;
+
+      &.seat-number-dark {
+        fill: #0f172a;
+        stroke: rgba(255, 255, 255, 0.65);
+        stroke-width: 1px;
+      }
     }
 
-    &:not(.non-interactive):hover .seat-circle {
-      fill: #60a5fa;
-      stroke: #2563eb;
+    .seat-selection-ring {
+      fill: none;
+      stroke: #fbbf24;
+      stroke-width: 2.5px;
+      stroke-dasharray: 4 2;
+      filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+    }
+
+    /* Fixed: Zero CSS transform on SVG <g> to eliminate hover oscillation / teleporting */
+    &:not(.non-interactive):hover {
+      .seat-circle {
+        stroke: #ffffff;
+        stroke-width: 2.5px;
+        filter: drop-shadow(0 0 8px var(--seat-color, #6366f1));
+      }
+
+      .seat-backrest-arc {
+        stroke: rgba(255, 255, 255, 0.65);
+        stroke-width: 1.75px;
+      }
+    }
+
+    &.tool-toggle {
+      cursor: crosshair;
+
+      &:hover .seat-circle {
+        stroke: #f43f5e;
+        stroke-width: 2.5px;
+        filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.7));
+      }
+    }
+
+    &.tool-paint {
+      cursor: copy;
+
+      &:hover .seat-circle {
+        stroke: #38bdf8;
+        stroke-width: 2.5px;
+        filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.7));
+      }
     }
 
     &:not(.non-interactive):focus-visible .seat-circle {
@@ -92,20 +148,75 @@
 
     &.non-interactive {
       cursor: default;
-      // REV-004: keep disabled seats hit-testable; onSeatClick guards + stops propagation.
     }
 
     &.inactive {
-      opacity: 0.45;
-      cursor: not-allowed;
+      opacity: 0.5;
 
       .seat-circle {
-        fill: #475569;
-        stroke: #334155;
+        fill: rgba(15, 23, 42, 0.75);
+        stroke: rgba(148, 163, 184, 0.4);
+        stroke-dasharray: 3 2.5;
+        stroke-width: 1.25px;
       }
 
-      .seat-number {
-        fill: #94a3b8;
+      &:hover .seat-circle {
+        fill: rgba(30, 41, 59, 0.95);
+        stroke: #059669;
+        stroke-width: 2px;
+        filter: drop-shadow(0 0 6px rgba(5, 150, 105, 0.5));
+      }
+    }
+  }
+}
+
+.canvas-guides {
+  .canvas-guide-badge {
+    outline: none;
+    cursor: pointer;
+
+    .guide-badge-bg {
+      fill: #1e293b;
+      stroke: #475569;
+      stroke-width: 1.5px;
+      transition:
+        fill 0.15s ease,
+        stroke 0.15s ease,
+        stroke-width 0.15s ease,
+        filter 0.15s ease;
+    }
+
+    .guide-badge-text {
+      fill: #cbd5e1;
+      font-size: 10.5px;
+      font-weight: 600;
+      font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        Roboto,
+        'Inter',
+        sans-serif;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
+      pointer-events: none;
+      user-select: none;
+      transition: fill 0.15s ease;
+    }
+
+    /* Fixed: Zero CSS transform on SVG <g> to eliminate guide badge jittering */
+    &:hover {
+      .guide-badge-bg {
+        fill: #334155;
+        stroke: #818cf8;
+        stroke-width: 2px;
+        filter: drop-shadow(0 0 8px rgba(129, 140, 248, 0.6));
+      }
+
+      .guide-badge-text {
+        fill: #ffffff;
+        font-weight: 700;
       }
     }
   }

@@ -2,6 +2,7 @@ package com.seatflow.seatmap.service.impl;
 
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.seatflow.seatmap.model.entity.Venue;
 import com.seatflow.seatmap.model.enums.LayoutElementType;
 import com.seatflow.seatmap.service.LayoutValidationService;
@@ -439,10 +440,22 @@ public class LayoutValidationServiceImpl implements LayoutValidationService {
             if (section == null) {
                 continue;
             }
-            if (section.shapeMetadata() == null || section.shapeMetadata().isNull()) {
+            Object meta = section.shapeMetadata();
+            if (meta == null) {
                 continue;
             }
-            if (!section.shapeMetadata().isObject()) {
+            if (meta instanceof JsonNode jsonNode) {
+                if (jsonNode.isNull()) {
+                    continue;
+                }
+                if (!jsonNode.isObject()) {
+                    throw new ValidationException(
+                            "Rule 9: sections[" + i + "].shapeMetadata must be a JSON object",
+                            ErrorCode.INVALID_REQUEST);
+                }
+                continue;
+            }
+            if (!(meta instanceof Map<?, ?>)) {
                 throw new ValidationException(
                         "Rule 9: sections[" + i + "].shapeMetadata must be a JSON object",
                         ErrorCode.INVALID_REQUEST);

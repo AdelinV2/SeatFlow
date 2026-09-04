@@ -43,18 +43,36 @@
     <!-- Capacity Stats & Action Buttons -->
     <div class="flex flex-wrap items-center gap-3 self-start lg:self-auto">
       <div
-        class="px-4 py-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs"
+        class="px-4 py-2.5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs min-w-[200px]"
       >
-        <span
-          class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]"
-          >Configured Seats</span
-        >
-        <span class="text-lg font-black text-indigo-600 dark:text-indigo-400">
-          {{ totalConfiguredActiveSeats() | number }}
+        <div class="flex items-center justify-between gap-3">
+          <span
+            class="block text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]"
+            >Capacity</span
+          >
+          <span class="text-[10px] font-extrabold font-mono text-indigo-600 dark:text-indigo-400">
+            {{ capacityPercentage() }}%
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1 mt-0.5">
+          <span class="text-lg font-black text-indigo-600 dark:text-indigo-400">
+            {{ totalConfiguredActiveSeats() | number }}
+          </span>
           <span class="text-xs font-normal text-[var(--color-text-muted)]"
             >/ {{ venue()?.capacity || 0 }} max</span
           >
-        </span>
+        </div>
+        <div
+          class="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 mt-1.5 overflow-hidden"
+        >
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            [style.width.%]="capacityPercentage()"
+            [class.bg-emerald-500]="capacityPercentage() <= 85"
+            [class.bg-amber-500]="capacityPercentage() > 85 && capacityPercentage() < 100"
+            [class.bg-rose-500]="capacityPercentage() >= 100"
+          ></div>
+        </div>
       </div>
 
       <!-- Discard Draft Button -->
@@ -193,22 +211,26 @@
       class="flex items-center justify-between gap-3 overflow-x-auto pb-3 mb-6 border-b border-[var(--color-border)]"
     >
       <div class="flex items-center gap-2">
-        @for (sec of sections(); track sec.sectionId || sec.name) {
+        @for (sec of sections(); track sec.draftKey ?? sec.sectionId ?? sec.name) {
           <button
             type="button"
-            (click)="selectSection(sec.sectionId)"
-            [class.bg-indigo-600]="selectedSectionId() === sec.sectionId"
-            [class.text-white]="selectedSectionId() === sec.sectionId"
-            [class.border-indigo-600]="selectedSectionId() === sec.sectionId"
-            [class.shadow-md]="selectedSectionId() === sec.sectionId"
+            (click)="selectSection(sec)"
+            [class.bg-indigo-600]="selectedSectionKey() === sectionKey(sec)"
+            [class.text-white]="selectedSectionKey() === sectionKey(sec)"
+            [class.border-indigo-600]="selectedSectionKey() === sectionKey(sec)"
+            [class.shadow-md]="selectedSectionKey() === sectionKey(sec)"
             class="btn-spring px-4 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-canvas-subtle)] whitespace-nowrap transition-all flex items-center gap-2"
           >
+            <span
+              class="size-2.5 rounded-full shrink-0 shadow-xs"
+              [style.background-color]="getSectionColor(sec)"
+            ></span>
             <span>{{ sec.name }}</span>
             <span
-              [class.bg-white]="selectedSectionId() === sec.sectionId"
-              [class.text-indigo-600]="selectedSectionId() === sec.sectionId"
-              [class.bg-indigo-500/15]="selectedSectionId() !== sec.sectionId"
-              [class.text-indigo-600]="selectedSectionId() !== sec.sectionId"
+              [class.bg-white]="selectedSectionKey() === sectionKey(sec)"
+              [class.text-indigo-600]="selectedSectionKey() === sectionKey(sec)"
+              [class.bg-indigo-500/15]="selectedSectionKey() !== sectionKey(sec)"
+              [class.text-indigo-600]="selectedSectionKey() !== sectionKey(sec)"
               class="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold"
             >
               {{ sec.rowCount }}×{{ sec.colCount }}
@@ -259,81 +281,6 @@
         <div
           class="canvas-wrapper relative w-full h-[650px] min-h-[500px] rounded-3xl border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-md overflow-hidden"
         >
-          <!-- Canvas Toolbar Controls Overlay -->
-          <div
-            class="absolute top-4 left-4 z-20 flex items-center gap-1 p-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md shadow-sm"
-          >
-            <button
-              type="button"
-              (click)="zoomIn()"
-              aria-label="Zoom in"
-              title="Zoom in (+)"
-              class="p-2 rounded-xl hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)]"
-            >
-              <svg
-                class="size-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                <line x1="11" y1="8" x2="11" y2="14" />
-                <line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              (click)="zoomOut()"
-              aria-label="Zoom out"
-              title="Zoom out (-)"
-              class="p-2 rounded-xl hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)]"
-            >
-              <svg
-                class="size-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                <line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-            </button>
-            <div class="h-4 w-px bg-[var(--color-border)]"></div>
-            <button
-              type="button"
-              (click)="resetView()"
-              aria-label="Reset view to 100%"
-              title="Reset view (1:1)"
-              class="p-2 rounded-xl hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)] text-xs font-bold font-mono"
-            >
-              1:1
-            </button>
-            <button
-              type="button"
-              (click)="fitToLayout()"
-              aria-label="Fit layout in view"
-              title="Fit to layout"
-              class="p-2 rounded-xl hover:bg-[var(--color-canvas-subtle)] text-[var(--color-text-secondary)]"
-            >
-              <svg
-                class="size-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polyline points="15 3 21 3 21 9" />
-                <polyline points="9 21 3 21 3 15" />
-                <line x1="21" y1="3" x2="14" y2="10" />
-                <line x1="3" y1="21" x2="10" y2="14" />
-              </svg>
-            </button>
-          </div>
-
           <!-- Shared Layout Canvas Component -->
           <app-layout-canvas
             #canvasRef
@@ -341,9 +288,19 @@
             [elements]="elements()"
             [selectedSectionIds]="selectedSectionIdSet()"
             [editable]="true"
+            [toolMode]="toolMode()"
+            [paintColor]="activePaintColor()"
+            [selectedSeatKeys]="selectedSeatKeys()"
+            (toolModeChange)="onToolModeChange($event)"
             (sectionTransformChanged)="onSectionTransformChanged($event)"
             (selectionChanged)="onCanvasSelectionChanged($event)"
             (seatSelected)="onCanvasSeatSelected($event)"
+            (seatToggle)="onCanvasSeatToggle($event)"
+            (seatPaint)="onCanvasSeatPaint($event)"
+            (rowClick)="onCanvasRowClick($event)"
+            (rowDblClick)="onCanvasRowDblClick($event)"
+            (colClick)="onCanvasColClick($event)"
+            (colDblClick)="onCanvasColDblClick($event)"
           />
         </div>
       </div>
@@ -367,6 +324,15 @@
           (bulkSetRowLabel)="onBulkSetRowLabel($event)"
           (bulkRenumber)="onBulkRenumber($event)"
           (seatSelectionChanged)="onSeatSelectionChanged($event)"
+          (sectionColorChanged)="onSectionColorChanged($event)"
+          (seatColorAssigned)="onSeatColorAssigned($event)"
+          (rowToggled)="onRowToggled($event)"
+          (colToggled)="onColToggled($event)"
+          (centerAisleCreated)="onCenterAisleCreated()"
+          (dualAislesCreated)="onDualAislesCreated()"
+          (allSeatsActivated)="onAllSeatsActivated()"
+          (rowAppended)="onRowAppended()"
+          (colAppended)="onColAppended()"
         />
       </div>
     </div>

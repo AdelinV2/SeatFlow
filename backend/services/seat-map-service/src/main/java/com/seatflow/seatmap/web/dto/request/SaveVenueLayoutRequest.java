@@ -1,6 +1,5 @@
 package com.seatflow.seatmap.web.dto.request;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.seatflow.seatmap.model.enums.LayoutElementType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -79,7 +78,7 @@ public record SaveVenueLayoutRequest(
         Integer zIndex,
 
         @Schema(description = "Optional shape metadata; must be a JSON object when present")
-        JsonNode shapeMetadata,
+        Object shapeMetadata,
 
         @Schema(description = "Seat upserts in this section")
         @NotNull(message = "Seats list is required")

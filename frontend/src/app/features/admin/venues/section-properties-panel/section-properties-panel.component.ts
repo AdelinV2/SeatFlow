@@ -36,6 +36,32 @@ export class SectionPropertiesPanelComponent {
   readonly bulkSetRowLabel = output<string>();
   readonly bulkRenumber = output<number>();
   readonly seatSelectionChanged = output<Set<string>>();
+  readonly sectionColorChanged = output<string>();
+  readonly seatColorAssigned = output<{ seatKeys: string[]; color: string }>();
+  readonly rowToggled = output<{ rowLabel: string; active?: boolean }>();
+  readonly colToggled = output<{ colIndex: number; active?: boolean }>();
+  readonly centerAisleCreated = output<void>();
+  readonly dualAislesCreated = output<void>();
+  readonly allSeatsActivated = output<void>();
+  readonly rowAppended = output<void>();
+  readonly colAppended = output<void>();
+
+  // Color Theme Presets
+  readonly PRESET_COLORS: ReadonlyArray<{ name: string; hex: string }> = [
+    { name: 'Royal Indigo', hex: '#6366f1' },
+    { name: 'Jewel Emerald', hex: '#059669' },
+    { name: 'Amber Gold', hex: '#f59e0b' },
+    { name: 'Ruby Rose', hex: '#f43f5e' },
+    { name: 'Deep Violet', hex: '#8b5cf6' },
+    { name: 'Ocean Cyan', hex: '#0ea5e9' },
+    { name: 'Sunset Coral', hex: '#f97316' },
+    { name: 'Fuchsia Pink', hex: '#d946ef' },
+  ];
+
+  // Quick Row / Col selectors
+  readonly selectedQuickRow = signal<string>('');
+  readonly selectedQuickCol = signal<number>(0);
+  readonly customHexColor = signal<string>('#6366f1');
 
   // Generator form fields
   readonly generatorRows = signal<number>(10);
@@ -89,6 +115,102 @@ export class SectionPropertiesPanelComponent {
     const keys = this.selectedSeatKeys();
     return list.every((s) => isSeatSelected(s, keys));
   });
+
+  readonly currentSectionColor = computed<string>(() => {
+    const meta = this.section()?.shapeMetadata as Record<string, unknown> | null;
+    if (meta && typeof meta['color'] === 'string' && meta['color']) {
+      return meta['color'];
+    }
+    return '#6366f1';
+  });
+
+  readonly availableRows = computed(() => {
+    const seats = this.seatsList();
+    const map = new Map<string, { label: string; total: number; active: number }>();
+    for (const s of seats) {
+      let item = map.get(s.rowLabel);
+      if (!item) {
+        item = { label: s.rowLabel, total: 0, active: 0 };
+        map.set(s.rowLabel, item);
+      }
+      item.total++;
+      if (s.isActive) item.active++;
+    }
+    return Array.from(map.values());
+  });
+
+  readonly availableCols = computed(() => {
+    const seats = this.seatsList();
+    const sec = this.section();
+    const colCount = sec?.colCount || 0;
+    const cols: { colIndex: number; total: number; active: number }[] = [];
+    for (let c = 0; c < colCount; c++) {
+      const colSeats = seats.filter((s) => s.gridX === c);
+      cols.push({
+        colIndex: c,
+        total: colSeats.length,
+        active: colSeats.filter((s) => s.isActive).length,
+      });
+    }
+    return cols;
+  });
+
+  selectSectionColor(color: string): void {
+    this.sectionColorChanged.emit(color);
+  }
+
+  assignColorToSelectedSeats(color: string): void {
+    const keys = Array.from(this.selectedSeatKeys());
+    if (keys.length > 0) {
+      this.seatColorAssigned.emit({ seatKeys: keys, color });
+    }
+  }
+
+  triggerRowToggle(rowLabel: string, active?: boolean): void {
+    this.rowToggled.emit({ rowLabel, active });
+  }
+
+  triggerColToggle(colIndex: number, active?: boolean): void {
+    this.colToggled.emit({ colIndex, active });
+  }
+
+  triggerCenterAisle(): void {
+    this.centerAisleCreated.emit();
+  }
+
+  triggerDualAisles(): void {
+    this.dualAislesCreated.emit();
+  }
+
+  triggerActivateAllSeats(): void {
+    this.allSeatsActivated.emit();
+  }
+
+  triggerAppendRow(): void {
+    this.rowAppended.emit();
+  }
+
+  triggerAppendCol(): void {
+    this.colAppended.emit();
+  }
+
+  selectRowSeats(rowLabel: string): void {
+    const seats = this.seatsList().filter((s) => s.rowLabel === rowLabel);
+    const keys = new Set(this.selectedSeatKeys());
+    for (const s of seats) {
+      keys.add(s.seatId || getSeatKey(s));
+    }
+    this.seatSelectionChanged.emit(keys);
+  }
+
+  selectColSeats(colIndex: number): void {
+    const seats = this.seatsList().filter((s) => s.gridX === colIndex);
+    const keys = new Set(this.selectedSeatKeys());
+    for (const s of seats) {
+      keys.add(s.seatId || getSeatKey(s));
+    }
+    this.seatSelectionChanged.emit(keys);
+  }
 
   isSeatSelected(seat: VenueSectionSeat): boolean {
     return isSeatSelected(seat, this.selectedSeatKeys());

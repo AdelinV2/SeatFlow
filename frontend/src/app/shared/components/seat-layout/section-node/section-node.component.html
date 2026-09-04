@@ -4,6 +4,7 @@
   [class.section-inactive]="!section().isActive"
   [class.editable]="editable()"
   [attr.transform]="transformString()"
+  [style.--section-color]="getSectionColor()"
   (pointerdown)="onSectionPointerDown($event)"
   (click)="onSectionClick($event)"
   [attr.tabindex]="isSelectable() ? 0 : -1"
@@ -17,8 +18,8 @@
     y="0"
     [attr.width]="section().width"
     [attr.height]="section().height"
-    rx="6"
-    ry="6"
+    rx="8"
+    ry="8"
   />
 
   <!-- Section Name Badge / Title -->
@@ -41,9 +42,15 @@
       <svg:g
         class="seat-item"
         [class.inactive]="!seat.isActive"
+        [class.selected]="isSeatSelected(seat)"
         [class.non-interactive]="!isSeatInteractive(seat)"
+        [class.tool-toggle]="editable() && toolMode() === 'toggle'"
+        [class.tool-paint]="editable() && toolMode() === 'paint'"
         [attr.transform]="'translate(' + seat.positionX + ' ' + seat.positionY + ')'"
+        [style.--seat-color]="getSeatColor(seat)"
+        (pointerdown)="onSeatPointerDown($event, seat)"
         (click)="onSeatClick($event, seat)"
+        (dblclick)="onSeatDblClick($event, seat)"
         (keydown)="onSeatKeyDown($event, seat)"
         [attr.tabindex]="isSeatInteractive(seat) ? 0 : -1"
         [attr.role]="isSeatInteractive(seat) ? 'button' : null"
@@ -56,13 +63,87 @@
           (seat.isActive ? '' : ' (inactive)')
         "
       >
-        <svg:circle class="seat-circle" cx="0" cy="0" r="14" />
-        <svg:text class="seat-number" x="0" y="0" text-anchor="middle" dominant-baseline="central">
-          {{ seat.seatNumber }}
-        </svg:text>
+        <!-- Selection Ring Overlay -->
+        @if (isSeatSelected(seat)) {
+          <svg:circle class="seat-selection-ring" cx="0" cy="0" r="17" />
+        }
+
+        <!-- Primary Seat Base -->
+        <svg:circle class="seat-circle" cx="0" cy="0" r="13" />
+
+        <!-- Seat Number (Active seats only; inactive seats display as clean dashed walkway) -->
+        @if (seat.isActive) {
+          <svg:text
+            class="seat-number"
+            [class.seat-number-dark]="isSeatColorLight(seat)"
+            x="0"
+            y="1"
+            text-anchor="middle"
+            dominant-baseline="central"
+          >
+            {{ seat.seatNumber }}
+          </svg:text>
+        }
       </svg:g>
     }
   </svg:g>
+
+  <!-- Interactive Row & Column Canvas Guide Badges (when selected & editable) -->
+  @if (editable() && selected()) {
+    <!-- Row Guides along left boundary -->
+    <svg:g class="canvas-guides row-guides" role="group" aria-label="Row Guides">
+      @for (row of rowHeaders(); track row.rowLabel) {
+        <svg:g
+          class="canvas-guide-badge row-guide-badge"
+          [attr.transform]="'translate(-20 ' + row.y + ')'"
+          (click)="onRowClick($event, row.rowLabel)"
+          (dblclick)="onRowDblClick($event, row.rowLabel)"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="'Row ' + row.rowLabel + ': click to select, double-click to toggle'"
+        >
+          <svg:rect x="-12" y="-11" width="24" height="22" rx="6" class="guide-badge-bg" />
+          <svg:text
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="central"
+            class="guide-badge-text"
+          >
+            {{ row.rowLabel }}
+          </svg:text>
+        </svg:g>
+      }
+    </svg:g>
+
+    <!-- Column Guides along top boundary -->
+    <svg:g class="canvas-guides col-guides" role="group" aria-label="Column Guides">
+      @for (col of colHeaders(); track col.colIndex) {
+        <svg:g
+          class="canvas-guide-badge col-guide-badge"
+          [attr.transform]="'translate(' + col.x + ' -20)'"
+          (click)="onColClick($event, col.colIndex)"
+          (dblclick)="onColDblClick($event, col.colIndex)"
+          role="button"
+          tabindex="0"
+          [attr.aria-label]="
+            'Column ' + (col.colIndex + 1) + ': click to select, double-click to toggle'
+          "
+        >
+          <svg:rect x="-11" y="-11" width="22" height="22" rx="6" class="guide-badge-bg" />
+          <svg:text
+            x="0"
+            y="0"
+            text-anchor="middle"
+            dominant-baseline="central"
+            class="guide-badge-text"
+          >
+            {{ col.colIndex + 1 }}
+          </svg:text>
+        </svg:g>
+      }
+    </svg:g>
+  }
 
   <!-- Transform Handles: Only visible when selected and editable -->
   @if (editable() && selected()) {
