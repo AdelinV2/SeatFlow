@@ -7,11 +7,15 @@ import { of, throwError } from 'rxjs';
 import { getRowLabel, VenueGridDesignerComponent } from './venue-grid-designer.component';
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import { VenueLayout, VenueSectionLayout, VenueSectionSeat } from '../../../../models/venue.model';
+import { VenueLayoutEditorStateService } from '../../../../services/venue-layout-editor-state.service';
+import { SeatLayoutGeneratorService } from '../../../../services/seat-layout-generator.service';
 
 describe('VenueGridDesignerComponent', () => {
   let component: VenueGridDesignerComponent;
   let fixture: ComponentFixture<VenueGridDesignerComponent>;
   let venueApiSpy: jasmine.SpyObj<AdminVenueApiService>;
+  let editorState: VenueLayoutEditorStateService;
+  let generator: SeatLayoutGeneratorService;
   let snackBarSpy: jasmine.SpyObj<MatSnackBar>;
 
   const mockSeats: VenueSectionSeat[] = [
@@ -21,8 +25,8 @@ describe('VenueGridDesignerComponent', () => {
       seatNumber: 1,
       gridX: 0,
       gridY: 0,
-      positionX: 10,
-      positionY: 10,
+      positionX: 20,
+      positionY: 20,
       isActive: true,
     },
     {
@@ -31,8 +35,8 @@ describe('VenueGridDesignerComponent', () => {
       seatNumber: 2,
       gridX: 1,
       gridY: 0,
-      positionX: 50,
-      positionY: 10,
+      positionX: 60,
+      positionY: 20,
       isActive: true,
     },
     {
@@ -41,8 +45,8 @@ describe('VenueGridDesignerComponent', () => {
       seatNumber: 1,
       gridX: 0,
       gridY: 1,
-      positionX: 10,
-      positionY: 50,
+      positionX: 20,
+      positionY: 60,
       isActive: true,
     },
     {
@@ -51,8 +55,8 @@ describe('VenueGridDesignerComponent', () => {
       seatNumber: 2,
       gridX: 1,
       gridY: 1,
-      positionX: 50,
-      positionY: 50,
+      positionX: 60,
+      positionY: 60,
       isActive: false,
     },
   ];
@@ -63,10 +67,10 @@ describe('VenueGridDesignerComponent', () => {
     rowCount: 2,
     colCount: 2,
     isActive: true,
-    positionX: 0,
-    positionY: 0,
+    positionX: 10,
+    positionY: 20,
     width: 400,
-    height: 200,
+    height: 300,
     rotationDeg: 0,
     zIndex: 1,
     shapeMetadata: null,
@@ -100,14 +104,19 @@ describe('VenueGridDesignerComponent', () => {
   describe('Component lifecycle & interactions', () => {
     beforeEach(async () => {
       venueApiSpy = jasmine.createSpyObj('AdminVenueApiService', [
+        'getEditableLayout',
         'getVenueLayout',
+        'saveLayout',
+        'validateLayout',
         'createSection',
         'deleteSection',
         'toggleSeat',
       ]);
       snackBarSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
 
-      venueApiSpy.getVenueLayout.and.returnValue(of(mockLayout));
+      venueApiSpy.getEditableLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
+      venueApiSpy.getVenueLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
+      venueApiSpy.saveLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
 
       await TestBed.configureTestingModule({
         imports: [VenueGridDesignerComponent],
@@ -130,154 +139,235 @@ describe('VenueGridDesignerComponent', () => {
         ],
       }).compileComponents();
 
+      editorState = TestBed.inject(VenueLayoutEditorStateService);
+      generator = TestBed.inject(SeatLayoutGeneratorService);
+
       fixture = TestBed.createComponent(VenueGridDesignerComponent);
       component = fixture.componentInstance;
       fixture.detectChanges();
     });
 
-    it('should initialize and load venue layout', () => {
+    it('should initialize and load venue layout via editor state', () => {
       expect(component).toBeTruthy();
-      expect(venueApiSpy.getVenueLayout).toHaveBeenCalledWith('v-100');
+      expect(venueApiSpy.getEditableLayout).toHaveBeenCalledWith('v-100');
       expect(component.venue()?.name).toBe('National Opera');
       expect(component.sections().length).toBe(1);
       expect(component.currentSection()?.name).toBe('Orchestra');
-    });
-
-    it('should compute grid matrix and active/inactive counts accurately', () => {
-      expect(component.currentSectionTotalCount()).toBe(4);
-      expect(component.currentSectionActiveCount()).toBe(3);
-      expect(component.currentSectionInactiveCount()).toBe(1);
       expect(component.totalConfiguredActiveSeats()).toBe(3);
-
-      const matrix = component.gridMatrix();
-      expect(matrix.length).toBe(2);
-      expect(matrix[0].rowLabel).toBe('A');
-      expect(matrix[1].rowLabel).toBe('B');
-      expect(matrix[0].seats.length).toBe(2);
     });
 
-    it('should toggle seat active state optimistically and call API', () => {
-      const targetSeat = mockSeats[0]; // s-00, active: true
-      const updatedSeat: VenueSectionSeat = { ...targetSeat, isActive: false };
-      venueApiSpy.toggleSeat.and.returnValue(of(updatedSeat));
+    describe('Risk: UUID regeneration and stable seat IDs', () => {
+      it('should preserve loaded seatIds when bulk updating seat active status', () => {
+        component.onSeatSelectionChanged(new Set(['s-00', 's-01']));
+        component.onBulkActivate(false);
 
-      component.toggleSeat(targetSeat);
+        const sec = component.currentSection();
+        expect(sec?.seats[0].seatId).toBe('s-00');
+        expect(sec?.seats[0].isActive).toBeFalse();
+        expect(sec?.seats[1].seatId).toBe('s-01');
+        expect(sec?.seats[1].isActive).toBeFalse();
 
-      expect(venueApiSpy.toggleSeat).toHaveBeenCalledWith('v-100', 'sec-1', 's-00', false);
-
-      const section = component.currentSection();
-      const toggled = section?.seats.find((s) => s.seatId === 's-00');
-      expect(toggled?.isActive).toBeFalse();
-    });
-
-    it('should rollback seat state if API call fails', () => {
-      const targetSeat = mockSeats[0]; // active: true
-      venueApiSpy.toggleSeat.and.returnValue(
-        throwError(() => ({ error: { message: 'Server error' } })),
-      );
-
-      component.toggleSeat(targetSeat);
-
-      expect(venueApiSpy.toggleSeat).toHaveBeenCalled();
-      expect(snackBarSpy.open).toHaveBeenCalled();
-
-      // State should have reverted to true
-      const section = component.currentSection();
-      const reverted = section?.seats.find((s) => s.seatId === 's-00');
-      expect(reverted?.isActive).toBeTrue();
-    });
-
-    it('should bulk toggle row seats', () => {
-      venueApiSpy.toggleSeat.and.returnValue(of({} as any));
-
-      // Row 0 has 2 seats (both active). Bulk toggle to inactive:
-      component.bulkToggleRow(0, false);
-
-      expect(venueApiSpy.toggleSeat).toHaveBeenCalledTimes(2);
-    });
-
-    it('should bulk toggle column seats', () => {
-      venueApiSpy.toggleSeat.and.returnValue(of({} as any));
-
-      // Col 0 has seat (0,0) [active] and (1,0) [active]. Bulk toggle to inactive:
-      component.bulkToggleColumn(0, false);
-
-      expect(venueApiSpy.toggleSeat).toHaveBeenCalledTimes(2);
-    });
-
-    it('should open and close add section modal', () => {
-      component.openAddSectionModal();
-      expect(component.showAddSectionModal()).toBeTrue();
-
-      component.closeAddSectionModal();
-      expect(component.showAddSectionModal()).toBeFalse();
-    });
-
-    it('should create new section successfully', () => {
-      const newSec: VenueSectionLayout = {
-        sectionId: 'sec-new',
-        name: 'Balcony',
-        rowCount: 3,
-        colCount: 4,
-        isActive: true,
-        positionX: 0,
-        positionY: 200,
-        width: 500,
-        height: 250,
-        rotationDeg: 0,
-        zIndex: 1,
-        shapeMetadata: null,
-        seats: [],
-      };
-
-      venueApiSpy.createSection.and.returnValue(of(newSec));
-
-      component.openAddSectionModal();
-      component.sectionForm.patchValue({
-        name: 'Balcony',
-        rowCount: 3,
-        colCount: 4,
+        // Check unselected seats
+        expect(sec?.seats[2].seatId).toBe('s-10');
+        expect(sec?.seats[3].seatId).toBe('s-11');
       });
 
-      component.createSection();
+      it('should preserve loaded seatIds when bulk translating seats', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkTranslate({ deltaX: 10, deltaY: 5 });
 
-      expect(venueApiSpy.createSection).toHaveBeenCalledWith('v-100', {
-        name: 'Balcony',
-        rowCount: 3,
-        colCount: 4,
+        const sec = component.currentSection();
+        expect(sec?.seats[0].seatId).toBe('s-00');
+        expect(sec?.seats[0].positionX).toBe(30);
+        expect(sec?.seats[0].positionY).toBe(25);
       });
-      expect(component.showAddSectionModal()).toBeFalse();
+
+      it('should preserve loaded seatIds when bulk setting row labels', () => {
+        component.onSeatSelectionChanged(new Set(['s-00', 's-01']));
+        component.onBulkSetRowLabel('VIP');
+
+        const sec = component.currentSection();
+        expect(sec?.seats[0].seatId).toBe('s-00');
+        expect(sec?.seats[0].rowLabel).toBe('VIP');
+        expect(sec?.seats[1].seatId).toBe('s-01');
+        expect(sec?.seats[1].rowLabel).toBe('VIP');
+      });
+
+      it('should preserve loaded seatIds when bulk renumbering seats', () => {
+        component.onSeatSelectionChanged(new Set(['s-00', 's-01']));
+        component.onBulkRenumber(10);
+
+        const sec = component.currentSection();
+        expect(sec?.seats[0].seatId).toBe('s-00');
+        expect(sec?.seats[0].seatNumber).toBe(10);
+        expect(sec?.seats[1].seatId).toBe('s-01');
+        expect(sec?.seats[1].seatNumber).toBe(11);
+      });
+
+      it('should preserve loaded sectionId and seatIds when deactivating a section', () => {
+        component.deactivateSection();
+
+        const sec = component.currentSection();
+        expect(sec?.sectionId).toBe('sec-1');
+        expect(sec?.isActive).toBeFalse();
+        expect(sec?.seats[0].seatId).toBe('s-00');
+        expect(sec?.seats[0].isActive).toBeFalse();
+        expect(sec?.seats[1].seatId).toBe('s-01');
+        expect(sec?.seats[1].isActive).toBeFalse();
+      });
+
+      it('should create null IDs only when duplicating section or generating seats', () => {
+        component.duplicateSection();
+
+        const sections = component.sections();
+        expect(sections.length).toBe(2);
+
+        const dup = sections[1];
+        expect(dup.sectionId).toBeNull();
+        expect(dup.name).toBe('Orchestra Copy');
+        for (const seat of dup.seats) {
+          expect(seat.seatId).toBeNull();
+        }
+
+        // Original section retains its loaded IDs
+        const original = sections[0];
+        expect(original.sectionId).toBe('sec-1');
+        expect(original.seats[0].seatId).toBe('s-00');
+      });
     });
 
-    it('should adjust zoom levels within constraints', () => {
-      component.setZoom(120);
-      expect(component.zoomLevel()).toBe(120);
+    describe('Risk: Network Fan-Out', () => {
+      it('should apply all bulk seat operations strictly in local draft without HTTP calls', () => {
+        // Clear spy invocations from initial load
+        venueApiSpy.saveLayout.calls.reset();
+        venueApiSpy.toggleSeat.calls.reset();
 
-      component.setZoom(300); // capped at 175
-      expect(component.zoomLevel()).toBe(175);
+        // Run rapid bulk actions
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        component.onBulkTranslate({ deltaX: 5, deltaY: 5 });
+        component.onBulkRenumber(5);
+        component.duplicateSection();
+        component.deactivateSection();
 
-      component.resetZoom();
-      expect(component.zoomLevel()).toBe(100);
+        // Must NOT make any API calls
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(venueApiSpy.toggleSeat).not.toHaveBeenCalled();
+
+        // Only explicit saveLayout triggers HTTP request
+        component.saveLayout();
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+      });
     });
 
-    it('should open and close delete section confirm modal', () => {
-      component.openDeleteSectionConfirm();
-      expect(component.showDeleteSectionConfirm()).toBeTrue();
+    describe('Risk: Invalid generation and bounds leave draft byte-for-byte unchanged', () => {
+      it('should leave draft unchanged when bulk translate moves seat out of bounds', () => {
+        const preUpdateSeats = JSON.stringify(component.currentSection()?.seats);
 
-      component.closeDeleteSectionConfirm();
-      expect(component.showDeleteSectionConfirm()).toBeFalse();
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        // section width is 400. Moving by +500 moves it out of bounds
+        component.onBulkTranslate({ deltaX: 500, deltaY: 0 });
+
+        expect(component.validationError()).toContain('out of bounds');
+        const postUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+        expect(postUpdateSeats).toBe(preUpdateSeats);
+      });
+
+      it('should leave draft unchanged when duplicate row/seat is caused by row label edit', () => {
+        const preUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+
+        // Renaming B1 to A1 would duplicate A1
+        component.onSeatSelectionChanged(new Set(['s-10']));
+        component.onBulkSetRowLabel('A');
+
+        expect(component.validationError()).toContain('duplicate row/seat');
+        const postUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+        expect(postUpdateSeats).toBe(preUpdateSeats);
+      });
+
+      it('should leave draft unchanged when seat generation exceeds capacity', () => {
+        const preUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+
+        // Request generating 2000 seats when venue capacity is 1000
+        component.onGenerateSeats({
+          rowCount: 40,
+          colCount: 50,
+          pitchX: 20,
+          pitchY: 20,
+          originX: 10,
+          originY: 10,
+          isActive: true,
+          sectionWidth: 1500,
+          sectionHeight: 1500,
+          venueCapacity: component.venue()?.capacity,
+          totalOtherActiveSeats: 0,
+        });
+
+        expect(component.validationError()).toContain('exceeds venue capacity');
+        const postUpdateSeats = JSON.stringify(component.currentSection()?.seats);
+        expect(postUpdateSeats).toBe(preUpdateSeats);
+      });
     });
 
-    it('should delete section successfully and reload layout', () => {
-      venueApiSpy.deleteSection.and.returnValue(of(undefined));
-      component.openDeleteSectionConfirm();
+    describe('Risk: Destructive removal of existing section', () => {
+      it('should reject removing a saved section and keep it in draft', () => {
+        expect(component.sections().length).toBe(1);
+        component.removeSection();
 
-      component.confirmDeleteSection();
+        expect(component.validationError()).toContain(
+          'Saved sections cannot be removed; use deactivate instead',
+        );
+        expect(component.sections().length).toBe(1);
+        expect(component.sections()[0].sectionId).toBe('sec-1');
+      });
 
-      expect(venueApiSpy.deleteSection).toHaveBeenCalledWith('v-100', 'sec-1');
-      expect(component.showDeleteSectionConfirm()).toBeFalse();
-      expect(snackBarSpy.open).toHaveBeenCalled();
-      expect(venueApiSpy.getVenueLayout).toHaveBeenCalledWith('v-100');
+      it('should permit removing a never-saved null-ID section', () => {
+        // Add a new draft section
+        component.sectionForm.patchValue({
+          name: 'Temporary Balcony',
+          rowCount: 2,
+          colCount: 2,
+          generateSeats: false,
+        });
+        component.createSection();
+
+        expect(component.sections().length).toBe(2);
+        const draftSec = component.sections().find((s) => s.name === 'Temporary Balcony');
+        expect(draftSec?.sectionId).toBeNull();
+
+        component.selectSection(draftSec ?? null);
+        component.removeSection();
+
+        expect(component.sections().length).toBe(1);
+        expect(component.sections()[0].name).toBe('Orchestra');
+      });
+    });
+
+    describe('Save and Discard workflow', () => {
+      it('should save layout draft and display success notification', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.isDirty()).toBeTrue();
+
+        component.saveLayout();
+
+        expect(venueApiSpy.saveLayout).toHaveBeenCalled();
+        expect(snackBarSpy.open).toHaveBeenCalledWith(
+          'Venue layout saved successfully!',
+          'Close',
+          jasmine.objectContaining({ panelClass: 'snack-success' }),
+        );
+      });
+
+      it('should discard changes and reset draft to baseline', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.isDirty()).toBeTrue();
+
+        component.discardChanges();
+        expect(component.isDirty()).toBeFalse();
+        expect(component.currentSection()?.seats[0].isActive).toBeTrue();
+      });
     });
   });
 });
