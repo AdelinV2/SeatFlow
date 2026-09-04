@@ -1,0 +1,117 @@
+<div
+  class="layout-element-palette flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-700/70 shadow-lg text-xs"
+  role="toolbar"
+  aria-label="Add Layout Elements"
+>
+  <button
+    type="button"
+    (click)="onAddElement('STAGE')"
+    class="palette-btn min-h-[44px] min-w-[44px] px-3 py-2 flex items-center gap-1.5 rounded-xl font-semibold text-indigo-300 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-label="Add Stage element"
+    title="Add Stage (Default 400x80)"
+  >
+    <svg
+      class="size-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <rect x="2" y="7" width="20" height="14" rx="3" />
+      <path d="M7 7V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3" />
+    </svg>
+    <span>+ Stage</span>
+  </button>
+
+  <button
+    type="button"
+    (click)="onAddElement('AISLE')"
+    class="palette-btn min-h-[44px] min-w-[44px] px-3 py-2 flex items-center gap-1.5 rounded-xl font-semibold text-slate-300 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-label="Add Aisle element"
+    title="Add Aisle (Default 300x40)"
+  >
+    <svg
+      class="size-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path d="M4 19h16M4 5h16M8 9h8M8 15h8" stroke-dasharray="2 2" />
+    </svg>
+    <span>+ Aisle</span>
+  </button>
+
+  <button
+    type="button"
+    (click)="onAddElement('LABEL')"
+    class="palette-btn min-h-[44px] min-w-[44px] px-3 py-2 flex items-center gap-1.5 rounded-xl font-semibold text-amber-300 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-label="Add Label element"
+    title="Add Text Label (Default 200x44)"
+  >
+    <svg
+      class="size-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="9" y1="20" x2="15" y2="20" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+    <span>+ Label</span>
+  </button>
+
+  <button
+    type="button"
+    (click)="onAddElement('BARRIER')"
+    class="palette-btn min-h-[44px] min-w-[44px] px-3 py-2 flex items-center gap-1.5 rounded-xl font-semibold text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-label="Add Barrier element"
+    title="Add Barrier / Wall (Default 300x20)"
+  >
+    <svg
+      class="size-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <rect x="2" y="9" width="20" height="6" rx="1" />
+      <line x1="7" y1="9" x2="7" y2="15" />
+      <line x1="12" y1="9" x2="12" y2="15" />
+      <line x1="17" y1="9" x2="17" y2="15" />
+    </svg>
+    <span>+ Barrier</span>
+  </button>
+
+  <button
+    type="button"
+    (click)="onAddElement('DECORATION')"
+    class="palette-btn min-h-[44px] min-w-[44px] px-3 py-2 flex items-center gap-1.5 rounded-xl font-semibold text-emerald-300 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+    aria-label="Add Decoration element"
+    title="Add Decoration / Icon Area (Default 100x100)"
+  >
+    <svg
+      class="size-4 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path
+        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+      />
+    </svg>
+    <span>+ Decoration</span>
+  </button>
+
+  @if (validationError()) {
+    <div
+      role="alert"
+      class="palette-error-message ml-2 px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-500/50 text-rose-300 text-[11px] font-medium"
+    >
+      {{ validationError() }}
+    </div>
+  }
+</div>

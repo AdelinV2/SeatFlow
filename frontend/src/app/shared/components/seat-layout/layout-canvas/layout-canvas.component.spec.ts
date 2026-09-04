@@ -877,4 +877,416 @@ describe('LayoutCanvasComponent', () => {
       expect(component.zoomLevel()).toBeLessThanOrEqual(4.0);
     });
   });
+
+  describe('Layout Elements Operations and Invariants (TASK-P11-008)', () => {
+    it('isolates layout elements from seat selection, capacity, and active seat counts (Booking Contamination)', () => {
+      const initialSections = component.sections();
+      const initialSeatCount = initialSections.reduce(
+        (sum, sec) => sum + sec.seats.filter((s) => s.isActive).length,
+        0,
+      );
+      const initialSelectedSeats = new Set(component.selectedSeatKeys());
+
+      // 1. Add element via palette
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'STAGE',
+        label: 'Stage 2',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 10,
+      });
+
+      // 2. Drag element
+      const added = component.internalElements()[component.internalElements().length - 1];
+      component.onElementPointerDown({
+        event: new PointerEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 40 }),
+        element: added,
+      });
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          clientX: 200,
+          clientY: 100,
+          bubbles: true,
+        }),
+      );
+      svg.dispatchEvent(
+        new PointerEvent('pointerup', { pointerId: 1, clientX: 200, clientY: 100, bubbles: true }),
+      );
+
+      // 3. Duplicate element
+      component.duplicateElement(added);
+
+      // 4. Update element geometry and zIndex
+      component.updateSelectedElementGeometry({ width: 500, height: 120 });
+      component.updateSelectedElementZIndex(15);
+
+      // 5. Remove element
+      component.removeElement(added);
+
+      // Verify invariant: seat count and seat selections are completely unaffected
+      const currentSections = component.sections();
+      const currentSeatCount = currentSections.reduce(
+        (sum, sec) => sum + sec.seats.filter((s) => s.isActive).length,
+        0,
+      );
+
+      expect(currentSeatCount).toBe(initialSeatCount);
+      expect(component.selectedSeatKeys()).toEqual(initialSelectedSeats);
+      for (let i = 0; i < currentSections.length; i++) {
+        expect(currentSections[i].seats.length).toBe(initialSections[i].seats.length);
+      }
+    });
+
+    it('escapes hostile script labels and renders as text without injected nodes/paths (Injection Scope)', () => {
+      const hostile = "<script>alert('XSS')</script><svg onload=alert(1)>";
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'LABEL',
+        label: hostile,
+        geometry: { x: 100, y: 240, width: 200, height: 44, rotationDeg: 0 },
+        zIndex: 5,
+      });
+      fixture.detectChanges();
+
+      const scripts = fixture.nativeElement.querySelectorAll('script');
+      expect(scripts.length).toBe(0);
+
+      const labelNodes = fixture.nativeElement.querySelectorAll('.standalone-label');
+      const hostileNode = Array.from(labelNodes).find(
+        (n: any) => String(n.textContent).trim() === hostile,
+      );
+      expect(hostileNode).toBeDefined();
+
+      // No arbitrary SVG path tags created for label
+      const paths = fixture.nativeElement.querySelectorAll('path.custom-label-path');
+      expect(paths.length).toBe(0);
+    });
+
+    it('retains existing elementId during move/resize, while duplicates have null ID (ID Invariant)', () => {
+      const existing = mockElements[0]; // elementId: 'elem-stage'
+      expect(existing.elementId).toBe('elem-stage');
+
+      // Select and drag existing element
+      component.onElementPointerDown({
+        event: new PointerEvent('pointerdown', { pointerId: 1, clientX: 200, clientY: 20 }),
+        element: existing,
+      });
+
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointermove', { pointerId: 1, clientX: 250, clientY: 70, bubbles: true }),
+      );
+
+      const updatedExisting = component.internalElements().find((e) => e.label === existing.label);
+      expect(updatedExisting).toBeDefined();
+      expect(updatedExisting!.elementId).toBe('elem-stage'); // Preserved!
+
+      // Duplicate existing element
+      const duplicate = component.duplicateElement(existing);
+      expect(duplicate).not.toBeNull();
+      expect(duplicate!.elementId).toBeNull(); // Must be null!
+      expect(duplicate!.type).toBe(existing.type);
+      expect(duplicate!.geometry.x).toBe(existing.geometry.x + 20);
+      expect(duplicate!.geometry.y).toBe(existing.geometry.y + 20);
+    });
+
+    it('clamps duplicate at maximum coordinate (100000, 100000) within canvas bounds', () => {
+      const atMax: VenueLayoutElement = {
+        elementId: 'elem-max',
+        type: 'DECORATION',
+        label: null,
+        geometry: { x: 100000, y: 100000, width: 100, height: 100, rotationDeg: 0 },
+        zIndex: 2,
+      };
+
+      component.internalElements.set([atMax]);
+      fixture.detectChanges();
+
+      const dup = component.duplicateElement(atMax);
+      expect(dup).not.toBeNull();
+      expect(dup!.elementId).toBeNull();
+      // 100000 + 20 must clamp to 100000
+      expect(dup!.geometry.x).toBe(100000);
+      expect(dup!.geometry.y).toBe(100000);
+    });
+
+    it('clamps move, resize, rotate, and z-index within contract bounds', () => {
+      const elem = mockElements[0];
+      component.selectElement(elem, 0);
+
+      // Move beyond min (negative)
+      component.updateSelectedElementGeometry({ x: -50, y: -100 });
+      let updated = component.selectedElement()!;
+      expect(updated.geometry.x).toBe(0);
+      expect(updated.geometry.y).toBe(0);
+
+      // Move beyond max (150000)
+      component.updateSelectedElementGeometry({ x: 150000, y: 120000 });
+      updated = component.selectedElement()!;
+      expect(updated.geometry.x).toBe(100000);
+      expect(updated.geometry.y).toBe(100000);
+
+      // Resize: width/height strictly positive and <= 100000
+      component.updateSelectedElementGeometry({ width: -20, height: 0 });
+      updated = component.selectedElement()!;
+      expect(updated.geometry.width).toBe(0.001);
+      expect(updated.geometry.height).toBe(0.001);
+
+      component.updateSelectedElementGeometry({ width: 200000, height: 300000 });
+      updated = component.selectedElement()!;
+      expect(updated.geometry.width).toBe(100000);
+      expect(updated.geometry.height).toBe(100000);
+
+      // Rotate: normalize into [-180, 180]
+      component.updateSelectedElementGeometry({ rotationDeg: 270 });
+      updated = component.selectedElement()!;
+      expect(updated.geometry.rotationDeg).toBe(-90);
+
+      // Z-Index: clamp to [-1000, 1000]
+      component.updateSelectedElementZIndex(-5000);
+      updated = component.selectedElement()!;
+      expect(updated.zIndex).toBe(-1000);
+
+      component.updateSelectedElementZIndex(9999);
+      updated = component.selectedElement()!;
+      expect(updated.zIndex).toBe(1000);
+    });
+
+    it('fails and rejects blank or whitespace-only LABEL before state mutation', () => {
+      const labelElem: VenueLayoutElement = {
+        elementId: 'elem-lbl',
+        type: 'LABEL',
+        label: 'Original Label',
+        geometry: { x: 100, y: 240, width: 200, height: 44, rotationDeg: 0 },
+        zIndex: 1,
+      };
+
+      component.internalElements.set([labelElem]);
+      component.selectElement(labelElem, 0);
+
+      // Attempt empty label
+      const successEmpty = component.updateSelectedElementLabel('');
+      expect(successEmpty).toBeFalse();
+      expect(component.elementValidationError()).toContain('LABEL requires visible non-blank text');
+      expect(component.selectedElement()!.label).toBe('Original Label'); // Unchanged!
+
+      // Attempt whitespace-only label
+      const successWhitespace = component.updateSelectedElementLabel('    ');
+      expect(successWhitespace).toBeFalse();
+      expect(component.elementValidationError()).toContain('LABEL requires visible non-blank text');
+      expect(component.selectedElement()!.label).toBe('Original Label'); // Unchanged!
+
+      // Valid label succeeds and clears error
+      const successValid = component.updateSelectedElementLabel('Valid Label');
+      expect(successValid).toBeTrue();
+      expect(component.elementValidationError()).toBeNull();
+      expect(component.selectedElement()!.label).toBe('Valid Label');
+    });
+
+    it('rejects unsupported element type without mutating draft', () => {
+      const initialCount = component.internalElements().length;
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'NON_EXISTENT' as any,
+        label: 'Invalid',
+        geometry: { x: 10, y: 10, width: 50, height: 50, rotationDeg: 0 },
+        zIndex: 0,
+      });
+
+      expect(component.internalElements().length).toBe(initialCount);
+      expect(component.elementValidationError()).toContain('Unsupported layout element type');
+    });
+
+    it('normalizes malformed palette payloads: null ID, blank LABEL, clamped bounds (REV-002)', () => {
+      // Non-null elementId on a "new" element is forced to null
+      component.onElementCreatedFromPalette({
+        elementId: 'smuggled-id',
+        type: 'STAGE',
+        label: 'Smuggled',
+        geometry: { x: 100, y: 40, width: 400, height: 80, rotationDeg: 0 },
+        zIndex: 3,
+      });
+      const created = component.internalElements()[component.internalElements().length - 1];
+      expect(created.elementId).toBeNull();
+      expect(created.label).toBe('Smuggled');
+
+      // Blank LABEL rejected without draft mutation
+      const beforeBlank = component.internalElements().length;
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'LABEL',
+        label: '   ',
+        geometry: { x: 100, y: 240, width: 200, height: 44, rotationDeg: 0 },
+        zIndex: 3,
+      });
+      expect(component.internalElements().length).toBe(beforeBlank);
+      expect(component.elementValidationError()).toContain('LABEL requires visible non-blank text');
+
+      // Out-of-range geometry and z-index are clamped, not retained
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'BARRIER',
+        label: null,
+        geometry: { x: -50, y: 200000, width: 0, height: 500000, rotationDeg: 270 },
+        zIndex: 5000,
+      });
+      const clamped = component.internalElements()[component.internalElements().length - 1];
+      expect(clamped.elementId).toBeNull();
+      expect(clamped.geometry.x).toBe(0);
+      expect(clamped.geometry.y).toBe(100000);
+      expect(clamped.geometry.width).toBe(0.001);
+      expect(clamped.geometry.height).toBe(100000);
+      expect(clamped.geometry.rotationDeg).toBe(-90);
+      expect(clamped.zIndex).toBe(1000);
+
+      // Non-finite geometry rejected without draft mutation
+      const beforeNaN = component.internalElements().length;
+      component.onElementCreatedFromPalette({
+        elementId: null,
+        type: 'DECORATION',
+        label: null,
+        geometry: { x: NaN, y: 0, width: 10, height: 10, rotationDeg: 0 },
+        zIndex: 0,
+      });
+      expect(component.internalElements().length).toBe(beforeNaN);
+      expect(component.elementValidationError()).toContain('Invalid element geometry');
+    });
+
+    it('keeps editable element nodes hit-testable and non-editable nodes inert (REV-001)', () => {
+      fixture.componentRef.setInput('editable', true);
+      fixture.detectChanges();
+      const node = fixture.nativeElement.querySelector('.layout-element-node') as Element;
+      expect(node).not.toBeNull();
+      expect(getComputedStyle(node).pointerEvents).not.toBe('none');
+
+      fixture.componentRef.setInput('editable', false);
+      fixture.detectChanges();
+      const inert = fixture.nativeElement.querySelector('.layout-element-node') as Element;
+      expect(inert).not.toBeNull();
+      expect(getComputedStyle(inert).pointerEvents).toBe('none');
+    });
+
+    it('mutually excludes section and element selection and clears both on background click', () => {
+      // Simulate the parent designer: emitted section selection flows back into the input.
+      component.selectionChanged.subscribe((sel) =>
+        fixture.componentRef.setInput('selectedSectionIds', sel),
+      );
+      // 1. Select section
+      component.onSectionClick({
+        event: new MouseEvent('click'),
+        section: mockSections[0],
+      });
+      expect(component.selectedIdSet().has('sec-orchestra')).toBeTrue();
+      expect(component.selectedElement()).toBeNull();
+
+      // 2. Select element
+      const elem = component.internalElements()[0];
+      component.onElementClick({
+        event: new MouseEvent('click'),
+        element: elem,
+      });
+      expect(component.selectedElement()).toBe(elem);
+      expect(component.selectedIdSet().size).toBe(0); // Section deselected!
+
+      // 3. Select section again -> element deselected
+      component.onSectionClick({
+        event: new MouseEvent('click'),
+        section: mockSections[1],
+      });
+      expect(component.selectedIdSet().has('sec-balcony')).toBeTrue();
+      expect(component.selectedElement()).toBeNull();
+
+      // 4. Select element again and click canvas background (< 4px pan)
+      component.onElementClick({
+        event: new MouseEvent('click'),
+        element: elem,
+      });
+      expect(component.selectedElement()).toBe(elem);
+
+      const svg = fixture.nativeElement.querySelector('.layout-canvas-svg');
+      svg.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          pointerId: 1,
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          bubbles: true,
+        }),
+      );
+      svg.dispatchEvent(
+        new PointerEvent('pointerup', { pointerId: 1, clientX: 5, clientY: 5, bubbles: true }),
+      );
+
+      expect(component.selectedElement()).toBeNull();
+      expect(component.selectedIdSet().size).toBe(0);
+    });
+
+    it('deletes element only from unsaved draft and deselects', () => {
+      const elem = component.internalElements()[0];
+      component.selectElement(elem, 0);
+      expect(component.selectedElement()).toBe(elem);
+
+      let removedElem: VenueLayoutElement | null = null;
+      component.elementRemoved.subscribe((e) => (removedElem = e));
+
+      component.removeSelectedElement();
+
+      expect<VenueLayoutElement | null>(removedElem).toBe(elem);
+      expect(component.selectedElement()).toBeNull();
+      expect(component.internalElements().includes(elem)).toBeFalse();
+    });
+
+    it('supports keyboard navigation alternatives: arrow keys to move, delete to remove', () => {
+      const elem = component.internalElements()[0];
+      component.selectElement(elem, 0);
+      const initialX = elem.geometry.x;
+      const initialY = elem.geometry.y;
+
+      // ArrowRight -> move +10
+      component.onElementKeyDown({
+        event: new KeyboardEvent('keydown', { key: 'ArrowRight' }),
+        element: component.selectedElement()!,
+      });
+      expect(component.selectedElement()!.geometry.x).toBe(initialX + 10);
+
+      // ArrowDown -> move +10
+      component.onElementKeyDown({
+        event: new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+        element: component.selectedElement()!,
+      });
+      expect(component.selectedElement()!.geometry.y).toBe(initialY + 10);
+
+      // Delete -> removes from draft
+      component.onElementKeyDown({
+        event: new KeyboardEvent('keydown', { key: 'Delete' }),
+        element: component.selectedElement()!,
+      });
+      expect(component.selectedElement()).toBeNull();
+    });
+
+    it('supports numeric form inputs to alter properties with bounds enforcement', () => {
+      const elem = component.internalElements()[0];
+      component.selectElement(elem, 0);
+
+      // Numeric change X
+      component.onNumericParamChange('x', { target: { value: '350' } } as unknown as Event);
+      expect(component.selectedElement()!.geometry.x).toBe(350);
+
+      // Numeric change Width
+      component.onNumericParamChange('width', { target: { value: '450' } } as unknown as Event);
+      expect(component.selectedElement()!.geometry.width).toBe(450);
+
+      // Numeric change Rotation
+      component.onNumericParamChange('rotationDeg', {
+        target: { value: '45' },
+      } as unknown as Event);
+      expect(component.selectedElement()!.geometry.rotationDeg).toBe(45);
+
+      // Numeric change Z-Index
+      component.onNumericParamChange('zIndex', { target: { value: '12' } } as unknown as Event);
+      expect(component.selectedElement()!.zIndex).toBe(12);
+    });
+  });
 });

@@ -322,7 +322,9 @@ export function sortedLayoutItems(first: readonly any[], second?: readonly any[]
         kind: 'section',
         data: s,
         zIndex: Number.isFinite(s?.zIndex) ? s.zIndex : 0,
-        stableKey: `sec-${s?.sectionId ?? 'idx-' + idx}`,
+        // Zero-padded fallback index keeps lexicographic comparison in numeric
+        // order for null-ID drafts (idx-2 < idx-10). See REV-003.
+        stableKey: `sec-${s?.sectionId ?? 'idx-' + String(idx).padStart(10, '0')}`,
       });
     });
 
@@ -331,7 +333,7 @@ export function sortedLayoutItems(first: readonly any[], second?: readonly any[]
         kind: 'element',
         data: e,
         zIndex: Number.isFinite(e?.zIndex) ? e.zIndex : 0,
-        stableKey: `elem-${e?.elementId ?? 'idx-' + idx}`,
+        stableKey: `elem-${e?.elementId ?? 'idx-' + String(idx).padStart(10, '0')}`,
       });
     });
 

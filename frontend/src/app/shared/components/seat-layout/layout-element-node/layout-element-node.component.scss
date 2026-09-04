@@ -1,0 +1,179 @@
+.layout-element-node {
+  outline: none;
+  user-select: none;
+
+  &.editable {
+    cursor: move;
+  }
+
+  &:not(.editable) {
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* Selection halo */
+  &.selected {
+    .stage-rect,
+    .aisle-rect,
+    .label-rect,
+    .barrier-rect,
+    .decoration-rect {
+      stroke: #818cf8 !important;
+      stroke-width: 2.5px !important;
+      filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.45));
+    }
+  }
+
+  /* Stage Visuals */
+  &.element-stage {
+    .stage-rect {
+      fill: #1e1b4b;
+      stroke: #6366f1;
+      stroke-width: 2px;
+      filter: drop-shadow(0 4px 12px rgba(99, 102, 241, 0.2));
+      transition:
+        stroke 0.15s ease,
+        filter 0.15s ease;
+    }
+
+    .stage-title {
+      fill: #e0e7ff;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-family: inherit;
+      pointer-events: none;
+    }
+  }
+
+  /* Aisle Visuals */
+  &.element-aisle {
+    .aisle-rect {
+      fill: rgba(30, 41, 59, 0.35);
+      stroke: rgba(100, 116, 139, 0.45);
+      stroke-width: 1.5px;
+      stroke-dasharray: 4 4;
+      transition: stroke 0.15s ease;
+    }
+
+    .aisle-title {
+      fill: #94a3b8;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+    }
+  }
+
+  /* Label Visuals */
+  &.element-label {
+    .label-rect {
+      fill: rgba(15, 23, 42, 0.4);
+      stroke: rgba(148, 163, 184, 0.2);
+      stroke-width: 1px;
+    }
+
+    .standalone-label {
+      fill: #f1f5f9;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+    }
+  }
+
+  /* Barrier Visuals */
+  &.element-barrier {
+    .barrier-rect {
+      fill: #475569;
+      stroke: #64748b;
+      stroke-width: 1.5px;
+    }
+  }
+
+  /* Decoration Visuals */
+  &.element-decoration {
+    .decoration-rect {
+      fill: rgba(30, 41, 59, 0.45);
+      stroke: rgba(71, 85, 105, 0.4);
+      stroke-width: 1.5px;
+    }
+
+    .decoration-title {
+      fill: #cbd5e1;
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: none;
+    }
+  }
+
+  /* Transform Handles */
+  .transform-handles {
+    .rotation-stem {
+      stroke: #818cf8;
+      stroke-width: 1.5px;
+      stroke-dasharray: 3 3;
+    }
+
+    .transform-handle {
+      outline: none;
+      stroke: #6366f1;
+      stroke-width: 2px;
+      fill: #ffffff;
+      transition: fill 0.15s ease;
+
+      &:hover {
+        fill: #e0e7ff;
+      }
+
+      &:focus-visible {
+        stroke: #fbbf24;
+        stroke-width: 3px;
+      }
+    }
+
+    .rotation-handle {
+      fill: #8b5cf6;
+      stroke: #ffffff;
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
+
+      &:hover {
+        fill: #a78bfa;
+      }
+    }
+
+    .corner-handle {
+      &.nw,
+      &.se {
+        cursor: nwse-resize;
+      }
+
+      &.ne,
+      &.sw {
+        cursor: nesw-resize;
+      }
+    }
+  }
+
+  /* Invalid / Unsupported placeholder */
+  .invalid-element-node {
+    .invalid-rect {
+      fill: rgba(225, 29, 72, 0.15);
+      stroke: #f43f5e;
+      stroke-width: 1.5px;
+      stroke-dasharray: 4 2;
+    }
+
+    .element-validation-message {
+      fill: #f43f5e;
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+  }
+}
