@@ -6,24 +6,25 @@
 
 ## 1. Goal
 
-The Builder receives one approved task specification and implements it **faithfully, minimally, and verifiably**. The implementer may resolve local coding details, but must not silently redesign architecture, weaken invariants, or expand scope.
+Implement one approved SeatFlow task **faithfully, minimally, and verifiably**.
 
-The task is not complete merely because code compiles or targeted tests pass. It must remain reviewable and survive the independent review + QA gates defined in workflows 05 and 04.
+The implementer may resolve local coding details but must not silently redesign architecture, weaken invariants, broaden scope, or become the final reviewer of its own substantive work.
+
+Model/provider/effort selection is governed only by `.ai/MODEL_ROUTER.md`.
 
 ---
 
 ## 2. Non-Negotiable Rules
 
-1. **Do not improvise architecture.** Follow the task, relevant ADRs, `.ai/architecture/`, and repository AGENTS files.
-2. **Respect subsystem standards.**
-   - Backend: `backend/AGENTS.md`
-   - Frontend: `frontend/AGENTS.md`
-3. **Do not weaken tests to make implementation pass.** Never delete, disable, broaden assertions, or replace meaningful integration behavior with mocks just to get green output.
-4. **No unrelated refactoring.** If unrelated cleanup is genuinely required, keep it minimal or move it to a separate refactor task.
-5. **Prefer the smallest correct diff.** Avoid speculative abstractions, duplicate helpers, or style churn outside the task.
-6. **Preserve compatibility unless the task explicitly changes it.** This includes API contracts, event schemas, DB semantics, environment variables, and frontend/back-end integration.
-7. **Treat tests as evidence, not proof.** Concurrency, payments, security, idempotency, migrations, and distributed state require explicit reasoning in addition to green tests.
-8. **Never commit temporary review files.** `.ai/tmp/` is local scratch state only.
+1. Follow the task, accepted ADRs, `.ai/architecture/`, `AGENTS.md`, and subsystem `AGENTS.md`.
+2. Do not weaken/delete tests to make implementation pass.
+3. Avoid unrelated refactoring/style churn.
+4. Prefer the smallest correct diff.
+5. Preserve API/event/DB/frontend compatibility unless the task explicitly changes it.
+6. Treat tests as evidence, not proof, for concurrency/payment/security/idempotency/migrations/distributed state.
+7. Never commit `.ai/tmp/` review ledgers.
+8. Preserve all pre-existing user working-tree changes outside the task.
+9. Do not force-push, reset hard, or discard unrelated work.
 
 ---
 
@@ -32,51 +33,53 @@ The task is not complete merely because code compiles or targeted tests pass. It
 Before editing:
 
 ```text
-1. Checkout the dedicated task branch from `develop`.
-2. Read the full assigned task file.
-3. Read all referenced ADRs and architecture docs.
-4. Read `backend/AGENTS.md` or `frontend/AGENTS.md` as applicable.
-5. Inspect existing neighboring code and shared abstractions before creating new ones.
-6. Confirm dependent migrations, DTOs, endpoints, events, or frontend models actually match the task assumptions.
-7. Identify the task's critical invariants and highest-risk failure modes.
+1. Confirm the dedicated task branch/worktree.
+2. Inspect git status and record pre-existing changes.
+3. Read the complete task file and orchestration metadata.
+4. Read referenced ADRs/architecture docs.
+5. Read backend/AGENTS.md and/or frontend/AGENTS.md as applicable.
+6. Inspect neighboring implementation and shared abstractions.
+7. Confirm migrations/DTOs/endpoints/events/frontend contracts match task assumptions.
+8. Identify critical invariants and highest-risk failure modes.
+9. Confirm exact verification commands.
 ```
 
-If the repository contradicts the task in a way that changes architecture or acceptance criteria, stop treating the task as deterministic implementation: surface the inconsistency for planning rather than silently choosing one interpretation.
+If repository reality contradicts the task in a way that changes architecture or acceptance criteria, stop deterministic implementation and return the issue to planning/supervisor.
 
 ---
 
 ## 4. Implementation Sequence
 
-Use the task's explicit file inventory and sequence. Where the task delegates to repository standards, use these defaults.
+Use the task's explicit sequence first.
 
-### Backend
+Default backend order when the task delegates to repository conventions:
 
 ```text
 Flyway migration
-→ Entity / Enum / Value Object
-→ Repository
-→ Request / Response Records
-→ Mapper
-→ Service Interface
-→ Service Implementation
-→ Controller / Adapter
-→ Messaging / Client integration when applicable
-→ Tests
+-> entity / enum / value object
+-> repository/query
+-> request/response records
+-> mapper
+-> service interface
+-> service implementation
+-> controller/adapter
+-> messaging/client integration
+-> tests
 ```
 
-### Frontend
+Default frontend order:
 
 ```text
-Interfaces / Models
-→ API service / state service
-→ Shared primitives when genuinely reusable
-→ Feature component
-→ Template / styles
-→ Routes / guards
-→ Tests
+interfaces/models
+-> API/state service
+-> shared primitive only when genuinely reusable
+-> feature component
+-> template/styles
+-> routes/guards
+-> tests
 ```
 
-Do not create abstractions before confirming they are required by the task or an established repository pattern.
+Do not create abstractions before confirming they are required by the task or existing architecture.
 
 ---
 
@@ -85,114 +88,118 @@ Do not create abstractions before confirming they are required by the task or an
 While coding:
 
 - preserve transaction boundaries and locking semantics;
-- preserve idempotency and retry behavior;
-- keep authorization server-side where required;
-- validate external and user-controlled inputs at the correct boundary;
-- keep DB constraints consistent with application invariants;
-- ensure time and money logic uses the types and semantics established by the architecture;
-- update `.env.example` only when a new version-controlled environment variable is actually introduced;
-- avoid logging credentials, tokens, payment details, or unnecessary PII;
-- keep frontend state transitions explicit and reconcile authoritative server state after reconnects or failed optimistic updates;
-- add tests at the same time as production behavior, not as an afterthought.
+- preserve idempotency/retry behavior;
+- keep authorization server-side;
+- validate untrusted input at the correct boundary;
+- keep DB constraints aligned with application invariants;
+- preserve established time/money types and semantics;
+- use transactional outbox for domain events where required;
+- use Eureka/LoadBalancer client patterns required by the constitution;
+- update `.env.example` only when a new version-controlled variable is introduced;
+- never log secrets/payment credentials/unnecessary PII;
+- keep frontend state transitions explicit and reconcile authoritative server state;
+- add meaningful tests alongside behavior, not as cleanup after coding.
 
-If implementation reveals a genuine bug unrelated to the task, do not casually fold a broad fix into the feature. Either apply a tiny safe prerequisite fix with regression coverage or create a separate bug-fix task.
+If implementation reveals an unrelated defect, either apply a tiny safe prerequisite fix with regression coverage or create/route a separate bug task. Do not smuggle broad cleanup into the feature.
 
 ---
 
-## 6. Self-Verification Before Review
+## 6. Self-Verification
 
-Run the task's exact verification command first. Then run the broader checks justified by the changed surface.
+Run checks in this order:
 
-Minimum self-check:
+1. task's exact verification command;
+2. new/modified regression tests;
+3. affected module/service suite;
+4. build/compile/typecheck/lint as applicable;
+5. integration/Testcontainers/concurrency/browser checks justified by risk;
+6. manual `git diff` inspection;
+7. acceptance-criteria evidence review.
+
+Also inspect for:
+
+- accidental TODO/FIXME/debug logs;
+- dead code/imports;
+- stale comments;
+- unrelated formatting churn;
+- secrets/local `.env` files;
+- API/event/frontend contract drift.
+
+A green suite does not justify skipping diff inspection.
+
+---
+
+## 7. Required Implementation Output
+
+Return structured evidence:
 
 ```text
-1. Targeted tests for the changed behavior.
-2. Relevant module/service test suite.
-3. Build / typecheck / lint where applicable.
-4. Integration or concurrency tests required by the task.
-5. Inspect `git diff` manually.
-6. Check that every task acceptance criterion has observable evidence.
-7. Check for accidental TODO/FIXME/debug logging, dead code, stale comments, and unrelated formatting churn.
-8. Check that no secrets or local `.env` files were added.
-9. Check that API/event/frontend contracts remain aligned.
+STAGE: IMPLEMENT
+TASK: TASK-PXX-YYY
+BRANCH/WORKTREE: ...
+PROVIDER: ...
+MODEL: ...
+EFFORT: ...
+FAST MODE: OFF | ON | N/A
+STATUS: PASS | BLOCKED | FAIL
+FILES TOUCHED: ...
+KEY CHANGES: ...
+VERIFICATION RUN: command -> result
+PRE-EXISTING CHANGES PRESERVED: yes/no + details
+UNRESOLVED RISKS: ...
+NEXT STAGE: INDEPENDENT REVIEW
 ```
 
-A green test suite does not justify skipping the diff review.
+Do not claim implementation complete if required verification failed.
 
 ---
 
-## 7. Next Stage Handoff: Independent Code Review
+## 8. Next Stage: Independent Review
 
-After self-verification passes, hand the task and branch diff over to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`).
+After self-verification passes, route to `.ai/workflows/05-code-review.md`.
 
-Do **not** move the task file to `completed/` before substantive review findings are resolved and the final QA gate passes.
+### Orchestrated mode
 
-### 7.1 Handling Review Findings
+The supervisor must:
 
-If the reviewer creates `.ai/tmp/review-<task-or-branch>.md`:
+1. resolve an **independent reviewer** via `.ai/MODEL_ROUTER.md`;
+2. apply Poracode rules from `.ai/integrations/PORACODE.md` when applicable;
+3. pass the original task, architecture/ADR context, complete diff, changed tests, verification results, and known risks;
+4. ensure the implementation agent does not self-approve.
 
-1. treat each open finding as explicit work;
-2. use `.ai/workflows/03-bug-fixing.md` for bugs/errors and targeted corrections;
-3. mark findings resolved only after code + required tests are updated;
-4. request re-review of changed areas when the finding is substantive or high risk;
-5. keep the temporary review file until every accepted finding is resolved and verification passes;
-6. delete the temporary review file before final completion.
+For ordinary Muse implementation, the default substantive reviewer route is Codex/Terra High with Fast OFF; critical domains follow the Sol risk override. The exact selection still comes from `.ai/MODEL_ROUTER.md`.
 
-Do not delete the file merely to satisfy the cleanup gate.
+### Manual fallback
 
-### 7.2 AI Model & Reasoning Effort Selection
+If delegation is unavailable, return a Next Stage Handoff with:
 
-Consult `.ai/MODEL_ROUTER.md` before selecting the reviewer:
-
-| Review Domain | Recommended Route | Alternative Route | Escalation / High Risk |
-|---|---|---|---|
-| **Substantive Backend Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
-| **Routine / Small Review** | **GPT-5.6 Terra Medium** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** (if issues detected) |
-| **Frontend Review** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** | **GPT-5.6 Terra High** (for state/contract risks) |
-| **Critical Invariants** (Holds, Double Booking, Money, Security, Idempotency) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** (if unresolved ambiguity) |
-
-### 7.3 Next Stage Prompt Template
-
-Copy and paste the following prompt to invoke the independent code reviewer:
-
-```markdown
-You are the Independent Code Reviewer for SeatFlow.
-Review task: [TASK-P<XX>-<YYY>: <Task Title>]
-Branch: `feat/p<XX>-<YYY>-<task-desc>`
-Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
-
-Instructions:
-1. Follow `.ai/workflows/05-code-review.md`. Act as an independent, skeptical reviewer.
-2. Inspect the git diff against `develop`:
-   `git diff develop...feat/p<XX>-<YYY>-<task-desc>`
-3. Review surrounding contracts, JPA transactions, API/event schemas, and DB constraints.
-4. Verify non-negotiable invariants:
-   - Max 10 seats per reservation
-   - 15-minute hold TTL & expiration
-   - Zero double-booking concurrency guarantee (PostgreSQL source of truth)
-   - Transactional outbox pattern & Kafka envelope integrity
-   - Idempotency on payment and reservation endpoints
-   - Server-side JWT role authorization
-5. Evaluate test quality: are edge cases, boundaries, negative paths, and concurrency tested?
-6. If any actionable bug, error, invariant issue, or contract gap is found:
-   - Create `.ai/tmp/review-p<XX>-<YYY>.md` with the standard template (P0-P3).
-7. Finish with a formal verdict: `APPROVE`, `APPROVE WITH NON-BLOCKING P3 NOTES`, `CHANGES REQUIRED`, or `CRITICAL CHANGES REQUIRED`.
-```
+- workflow: `.ai/workflows/05-code-review.md`;
+- recommended/fallback/alternative/escalation from `.ai/MODEL_ROUTER.md`;
+- copy-paste review prompt containing task ID/path, branch, diff command, verification evidence, and review focus.
 
 ---
 
-## 8. Completion Gate
+## 9. Review Findings
 
-The task may be finalized only when:
+If review creates `.ai/tmp/review-<task-or-branch>.md`:
 
-- implementation matches the approved task and architecture;
-- targeted and required broader checks pass;
-- code review is complete;
-- all accepted review findings are resolved;
-- `.ai/tmp/` contains no active review file for the task;
-- `.ai/workflows/04-testing-and-qa.md` final quality gate passes;
-- task checklist/acceptance criteria are complete;
-- the task file is moved to the appropriate `.ai/tasks/completed/...` folder;
-- changes are committed using the repository's conventional commit rules and proposed to `develop` through the normal PR workflow.
+1. preserve it until accepted findings are resolved;
+2. route fixes through `.ai/workflows/03-bug-fixing.md`;
+3. re-review when required by severity/risk;
+4. delete the ledger only after repair verification/re-review completes;
+5. never commit the ledger.
 
-Completion is a quality decision, not simply the end of code generation.
+---
+
+## 10. Completion Gate
+
+Implementation stage can hand off successfully only when:
+
+- task behavior is implemented;
+- targeted verification passes;
+- implementation diff is inspected;
+- no known blocker is hidden;
+- unrelated user changes are preserved;
+- independent review is ready to begin.
+
+The overall task is **not** complete until review/fix/re-review and final QA gates pass.

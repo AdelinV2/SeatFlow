@@ -1,203 +1,246 @@
 # Workflow 01: Task Planning & Breakdown Protocol
 
-**Role:** System Architect & Planner
+**Role:** System Architect / Planner
 
 ---
 
-## 1. Goal & Responsibilities
+## 1. Goal
 
-The Architect/Planner transforms high-level requirements into **atomic, unambiguous, deterministic task files** that implementation agents can execute without inventing architecture.
+Transform a high-level requirement into an **atomic, unambiguous, deterministic task specification** that another implementation agent can execute without inventing architecture.
 
-A good task must make the intended behavior, failure modes, constraints, files, tests, and verification observable before implementation starts.
+A good task makes intended behavior, contracts, failure modes, file scope, tests, verification, and review focus explicit before coding begins.
 
----
-
-## 2. Planning Principles
-
-### 2.1 Zero-Ambiguity Rules
-
-1. **One Task = One Atomic Feature Slice:** Prefer one microservice or one frontend domain and a bounded file set. Typical implementation tasks should touch roughly 4-10 meaningful files unless the architecture genuinely requires more.
-2. **Explicit Contracts Over General Descriptions:** Specify exact HTTP methods, paths, request/response records, validation rules, status codes, event payloads, persistence changes, and state transitions.
-3. **Pre-designed Data Changes:** For schema work, define exact Flyway DDL, nullability, constraints, indexes, migration ordering, and compatibility expectations.
-4. **Invariants Must Be Written Down:** Every relevant business, security, consistency, concurrency, idempotency, money, or time invariant belongs in the task file.
-5. **Failure Modes Before Implementation:** Identify the most dangerous ways the feature could fail, including boundary cases, partial failures, retries, races, stale state, duplicate events, authorization mistakes, and API-contract drift.
-6. **Deterministic Verification:** Every task must specify exact targeted verification commands and the expected observable result.
-7. **Reviewability:** The task must give an independent reviewer enough information to determine whether the implementation is correct without reconstructing the intended design from scratch.
-
-### 2.2 Task Scoping & Naming
-
-- **Task ID:** `TASK-P<XX>-<YYY>`
-- **Task file:** `.ai/tasks/phase-XX-<phase-name>/<YYY>-<task-description>.md`
-- **Completed path:** `.ai/tasks/completed/phase-XX-<phase-name>/<YYY>-<task-description>.md`
-- **Feature branch:** `feat/p<XX>-<YYY>-<task-description>`
-- Task numbering restarts at `001` for each phase.
-
-Do not hide multiple unrelated behaviors inside one task merely to reduce task count. Split a task when parts can be implemented, verified, rolled back, or reviewed independently.
+This workflow defines planning behavior only. Provider/model/effort selection is always resolved through `.ai/MODEL_ROUTER.md`.
 
 ---
 
-## 3. Risk Profile & Review Requirements
+## 2. When Planning Is Required
 
-Before writing implementation steps, classify the task:
+Use this workflow when:
 
-- **Complexity:** 1-5
-- **Failure risk:** Low / Medium / High / Critical
-- **Verification strength:** Strong / Partial / Weak
-- **Affected invariants:** list exact invariants
-- **Primary failure modes:** list realistic failure scenarios
-- **Required review depth:** Normal / Substantive / Critical
+- no approved task file exists;
+- architecture/contracts remain ambiguous;
+- multiple services/components must be coordinated non-trivially;
+- persistence/messaging/security/concurrency/payment semantics require design judgment;
+- implementation discovers a contradiction that changes acceptance criteria;
+- a refactor changes structural boundaries enough to need a planned sequence.
 
-A task is **Critical** when a hidden mistake can cause money loss, security exposure, corrupted state, double booking, broken idempotency, irreversible data damage, or distributed-consistency failure.
-
-For critical tasks, explicitly require review of the relevant high-risk area after implementation and verification. Model selection is governed by `.ai/MODEL_ROUTER.md`.
+An already approved deterministic task may proceed directly to `.ai/workflows/02-task-execution.md`.
 
 ---
 
-## 4. Architecture Decision Records (ADRs)
+## 3. Planning Principles
 
-### 4.1 Create an ADR Before Task Breakdown When
+### 3.1 Atomic scope
 
-1. Introducing a new architectural pattern such as Transactional Outbox, CQRS, Saga orchestration, or a new consistency model.
-2. Choosing between competing technologies or libraries with meaningful trade-offs.
-3. Modifying a system-wide invariant or policy such as hold TTL, seat limits, authorization policy, retry semantics, or idempotency behavior.
-4. Changing contracts in shared modules such as `common-security`, `common-domain`, `common-events`, or `common-observability`.
-5. Making a non-trivial storage, migration, messaging, security, or distributed-systems trade-off that future engineers need to understand.
+Prefer one coherent feature slice per task. Typical tasks should touch a bounded set of meaningful files unless the architecture genuinely requires more.
 
-### 4.2 Do Not Create an ADR For
+Split work when parts can be implemented, verified, reviewed, rolled back, or released independently.
 
-- standard CRUD following established architecture;
-- routine bug fixes that preserve existing contracts;
-- mechanical refactors;
-- routine UI layout/styling changes.
+### 3.2 Explicit contracts
 
-### 4.3 ADR Contents
+Specify exact behavior where applicable:
 
-Use `.ai/decisions/ADR-000-template.md` and document:
+- HTTP method/path/status/body;
+- DTO fields/types/validation;
+- service/repository signatures;
+- event topic/payload/envelope;
+- DB columns/nullability/defaults/constraints/indexes;
+- state transitions;
+- authorization/ownership rules;
+- idempotency/retry semantics;
+- frontend state/request/reconnect behavior.
 
-- Context
-- Decision
-- Alternatives Considered
-- Consequences
-- Implementation Notes
-- affected tasks and architecture docs
+Do not use vague requirements such as "handle errors properly" or "add validation" without defining observable rules.
 
-Set the ADR to `ACCEPTED` before tasks rely on it as an authoritative decision.
+### 3.3 Invariants first
 
----
+Write down every relevant business/security/consistency/concurrency/money/time invariant.
 
-## 5. Required Task Contents
+Critical SeatFlow invariants from `AGENTS.md` remain authoritative.
 
-Every implementation task should contain, where applicable:
+### 3.4 Failure modes before implementation
 
-1. **Objective** — one precise outcome.
-2. **Critical invariants** — behavior that must never be violated.
-3. **Dependencies / prerequisites** — existing code, ADRs, services, migrations, endpoints, events.
-4. **Exact file inventory** — `[NEW]`, `[MODIFY]`, `[DELETE]` with paths.
-5. **Contracts** — DTOs, service methods, HTTP status codes, event schemas, DB changes, frontend state contracts.
-6. **Implementation sequence** — deterministic order with no architectural guesswork.
-7. **Negative and edge cases** — not only happy path.
-8. **Concurrency / idempotency / retry requirements** when applicable.
-9. **Security requirements** — authentication, authorization, ownership checks, validation, sensitive logging.
-10. **Observability requirements** when behavior needs logs, metrics, tracing, or alerts.
-11. **Test requirements** — exact behavior each required test proves.
-12. **Verification commands** — targeted commands first; broader module/system checks when required.
-13. **Review focus** — files, invariants, state transitions, or failure modes the reviewer must inspect closely.
-14. **Acceptance criteria** — independently verifiable completion conditions.
+Identify realistic ways the feature could fail:
 
-Do not prescribe unnecessary implementation details when an existing repository standard already defines them. Reference `backend/AGENTS.md`, `frontend/AGENTS.md`, architecture docs, and ADRs instead of duplicating them.
+- boundaries and invalid input;
+- stale state and lost updates;
+- races/locking/order;
+- retries/duplicates/idempotency;
+- partial failures;
+- authorization mistakes;
+- migration/backfill problems;
+- API/event/frontend contract drift;
+- reconnect/async UI races.
+
+### 3.5 Deterministic verification
+
+Every task must specify the narrowest useful verification command plus broader checks required by the changed risk surface.
+
+"Tests should pass" is not a verification plan.
 
 ---
 
-## 6. Test Planning Rules
+## 4. Task Identity
 
-Tests must be designed from risks, not generated only from implementation structure.
+- Task ID: `TASK-P<XX>-<YYY>`
+- Active file: `.ai/tasks/phase-XX-<phase-name>/<YYY>-<task-description>.md`
+- Completed file: `.ai/tasks/completed/phase-XX-<phase-name>/<YYY>-<task-description>.md`
+- Branch: `feat/p<XX>-<YYY>-<task-description>`
 
-For relevant tasks, require coverage for:
+Task numbering restarts at `001` for each phase.
+
+Use `.ai/tasks/templates/TASK_TEMPLATE.md`.
+
+---
+
+## 5. Risk / Orchestration Metadata
+
+Before writing implementation details classify:
+
+- **Complexity:** `1-5`
+- **Failure risk:** `Low | Medium | High | Critical`
+- **Verification strength:** `Strong | Partial | Weak`
+- **Required review depth:** `Normal | Substantive | Critical`
+- **Affected critical invariants:** exact list
+- **Preferred workflow:** `standard | critical | bugfix | refactor`
+
+A task is `Critical` when a hidden mistake can plausibly cause money loss, security exposure, corrupted state, double booking, broken idempotency, destructive data damage, or distributed-consistency failure.
+
+Do **not** hardcode a provider/model into the task metadata. Routing changes over time and is resolved at execution through `.ai/MODEL_ROUTER.md`.
+
+---
+
+## 6. ADR Rules
+
+Create an ADR before task breakdown when the work:
+
+1. introduces a new architectural pattern;
+2. chooses between meaningful competing technologies/libraries;
+3. changes a global/domain invariant;
+4. changes a shared `backend/common/` contract;
+5. makes a non-trivial storage/migration/messaging/security/distributed-systems trade-off.
+
+Do not create ADRs for routine CRUD, normal bug fixes preserving contracts, mechanical refactors, or routine styling.
+
+Use `.ai/decisions/ADR-000-template.md` and set the ADR to an accepted state before dependent implementation treats it as authoritative.
+
+---
+
+## 7. Required Task Contents
+
+Every implementation-ready task should contain, where applicable:
+
+1. objective;
+2. orchestration/risk metadata;
+3. critical invariants;
+4. dependencies/prerequisites;
+5. exact `[NEW] / [MODIFY] / [DELETE]` file inventory;
+6. API/DTO/service/event/DB/frontend contracts;
+7. deterministic implementation sequence;
+8. negative/boundary cases;
+9. concurrency/idempotency/retry requirements;
+10. security/authorization/ownership requirements;
+11. observability requirements when needed;
+12. exact test requirements and what each proves;
+13. verification commands;
+14. review focus;
+15. independently verifiable acceptance criteria.
+
+Reference existing repository standards instead of duplicating them when a rule already exists in `AGENTS.md`, subsystem `AGENTS.md`, ADRs, or architecture specs.
+
+---
+
+## 8. Test Planning
+
+Design tests from failure risk, not from implementation structure alone.
+
+Require applicable coverage for:
 
 - happy path;
-- validation and boundary values;
+- validation/boundaries;
 - authorization/ownership failures;
 - duplicate/idempotent requests;
 - invalid state transitions;
 - persistence constraints;
-- retries and partial failures;
+- retries/partial failures;
 - concurrency/races;
-- API or event contract compatibility;
-- frontend loading/error/empty/reconnect state;
-- regression scenarios for previously fixed bugs.
+- API/event serialization compatibility;
+- frontend loading/error/empty/reconnect behavior;
+- regression scenarios for known defects.
 
-For critical invariants, state what must be proven by integration or concurrency tests rather than accepting mocks as sufficient evidence.
+For critical invariants, state which properties require real PostgreSQL/Testcontainers/concurrency/integration evidence rather than mocks.
 
 ---
 
-## 7. Planning Sequence
+## 9. Planning Sequence
 
 ```text
-1. Read the relevant `.ai/architecture/` documents and ADRs.
-2. Inspect the existing implementation and shared modules before designing new abstractions.
-3. Determine whether an ADR is required. Create it first when necessary.
-4. Classify complexity, risk, verification strength, affected invariants, and failure modes.
-5. Select the phase folder and next 3-digit task number.
-6. Copy `.ai/tasks/templates/TASK_TEMPLATE.md`.
-7. Define objective, exact contracts, file inventory, implementation order, tests, verification, and review focus.
-8. Check that another engineer/agent could implement the task without making architectural decisions.
-9. Check that another reviewer could determine correctness from the task + diff + repository contracts.
-10. Set status to `READY FOR IMPLEMENTATION` only when both checks pass.
+1. Read AGENTS.md and relevant subsystem AGENTS.md.
+2. Read relevant architecture specs and accepted ADRs.
+3. Inspect current implementation/shared abstractions before designing new ones.
+4. Decide whether a new ADR is required; create/accept it first when necessary.
+5. Classify complexity/risk/verification/review depth/invariants.
+6. Select the correct phase and next task number.
+7. Copy TASK_TEMPLATE.md.
+8. Define objective, contracts, file inventory, implementation order, tests, verification, and review focus.
+9. Check that an implementer could execute without making architecture decisions.
+10. Check that an independent reviewer could judge correctness from task + diff + repository contracts.
+11. Set status to READY FOR IMPLEMENTATION only when both checks pass.
 ```
-
-Current phase directories include `phase-00` through `phase-17`; use the existing repository structure rather than inventing a new phase name when one already applies.
 
 ---
 
-## 8. Planning Quality Gate
+## 10. Planning Quality Gate
 
-A task is not ready if any of these are true:
+A task is not implementation-ready if:
 
-- important behavior is described with words such as "properly", "appropriately", "handle errors", or "add validation" without exact rules;
-- the task changes an invariant without an ADR;
-- verification consists only of "tests should pass";
-- critical failure modes have no corresponding test or review requirement;
-- the task requires the implementer to invent DTOs, schema, state transitions, or architecture;
-- unrelated refactoring is mixed into a feature without justification;
-- compatibility or migration impact is unknown.
+- important behavior remains vague;
+- the task changes an invariant without the required ADR;
+- schema/DTO/state transition decisions are left to the implementer;
+- verification is only "run tests";
+- critical failure modes have no evidence/review requirement;
+- compatibility/migration impact is unknown;
+- unrelated work is bundled without justification;
+- repository implementation materially contradicts assumptions and the conflict is unresolved.
 
-When ambiguity remains, resolve it during planning rather than delegating it silently to the implementer.
+Resolve ambiguity during planning rather than transferring it silently to implementation.
 
 ---
 
-## 9. Next Stage Handoff: Task Execution
+## 11. Next Stage: Implementation
 
-Once the planning quality gate passes and the task status is set to `READY FOR IMPLEMENTATION`, hand off to **Workflow 02: Task Execution** (`.ai/workflows/02-task-execution.md`).
+When the planning gate passes, next stage is `.ai/workflows/02-task-execution.md`.
 
-### 9.1 AI Model & Reasoning Effort Selection
+### Orchestrated mode
 
-Consult `.ai/MODEL_ROUTER.md` before routing:
+The supervisor must:
 
-| Task Type | Recommended Route | Alternative Route | Escalation / Override |
-|---|---|---|---|
-| **Substantive Backend Implementation** | **Muse Spark 1.3 xHigh** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** (if design judgment needed during coding) |
-| **Frontend Implementation (Angular / Tailwind)** | **Gemini 3.8 Flash High** | **Muse Spark 1.3 xHigh** | **GPT-5.6 Terra High** (for complex state/architecture) |
-| **Small / Mechanical Implementation** | **Muse Spark 1.3 High** | **Gemini 3.8 Flash Medium** | **GPT-5.6 Terra Medium** |
-| **Critical Invariant Implementation** (Holds, Locking, Concurrency, Payments, Security) | **Muse Spark 1.3 xHigh** (guided by strict spec) | **GPT-5.6 Terra High** | **GPT-5.6 Sol High** (mandatory pre-implementation review or active supervision) |
+1. resolve the implementation route through `.ai/MODEL_ROUTER.md`;
+2. apply `.ai/integrations/PORACODE.md` if Poracode is active;
+3. delegate implementation directly;
+4. pass task path, branch/worktree, accepted plan, invariants, pre-existing user changes, and verification commands.
 
-### 9.2 Next Stage Prompt Template
+Do not ask the user to copy/paste a handoff when Crossagents/delegation is functioning.
 
-Copy and paste the following prompt to initiate execution:
+### Manual fallback
 
-```markdown
-You are the Builder / Implementer for SeatFlow.
-Execute task: [TASK-P<XX>-<YYY>: <Task Title>]
-Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
+If delegation is unavailable, return a Next Stage Handoff containing:
 
-Instructions:
-1. Follow `.ai/workflows/02-task-execution.md` and subsystem guidelines (`backend/AGENTS.md` or `frontend/AGENTS.md`).
-2. Create and checkout the dedicated branch:
-   `git checkout -b feat/p<XX>-<YYY>-<task-desc> develop`
-3. Read the task file, referenced ADRs, and neighboring abstractions. Do NOT improvise architecture.
-4. Implement the minimal correct diff according to the exact file inventory and sequence.
-5. Write and execute required unit, integration, and concurrency tests.
-6. Run self-verification:
-   - Command: `<verification-command-from-task>`
-   - Inspect `git diff` for hygiene, contract compliance, and zero unintended changes.
-7. Upon successful self-verification, prepare the handoff to independent code review.
-```
+- `Workflow: .ai/workflows/02-task-execution.md`
+- recommended/fallback/alternative/escalation from `.ai/MODEL_ROUTER.md`
+- a complete implementation prompt populated with the exact task path and branch.
+
+---
+
+## 12. Planner Output
+
+Finish with:
+
+- task ID/path/status;
+- risk metadata;
+- ADRs created/used;
+- important contracts/invariants;
+- verification commands;
+- unresolved assumptions (must be empty for `READY FOR IMPLEMENTATION` unless explicitly documented/non-blocking);
+- orchestrated next-stage delegation result or manual fallback handoff.
