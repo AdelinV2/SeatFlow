@@ -244,6 +244,13 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   private initialTransform: SectionTransform | null = null;
   private activeLayoutElement: VenueLayoutElement | null = null;
   private initialElementGeometry: LayoutGeometry | null = null;
+  /**
+   * Index of the element under gesture in internalElements. Gestures must track
+   * by index, not object identity: the designer feedback loop replaces the list
+   * with draft clones on every emitted change, so a captured reference detaches
+   * after the first pointermove and the drag would freeze.
+   */
+  private activeElementIndex: number | null = null;
   private activeHandle: CornerHandle | 'rotate' | null = null;
 
   // Pinch zoom state
@@ -516,7 +523,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         break;
       }
       case 'drag-element': {
-        if (!this.editable() || !this.activeLayoutElement || !this.initialElementGeometry) {
+        const target = this.activeGestureElement();
+        if (!target) {
           return;
         }
         const clientDelta = {
@@ -525,8 +533,8 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         };
         const worldDelta = clientDeltaToWorld(clientDelta, this.zoomLevel());
 
-        let newX = this.initialElementGeometry.x + worldDelta.x;
-        let newY = this.initialElementGeometry.y + worldDelta.y;
+        let newX = target.initial.x + worldDelta.x;
+        let newY = target.initial.y + worldDelta.y;
 
         const step = this.snapStep();
         if (step > 0) {
@@ -537,31 +545,26 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         newX = clampNumber(Number(newX.toFixed(3)), MIN_POSITION, MAX_POSITION);
         newY = clampNumber(Number(newY.toFixed(3)), MIN_POSITION, MAX_POSITION);
 
-        const targetEl = this.activeLayoutElement;
         const updated: VenueLayoutElement = {
-          ...targetEl,
+          ...target.element,
           geometry: {
-            ...targetEl.geometry,
+            ...target.element.geometry,
             x: newX,
             y: newY,
           },
         };
 
         this.activeLayoutElement = updated;
-        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
-        const idx = this.internalElements().indexOf(updated);
-        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.internalElements.update((list) =>
+          list.map((el, i) => (i === target.index ? updated : el)),
+        );
+        this.elementTransformChanged.emit({ element: updated, index: target.index });
         this.elementsChange.emit(this.internalElements());
         break;
       }
       case 'resize-element': {
-        if (
-          !this.editable() ||
-          !this.activeLayoutElement ||
-          !this.initialElementGeometry ||
-          !this.activeHandle ||
-          this.activeHandle === 'rotate'
-        ) {
+        const target = this.activeGestureElement();
+        if (!target || !this.activeHandle || this.activeHandle === 'rotate') {
           return;
         }
         const clientDelta = {
@@ -572,11 +575,11 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
         const resize = calculateCornerResize(
           {
-            positionX: this.initialElementGeometry.x,
-            positionY: this.initialElementGeometry.y,
-            width: this.initialElementGeometry.width,
-            height: this.initialElementGeometry.height,
-            rotationDeg: this.initialElementGeometry.rotationDeg,
+            positionX: target.initial.x,
+            positionY: target.initial.y,
+            width: target.initial.width,
+            height: target.initial.height,
+            rotationDeg: target.initial.rotationDeg,
           },
           this.activeHandle as CornerHandle,
           worldDelta,
@@ -584,7 +587,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
           MIN_DIMENSION,
         );
 
-        const targetEl = this.activeLayoutElement;
+        const targetEl = target.element;
         const updated: VenueLayoutElement = {
           ...targetEl,
           geometry: {
@@ -597,14 +600,16 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         };
 
         this.activeLayoutElement = updated;
-        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
-        const idx = this.internalElements().indexOf(updated);
-        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.internalElements.update((list) =>
+          list.map((el, i) => (i === target.index ? updated : el)),
+        );
+        this.elementTransformChanged.emit({ element: updated, index: target.index });
         this.elementsChange.emit(this.internalElements());
         break;
       }
       case 'rotate-element': {
-        if (!this.editable() || !this.activeLayoutElement || !this.initialElementGeometry) {
+        const target = this.activeGestureElement();
+        if (!target) {
           return;
         }
         const containerRect = this.getContainerRect();
@@ -617,17 +622,17 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
         const newRot = calculateRotation(
           {
-            positionX: this.initialElementGeometry.x,
-            positionY: this.initialElementGeometry.y,
-            width: this.initialElementGeometry.width,
-            height: this.initialElementGeometry.height,
-            rotationDeg: this.initialElementGeometry.rotationDeg,
+            positionX: target.initial.x,
+            positionY: target.initial.y,
+            width: target.initial.width,
+            height: target.initial.height,
+            rotationDeg: target.initial.rotationDeg,
           },
           currentWorld,
           this.snapStep(),
         );
 
-        const targetEl = this.activeLayoutElement;
+        const targetEl = target.element;
         const updated: VenueLayoutElement = {
           ...targetEl,
           geometry: {
@@ -637,9 +642,10 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
         };
 
         this.activeLayoutElement = updated;
-        this.internalElements.update((list) => list.map((el) => (el === targetEl ? updated : el)));
-        const idx = this.internalElements().indexOf(updated);
-        this.elementTransformChanged.emit({ element: updated, index: idx });
+        this.internalElements.update((list) =>
+          list.map((el, i) => (i === target.index ? updated : el)),
+        );
+        this.elementTransformChanged.emit({ element: updated, index: target.index });
         this.elementsChange.emit(this.internalElements());
         break;
       }
@@ -778,6 +784,28 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
   // --- Element Event Handlers from Child LayoutElementNodes ---
 
+  /**
+   * Resolves the element under the active element gesture by list index.
+   * The live list member (not the captured pointerdown reference) is returned
+   * so gestures survive parent feedback round-trips that replace list items
+   * with draft clones. Returns null when the gesture has no valid target.
+   */
+  private activeGestureElement(): {
+    element: VenueLayoutElement;
+    index: number;
+    initial: LayoutGeometry;
+  } | null {
+    const idx = this.activeElementIndex;
+    const initial = this.initialElementGeometry;
+    if (!this.editable() || !this.activeLayoutElement || !initial) {
+      return null;
+    }
+    if (idx === null || idx < 0 || idx >= this.internalElements().length) {
+      return null;
+    }
+    return { element: this.internalElements()[idx], index: idx, initial };
+  }
+
   getElementKey(element: VenueLayoutElement, index?: number): string {
     if (element.elementId) {
       return `elem-${element.elementId}`;
@@ -837,6 +865,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
     this.mode = 'drag-element';
     this.activeLayoutElement = event.element;
+    this.activeElementIndex = idx;
     this.initialElementGeometry = { ...event.element.geometry };
     this.dragStartClient = { x: event.event.clientX, y: event.event.clientY };
     this.lastDragClient = { x: event.event.clientX, y: event.event.clientY };
@@ -865,6 +894,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     }
 
     this.activeLayoutElement = event.element;
+    this.activeElementIndex = this.internalElements().indexOf(event.element);
     this.activeHandle = event.handle;
     this.initialElementGeometry = { ...event.element.geometry };
     this.dragStartClient = { x: event.event.clientX, y: event.event.clientY };
@@ -1010,8 +1040,12 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     if (!this.editable() || !element) {
       return;
     }
+    // Capture selection BEFORE filtering: for null-ID elements the selection key
+    // is index-based, so a post-removal lookup would resolve to the next element
+    // occupying the freed index and wrongly keep the inspector open on it.
+    const wasSelected = this.selectedElement() === element;
     this.internalElements.update((list) => list.filter((el) => el !== element));
-    if (this.selectedElement() === element) {
+    if (wasSelected) {
       this.deselectElement();
     }
     this.elementRemoved.emit(element);
@@ -1234,6 +1268,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     this.activeSection = null;
     this.initialTransform = null;
     this.activeLayoutElement = null;
+    this.activeElementIndex = null;
     this.initialElementGeometry = null;
     this.activeHandle = null;
     this.capturedElement = null;
