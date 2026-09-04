@@ -1,0 +1,939 @@
+<div
+  class="section-properties-panel flex flex-col gap-5 p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm text-[var(--color-text-primary)]"
+>
+  @if (!section()) {
+    <div class="text-center py-10 text-[var(--color-text-muted)] text-sm">
+      Select a section on the canvas or from the tabs above to edit properties and manage seats.
+    </div>
+  } @else {
+    <!-- Validation Message Banner -->
+    @if (validationMessage()) {
+      <div
+        role="alert"
+        aria-live="polite"
+        class="validation-alert p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2"
+      >
+        <svg
+          class="size-4 shrink-0 text-rose-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <span>{{ validationMessage() }}</span>
+      </div>
+    }
+
+    <!-- Section Header & Lifecycle Actions -->
+    <div class="flex flex-col gap-3 pb-4 border-b border-[var(--color-border)]">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <h2 class="text-base font-extrabold tracking-tight">
+            {{ section()?.name }}
+          </h2>
+          @if (isSectionActive()) {
+            <span
+              class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+            >
+              Active
+            </span>
+          } @else {
+            <span
+              class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+            >
+              Inactive
+            </span>
+          }
+        </div>
+        <span class="text-[10px] font-mono text-[var(--color-text-muted)]">
+          {{ section()?.sectionId ? (section()?.sectionId | slice: 0 : 8) : 'Draft (Unsaved)' }}
+        </span>
+      </div>
+
+      <!-- Section Operations Toolbar -->
+      <div class="flex flex-wrap items-center gap-2 pt-1">
+        <button
+          type="button"
+          (click)="duplicateSection.emit()"
+          aria-label="Duplicate this section"
+          class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] flex items-center gap-1.5 transition-colors"
+        >
+          <svg
+            class="size-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect width="13" height="13" x="9" y="9" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          <span>Duplicate</span>
+        </button>
+
+        @if (isSectionActive()) {
+          <button
+            type="button"
+            (click)="deactivateSection.emit()"
+            aria-label="Deactivate this section and its seats"
+            class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 flex items-center gap-1.5 transition-colors"
+          >
+            <svg
+              class="size-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+            </svg>
+            <span>Deactivate</span>
+          </button>
+        } @else {
+          <button
+            type="button"
+            (click)="reactivateSection.emit()"
+            aria-label="Reactivate this section"
+            class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 flex items-center gap-1.5 transition-colors"
+          >
+            <svg
+              class="size-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>Reactivate</span>
+          </button>
+        }
+
+        <button
+          type="button"
+          (click)="removeSection.emit()"
+          [disabled]="!canRemove()"
+          [attr.aria-disabled]="!canRemove()"
+          aria-label="Remove draft section"
+          [title]="
+            canRemove()
+              ? 'Remove draft section'
+              : 'Saved sections cannot be deleted; use deactivate instead'
+          "
+          class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5 transition-colors"
+        >
+          <svg
+            class="size-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"
+            />
+          </svg>
+          <span>Remove</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Appearance & Color Theme -->
+    <div
+      class="rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-4 space-y-3"
+    >
+      <div class="flex items-center justify-between">
+        <h3
+          class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] flex items-center gap-1.5"
+        >
+          <svg
+            class="size-4 text-indigo-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="m4.93 4.93 4.24 4.24" />
+            <path d="m14.83 9.17 4.24-4.24" />
+            <path d="m14.83 14.83 4.24 4.24" />
+            <path d="m9.17 14.83-4.24 4.24" />
+          </svg>
+          Section Color Theme
+        </h3>
+        <span class="text-[10px] font-mono text-[var(--color-text-muted)]">{{
+          currentSectionColor()
+        }}</span>
+      </div>
+
+      <!-- Color Swatches Grid -->
+      <div class="grid grid-cols-4 gap-2">
+        @for (c of PRESET_COLORS; track c.hex) {
+          <button
+            type="button"
+            (click)="selectSectionColor(c.hex)"
+            [style.background-color]="c.hex"
+            [title]="c.name + ' (' + c.hex + ')'"
+            class="h-8 rounded-xl border-2 transition-all flex items-center justify-center shadow-xs hover:scale-105"
+            [class.border-white]="currentSectionColor() === c.hex"
+            [class.ring-2]="currentSectionColor() === c.hex"
+            [class.ring-indigo-400]="currentSectionColor() === c.hex"
+            [class.border-transparent]="currentSectionColor() !== c.hex"
+          >
+            @if (currentSectionColor() === c.hex) {
+              <svg
+                class="size-4 text-white drop-shadow-sm"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            }
+          </button>
+        }
+      </div>
+
+      <!-- Custom Color Picker -->
+      <div class="flex items-center gap-2 pt-1">
+        <label for="customSecColor" class="text-xs font-semibold text-[var(--color-text-muted)]">
+          Custom:
+        </label>
+        <input
+          id="customSecColor"
+          type="color"
+          [value]="currentSectionColor()"
+          (input)="selectSectionColor($any($event.target).value)"
+          class="h-8 w-14 rounded-lg cursor-pointer border border-[var(--color-border)] bg-transparent p-0.5"
+          title="Choose custom section color"
+        />
+        <span class="text-xs text-[var(--color-text-muted)]"
+          >Seats in this section use this color</span
+        >
+      </div>
+    </div>
+
+    <!-- Row & Column Quick Manager -->
+    <div
+      class="rounded-2xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-4 space-y-3"
+    >
+      <div class="flex items-center justify-between">
+        <h3
+          class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] flex items-center gap-1.5"
+        >
+          <svg
+            class="size-4 text-amber-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+          </svg>
+          Row & Column Manager
+        </h3>
+        <span class="text-[10px] font-bold text-amber-600 dark:text-amber-400">Quick Aisles</span>
+      </div>
+
+      <!-- 1-Click Aisle Generators -->
+      <div class="space-y-1.5">
+        <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+          >1-Click Walkway Presets:</span
+        >
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            (click)="triggerCenterAisle()"
+            title="Automatically deactivate the center column to create a central walkway"
+            class="btn-spring px-2.5 py-2 rounded-xl text-xs font-bold border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>🚶 Center Aisle</span>
+          </button>
+          <button
+            type="button"
+            (click)="triggerDualAisles()"
+            title="Automatically deactivate columns at 1/3 and 2/3"
+            class="btn-spring px-2.5 py-2 rounded-xl text-xs font-bold border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>🚶🚶 Dual Aisles</span>
+          </button>
+        </div>
+        <button
+          type="button"
+          (click)="triggerActivateAllSeats()"
+          title="Restore all seats in this section to active"
+          class="btn-spring w-full py-1.5 px-2 rounded-lg text-[11px] font-semibold text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+        >
+          ✓ Reset All Seats to Active
+        </button>
+      </div>
+
+      <!-- Row Manager -->
+      <div class="pt-2 border-t border-[var(--color-border)] space-y-2">
+        <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+          >Row Operations:</span
+        >
+        <div class="flex items-center gap-2">
+          <select
+            [ngModel]="selectedQuickRow() || (availableRows()[0]?.label ?? '')"
+            (ngModelChange)="selectedQuickRow.set($event)"
+            [ngModelOptions]="{ standalone: true }"
+            class="flex-1 px-2.5 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-bold text-[var(--color-text-primary)]"
+          >
+            @for (row of availableRows(); track row.label) {
+              <option [value]="row.label">
+                Row {{ row.label }} ({{ row.active }}/{{ row.total }} active)
+              </option>
+            }
+          </select>
+          <button
+            type="button"
+            (click)="triggerRowToggle(selectedQuickRow() || (availableRows()[0]?.label ?? ''))"
+            title="Toggle active status of this row"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-indigo-500/15 hover:text-indigo-600"
+          >
+            Toggle
+          </button>
+          <button
+            type="button"
+            (click)="
+              triggerRowToggle(selectedQuickRow() || (availableRows()[0]?.label ?? ''), false)
+            "
+            title="Make entire row an aisle (deactivate all seats in row)"
+            class="btn-spring px-2.5 py-2 rounded-xl text-xs font-bold border border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20"
+          >
+            Aisle
+          </button>
+        </div>
+      </div>
+
+      <!-- Column Manager -->
+      <div class="pt-2 border-t border-[var(--color-border)] space-y-2">
+        <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+          >Column Operations:</span
+        >
+        <div class="flex items-center gap-2">
+          <select
+            [ngModel]="selectedQuickCol()"
+            (ngModelChange)="selectedQuickCol.set(+$event)"
+            [ngModelOptions]="{ standalone: true }"
+            class="flex-1 px-2.5 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-bold text-[var(--color-text-primary)]"
+          >
+            @for (col of availableCols(); track col.colIndex) {
+              <option [value]="col.colIndex">
+                Column {{ col.colIndex + 1 }} ({{ col.active }}/{{ col.total }} active)
+              </option>
+            }
+          </select>
+          <button
+            type="button"
+            (click)="triggerColToggle(selectedQuickCol())"
+            title="Toggle active status of this column"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-indigo-500/15 hover:text-indigo-600"
+          >
+            Toggle
+          </button>
+          <button
+            type="button"
+            (click)="triggerColToggle(selectedQuickCol(), false)"
+            title="Make entire column an aisle (deactivate all seats in col)"
+            class="btn-spring px-2.5 py-2 rounded-xl text-xs font-bold border border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20"
+          >
+            Aisle
+          </button>
+        </div>
+      </div>
+
+      <!-- Expand Section (Add Row / Add Column) -->
+      <div class="pt-2 border-t border-[var(--color-border)] space-y-2">
+        <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+          >Expand Section:</span
+        >
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            (click)="triggerAppendRow()"
+            title="Add a new row at the bottom of this section"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>+ Add Row</span>
+          </button>
+          <button
+            type="button"
+            (click)="triggerAppendCol()"
+            title="Add a new column at the right of this section"
+            class="btn-spring px-3 py-2 rounded-xl text-xs font-bold border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <span>+ Add Column</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Geometry & Core Attributes -->
+    <div class="space-y-3">
+      <h3 class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+        Section Geometry
+      </h3>
+
+      <!-- Section Name -->
+      <div>
+        <label
+          for="secPropName"
+          class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+        >
+          Section Name
+        </label>
+        <input
+          id="secPropName"
+          type="text"
+          [value]="section()?.name || ''"
+          (change)="onPropertyChange('name', $any($event.target).value)"
+          class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+
+      <!-- Position X & Y -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label
+            for="secPropPosX"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Position X
+          </label>
+          <input
+            id="secPropPosX"
+            type="number"
+            min="0"
+            max="100000"
+            [value]="section()?.positionX ?? 0"
+            (change)="onNumericPropertyChange('positionX', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+        <div>
+          <label
+            for="secPropPosY"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Position Y
+          </label>
+          <input
+            id="secPropPosY"
+            type="number"
+            min="0"
+            max="100000"
+            [value]="section()?.positionY ?? 0"
+            (change)="onNumericPropertyChange('positionY', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+      </div>
+
+      <!-- Width & Height -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label
+            for="secPropWidth"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Width (units)
+          </label>
+          <input
+            id="secPropWidth"
+            type="number"
+            min="1"
+            max="100000"
+            [value]="section()?.width ?? 400"
+            (change)="onNumericPropertyChange('width', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+        <div>
+          <label
+            for="secPropHeight"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Height (units)
+          </label>
+          <input
+            id="secPropHeight"
+            type="number"
+            min="1"
+            max="100000"
+            [value]="section()?.height ?? 300"
+            (change)="onNumericPropertyChange('height', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+      </div>
+
+      <!-- Rotation & Z-Index -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label
+            for="secPropRot"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Rotation (-180°..180°)
+          </label>
+          <input
+            id="secPropRot"
+            type="number"
+            min="-180"
+            max="180"
+            [value]="section()?.rotationDeg ?? 0"
+            (change)="onNumericPropertyChange('rotationDeg', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+        <div>
+          <label
+            for="secPropZ"
+            class="block text-xs font-semibold text-[var(--color-text-muted)] mb-1"
+          >
+            Z-Index (-1000..1000)
+          </label>
+          <input
+            id="secPropZ"
+            type="number"
+            min="-1000"
+            max="1000"
+            [value]="section()?.zIndex ?? 1"
+            (change)="onNumericPropertyChange('zIndex', $event)"
+            class="w-full px-3 py-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] text-xs text-[var(--color-text-primary)] focus:ring-2 focus:ring-indigo-500 font-mono"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Seat Generation Sub-Panel (Accordion / Card) -->
+    <div
+      class="rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-3.5 space-y-3"
+    >
+      <button
+        type="button"
+        (click)="showGeneratorAccordion.set(!showGeneratorAccordion())"
+        class="w-full flex items-center justify-between text-xs font-bold text-[var(--color-text-primary)] hover:text-indigo-600 transition-colors"
+      >
+        <span class="flex items-center gap-1.5">
+          <svg
+            class="size-4 text-indigo-600"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M3 9h18M9 21V9" />
+          </svg>
+          Deterministic Seat Generator
+        </span>
+        <svg
+          class="size-4 transition-transform duration-150"
+          [class.rotate-180]="showGeneratorAccordion()"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      @if (showGeneratorAccordion()) {
+        <div
+          class="space-y-3 pt-2 border-t border-[var(--color-border)] text-xs animate-fade-in-up"
+        >
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label for="genRows" class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Rows (1-50)</label
+              >
+              <input
+                id="genRows"
+                type="number"
+                min="1"
+                max="50"
+                [value]="generatorRows()"
+                (input)="generatorRows.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs"
+              />
+            </div>
+            <div>
+              <label for="genCols" class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Cols (1-50)</label
+              >
+              <input
+                id="genCols"
+                type="number"
+                min="1"
+                max="50"
+                [value]="generatorCols()"
+                (input)="generatorCols.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label
+                for="genRowStart"
+                class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Row Start Index (0=A)</label
+              >
+              <input
+                id="genRowStart"
+                type="number"
+                min="0"
+                [value]="generatorRowStart()"
+                (input)="generatorRowStart.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs"
+              />
+            </div>
+            <div>
+              <label
+                for="genSeatStart"
+                class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Seat # Start (>=1)</label
+              >
+              <input
+                id="genSeatStart"
+                type="number"
+                min="1"
+                [value]="generatorSeatStart()"
+                (input)="generatorSeatStart.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label
+                for="genPitchX"
+                class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Pitch X (units)</label
+              >
+              <input
+                id="genPitchX"
+                type="number"
+                min="1"
+                max="1000"
+                [value]="generatorPitchX()"
+                (input)="generatorPitchX.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label
+                for="genPitchY"
+                class="block font-semibold text-[var(--color-text-muted)] mb-0.5"
+                >Pitch Y (units)</label
+              >
+              <input
+                id="genPitchY"
+                type="number"
+                min="1"
+                max="1000"
+                [value]="generatorPitchY()"
+                (input)="generatorPitchY.set(+$any($event.target).value)"
+                class="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            (click)="triggerGenerateSeats()"
+            class="btn-spring w-full min-h-[44px] py-2 px-3 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-md flex items-center justify-center gap-1.5 transition-all"
+          >
+            <svg
+              class="size-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>Generate {{ generatorRows() * generatorCols() }} Seats</span>
+          </button>
+        </div>
+      }
+    </div>
+
+    <!-- Multi-Seat Selection & Bulk Actions Toolbar -->
+    <div
+      class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5 space-y-3"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">
+          Bulk Seat Editing
+        </h3>
+        <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+          {{ selectedCount() }} selected
+        </span>
+      </div>
+
+      <!-- Quick Selection Buttons -->
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="selectAllSeats()"
+          aria-label="Select all seats in this section"
+          class="btn-spring min-h-[44px] flex-1 px-3 py-2 rounded-xl text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-hover)]"
+        >
+          Select All
+        </button>
+        <button
+          type="button"
+          (click)="clearSelection()"
+          [disabled]="!hasSelection()"
+          aria-label="Clear seat selection"
+          class="btn-spring min-h-[44px] flex-1 px-3 py-2 rounded-xl text-xs font-semibold border border-[var(--color-border)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+        >
+          Clear
+        </button>
+      </div>
+
+      @if (hasSelection()) {
+        <div class="space-y-3 pt-2 border-t border-[var(--color-border)] animate-fade-in-up">
+          <!-- Bulk Activate / Deactivate -->
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              (click)="triggerBulkActivate(true)"
+              [disabled]="!isSectionActive()"
+              aria-label="Bulk activate selected seats"
+              class="btn-spring min-h-[44px] flex-1 px-2.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs disabled:opacity-40"
+            >
+              Activate ({{ selectedCount() }})
+            </button>
+            <button
+              type="button"
+              (click)="triggerBulkActivate(false)"
+              aria-label="Bulk deactivate selected seats"
+              class="btn-spring min-h-[44px] flex-1 px-2.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-xs"
+            >
+              Deactivate ({{ selectedCount() }})
+            </button>
+          </div>
+
+          <!-- Color / Tier for Selected Seats -->
+          <div
+            class="p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-2"
+          >
+            <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+              >Assign Color / Tier ({{ selectedCount() }} seats):</span
+            >
+            <div class="flex items-center gap-1.5 flex-wrap">
+              @for (c of PRESET_COLORS; track c.hex) {
+                <button
+                  type="button"
+                  (click)="assignColorToSelectedSeats(c.hex)"
+                  [style.background-color]="c.hex"
+                  [title]="'Set color to ' + c.name"
+                  class="size-6 rounded-lg border border-white/40 hover:scale-110 active:scale-95 transition-transform shadow-xs"
+                ></button>
+              }
+              <input
+                type="color"
+                [value]="currentSectionColor()"
+                (change)="assignColorToSelectedSeats($any($event.target).value)"
+                class="size-6 rounded-lg cursor-pointer border border-[var(--color-border)] p-0 bg-transparent"
+                title="Custom color for selected seats"
+              />
+            </div>
+          </div>
+
+          <!-- Bulk Translate (Move by Delta) -->
+          <div
+            class="p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-2"
+          >
+            <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+              >Translate Delta (dx, dy)</span
+            >
+            <div class="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="ΔX"
+                [value]="translateDeltaX()"
+                (input)="translateDeltaX.set(+$any($event.target).value)"
+                class="w-16 px-2 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono"
+              />
+              <input
+                type="number"
+                placeholder="ΔY"
+                [value]="translateDeltaY()"
+                (input)="translateDeltaY.set(+$any($event.target).value)"
+                class="w-16 px-2 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono"
+              />
+              <button
+                type="button"
+                (click)="triggerBulkTranslate()"
+                aria-label="Move selected seats by delta"
+                class="btn-spring min-h-[44px] flex-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white"
+              >
+                Move
+              </button>
+            </div>
+          </div>
+
+          <!-- Bulk Set Row Label -->
+          <div
+            class="p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-2"
+          >
+            <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+              >Set Row Label</span
+            >
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                maxlength="10"
+                placeholder="e.g. A, VIP"
+                [value]="bulkRowLabelText()"
+                (input)="bulkRowLabelText.set($any($event.target).value)"
+                class="flex-1 px-2 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-semibold"
+              />
+              <button
+                type="button"
+                (click)="triggerBulkSetRowLabel()"
+                [disabled]="!bulkRowLabelText().trim()"
+                aria-label="Set row label for selected seats"
+                class="btn-spring min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40"
+              >
+                Set
+              </button>
+            </div>
+          </div>
+
+          <!-- Bulk Renumber -->
+          <div
+            class="p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] space-y-2"
+          >
+            <span class="block text-[11px] font-bold text-[var(--color-text-muted)]"
+              >Renumber Selected (Start #)</span
+            >
+            <div class="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                [value]="bulkStartNumberVal()"
+                (input)="bulkStartNumberVal.set(+$any($event.target).value)"
+                class="w-20 px-2 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono"
+              />
+              <button
+                type="button"
+                (click)="triggerBulkRenumber()"
+                aria-label="Renumber selected seats sequentially"
+                class="btn-spring min-h-[44px] flex-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white"
+              >
+                Renumber
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Accessible Seat List Table Accordion -->
+    <div
+      class="rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-3.5 space-y-2"
+    >
+      <button
+        type="button"
+        (click)="showSeatTable.set(!showSeatTable())"
+        class="w-full flex items-center justify-between text-xs font-bold text-[var(--color-text-primary)] hover:text-indigo-600 transition-colors"
+      >
+        <span class="flex items-center gap-1.5">
+          <svg
+            class="size-4 text-indigo-600"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />
+          </svg>
+          Seat Inventory Checklist ({{ seatsList().length }})
+        </span>
+        <svg
+          class="size-4 transition-transform duration-150"
+          [class.rotate-180]="showSeatTable()"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      @if (showSeatTable()) {
+        <div class="max-h-60 overflow-y-auto pt-2 border-t border-[var(--color-border)]">
+          <table class="w-full text-left text-xs border-collapse" role="table">
+            <thead>
+              <tr
+                class="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-[10px] uppercase"
+              >
+                <th class="py-1.5 px-2 w-10">Select</th>
+                <th class="py-1.5 px-2">Row</th>
+                <th class="py-1.5 px-2">Seat #</th>
+                <th class="py-1.5 px-2">Grid</th>
+                <th class="py-1.5 px-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (
+                seat of seatsList();
+                track seat.seatId || $index + '_' + seat.gridY + '_' + seat.gridX
+              ) {
+                <tr
+                  class="border-b border-[var(--color-border)]/50 hover:bg-[var(--color-surface)]"
+                >
+                  <td class="py-1 px-2">
+                    <label
+                      class="flex items-center justify-center min-w-[44px] min-h-[44px] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        [checked]="isSeatSelected(seat)"
+                        (change)="toggleSeat(seat)"
+                        [attr.aria-label]="
+                          'Select Row ' + seat.rowLabel + ' Seat ' + seat.seatNumber
+                        "
+                        class="size-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </label>
+                  </td>
+                  <td class="py-1 px-2 font-bold">{{ seat.rowLabel }}</td>
+                  <td class="py-1 px-2 font-mono">{{ seat.seatNumber }}</td>
+                  <td class="py-1 px-2 font-mono text-[var(--color-text-muted)]">
+                    {{ seat.gridX }},{{ seat.gridY }}
+                  </td>
+                  <td class="py-1 px-2">
+                    @if (seat.isActive) {
+                      <span class="text-emerald-600 font-bold text-[10px]">Active</span>
+                    } @else {
+                      <span class="text-amber-600 font-bold text-[10px]">Aisle</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+</div>

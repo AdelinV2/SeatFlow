@@ -5,6 +5,7 @@ import {
   ElementRef,
   OnDestroy,
   computed,
+  effect,
   input,
   output,
   signal,
@@ -41,12 +42,35 @@ import { SectionNodeComponent } from '../section-node/section-node.component';
 
 export interface SectionTransformChangeEvent {
   sectionId: string | null;
+  /** Stable client-side draft key (REV-002); falls back to sectionId when absent. */
+  draftKey?: string | null;
   positionX: number;
   positionY: number;
   width: number;
   height: number;
   rotationDeg: number;
   zIndex?: number;
+}
+
+export interface CanvasSeatSelectedEvent {
+  seat: VenueSectionSeat;
+  section: VenueSectionLayout;
+  /** True when Ctrl/Cmd was held; designer preserves/toggles multi-selection. */
+  additive: boolean;
+}
+
+/** Stable canvas identity: draftKey wins so multiple null-ID drafts stay distinct. */
+export function getCanvasSectionKey(section: VenueSectionLayout): string {
+  const draftKey = (section as VenueSectionLayout).draftKey;
+  if (draftKey) {
+    return draftKey;
+  }
+  return section.sectionId ?? '';
+}
+
+function isModifierPressed(event: MouseEvent | KeyboardEvent): boolean {
+  const anyEvent = event as MouseEvent;
+  return Boolean(anyEvent.ctrlKey || anyEvent.metaKey);
 }
 
 type InteractionMode =
@@ -70,11 +94,41 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   readonly selectedSectionIds = input<Set<string> | string[]>(new Set());
   readonly editable = input<boolean>(true);
   readonly snapStep = input<number>(0);
+  readonly toolMode = input<'select' | 'toggle' | 'paint'>('select');
+  readonly paintColor = input<string>('');
+  readonly selectedSeatKeys = input<ReadonlySet<string>>(new Set<string>());
 
   // Outputs
   readonly sectionTransformChanged = output<SectionTransformChangeEvent>();
   readonly selectionChanged = output<Set<string>>();
-  readonly seatSelected = output<{ seat: VenueSectionSeat; section: VenueSectionLayout }>();
+  readonly seatSelected = output<CanvasSeatSelectedEvent>();
+  readonly seatToggle = output<{ seat: VenueSectionSeat; section: VenueSectionLayout }>();
+  readonly seatPaint = output<{
+    seat: VenueSectionSeat;
+    section: VenueSectionLayout;
+    color: string;
+  }>();
+  readonly rowClick = output<{
+    event: MouseEvent;
+    rowLabel: string;
+    section: VenueSectionLayout;
+  }>();
+  readonly rowDblClick = output<{
+    event: MouseEvent;
+    rowLabel: string;
+    section: VenueSectionLayout;
+  }>();
+  readonly colClick = output<{
+    event: MouseEvent;
+    colIndex: number;
+    section: VenueSectionLayout;
+  }>();
+  readonly colDblClick = output<{
+    event: MouseEvent;
+    colIndex: number;
+    section: VenueSectionLayout;
+  }>();
+  readonly toolModeChange = output<'select' | 'toggle' | 'paint'>();
 
   // Signals
   readonly zoomLevel = signal<number>(1.0);
@@ -99,6 +153,21 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   readonly sortedItems = computed<SortedCanvasItem[]>(() => {
     return sortedLayoutItems(this.sections(), this.elements());
   });
+
+  // Signal for internal mode tracking (instantaneous local response)
+  readonly internalToolMode = signal<'select' | 'toggle' | 'paint'>('select');
+
+  // Computed active tool mode
+  readonly currentMode = computed<'select' | 'toggle' | 'paint'>(() => {
+    return this.internalToolMode();
+  });
+
+  constructor() {
+    effect(() => {
+      const mode = this.toolMode();
+      this.internalToolMode.set(mode);
+    });
+  }
 
   // World transform string for the root content group
   readonly viewportTransform = computed(() => {
@@ -311,6 +380,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
         this.sectionTransformChanged.emit({
           sectionId: this.activeSection.sectionId,
+          draftKey: getCanvasSectionKey(this.activeSection),
           positionX: newX,
           positionY: newY,
           width: this.initialTransform.width,
@@ -346,6 +416,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
         this.sectionTransformChanged.emit({
           sectionId: this.activeSection.sectionId,
+          draftKey: getCanvasSectionKey(this.activeSection),
           positionX: resize.positionX,
           positionY: resize.positionY,
           width: resize.width,
@@ -371,6 +442,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
         this.sectionTransformChanged.emit({
           sectionId: this.activeSection.sectionId,
+          draftKey: getCanvasSectionKey(this.activeSection),
           positionX: this.initialTransform.positionX,
           positionY: this.initialTransform.positionY,
           width: this.initialTransform.width,
@@ -416,7 +488,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const secId = event.section.sectionId ?? '';
+    const secId = getCanvasSectionKey(event.section);
     const isMultiSelect = event.event.ctrlKey || event.event.metaKey;
 
     if (isMultiSelect) {
@@ -437,7 +509,7 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const secId = event.section.sectionId ?? '';
+    const secId = getCanvasSectionKey(event.section);
     if (!this.selectedIdSet().has(secId) && !event.event.ctrlKey && !event.event.metaKey) {
       this.selectionChanged.emit(new Set([secId]));
     }
@@ -514,7 +586,40 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     if (!this.editable() && (!event.section.isActive || !event.seat.isActive)) {
       return;
     }
-    this.seatSelected.emit({ seat: event.seat, section: event.section });
+    this.seatSelected.emit({
+      seat: event.seat,
+      section: event.section,
+      additive: isModifierPressed(event.event),
+    });
+  }
+
+  setToolMode(mode: 'select' | 'toggle' | 'paint'): void {
+    this.internalToolMode.set(mode);
+    this.toolModeChange.emit(mode);
+  }
+
+  onSeatToggle(event: { seat: VenueSectionSeat; section: VenueSectionLayout }): void {
+    this.seatToggle.emit(event);
+  }
+
+  onSeatPaint(event: { seat: VenueSectionSeat; section: VenueSectionLayout; color: string }): void {
+    this.seatPaint.emit(event);
+  }
+
+  onRowClick(event: { event: MouseEvent; rowLabel: string; section: VenueSectionLayout }): void {
+    this.rowClick.emit(event);
+  }
+
+  onRowDblClick(event: { event: MouseEvent; rowLabel: string; section: VenueSectionLayout }): void {
+    this.rowDblClick.emit(event);
+  }
+
+  onColClick(event: { event: MouseEvent; colIndex: number; section: VenueSectionLayout }): void {
+    this.colClick.emit(event);
+  }
+
+  onColDblClick(event: { event: MouseEvent; colIndex: number; section: VenueSectionLayout }): void {
+    this.colDblClick.emit(event);
   }
 
   // --- Pinch-to-zoom helpers ---

@@ -22,9 +22,11 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import com.seatflow.seatmap.web.dto.response.SectionLayoutResponse;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -216,6 +218,59 @@ class AdminVenueControllerTest {
                         .content(objectMapper.writeValueAsString(emptyLayoutRequest(7L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.layoutVersion").value(8));
+    }
+
+    @Test
+    void shouldSaveLayoutWithShapeMetadataForAdmin() throws Exception {
+        UUID venueId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        SectionLayoutResponse sectionResponse = new SectionLayoutResponse(
+                sectionId, "Orchestra", 5, 10, List.of(), true,
+                BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("100"), new BigDecimal("50"),
+                BigDecimal.ZERO, 0, objectMapper.readTree("{\"color\": \"#6366f1\", \"seatColors\": {\"A_1\": \"#059669\"}}"));
+        VenueSeatMapLayoutResponse savedResponse = new VenueSeatMapLayoutResponse(
+                venueId, "Hall", 100, 0L, List.of(sectionResponse), 9L, List.of());
+        when(layoutService.saveLayout(eq(venueId), any(SaveVenueLayoutRequest.class)))
+                .thenReturn(savedResponse);
+
+        String requestBody = """
+                {
+                  "layoutVersion": 8,
+                  "sections": [
+                    {
+                      "sectionId": null,
+                      "name": "Orchestra",
+                      "rowCount": 5,
+                      "colCount": 10,
+                      "isActive": true,
+                      "positionX": 0,
+                      "positionY": 0,
+                      "width": 100,
+                      "height": 50,
+                      "rotationDeg": 0,
+                      "zIndex": 0,
+                      "shapeMetadata": {
+                        "color": "#6366f1",
+                        "seatColors": {
+                          "A_1": "#059669"
+                        }
+                      },
+                      "seats": []
+                    }
+                  ],
+                  "elements": []
+                }
+                """;
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                                "/api/admin/venues/{venueId}/layout", venueId)
+                        .with(user("admin").roles(SecurityRoles.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.layoutVersion").value(9))
+                .andExpect(jsonPath("$.sections[0].shapeMetadata.color").value("#6366f1"))
+                .andExpect(jsonPath("$.sections[0].shapeMetadata.seatColors.A_1").value("#059669"));
     }
 
     @Test

@@ -173,7 +173,7 @@ public class VenueLayoutServiceImpl implements VenueLayoutService {
                         .height(upsert.height())
                         .rotationDeg(upsert.rotationDeg())
                         .zIndex(upsert.zIndex())
-                        .shapeMetadata(upsert.shapeMetadata())
+                        .shapeMetadata(toJsonNode(upsert.shapeMetadata()))
                         .build();
                 created = sectionRepository.save(created);
                 newSections.add(created);
@@ -192,7 +192,7 @@ public class VenueLayoutServiceImpl implements VenueLayoutService {
                 existing.setHeight(upsert.height());
                 existing.setRotationDeg(upsert.rotationDeg());
                 existing.setZIndex(upsert.zIndex());
-                existing.setShapeMetadata(upsert.shapeMetadata());
+                existing.setShapeMetadata(toJsonNode(upsert.shapeMetadata()));
                 targetSectionByRequestId.put(upsert.sectionId(), existing);
                 allTargetSections.add(existing);
             }
@@ -463,6 +463,16 @@ public class VenueLayoutServiceImpl implements VenueLayoutService {
 
     private static BigDecimal decimal3(BigDecimal value) {
         return value == null ? null : value.setScale(3, RoundingMode.HALF_UP);
+    }
+
+    private JsonNode toJsonNode(Object shapeMetadata) {
+        if (shapeMetadata == null) {
+            return null;
+        }
+        if (shapeMetadata instanceof JsonNode jsonNode) {
+            return jsonNode;
+        }
+        return objectMapper.valueToTree(shapeMetadata);
     }
 
     private <T extends DomainEvent> void writeOutboxEvent(UUID aggregateId, String eventType, T eventPayload) {

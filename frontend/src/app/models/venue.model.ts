@@ -29,6 +29,13 @@ export interface VenueSectionSeat {
 
 export interface VenueSectionLayout {
   sectionId: string | null;
+  /**
+   * Stable client-side draft key used to target sections inside the versioned
+   * editor draft. Persisted sections use their `sectionId`; never-saved draft
+   * sections use a generated UUID. Never persisted to the backend and ignored
+   * by canonical dirty-checking/save serialization (see editor state service).
+   */
+  draftKey?: string | null;
   name: string;
   rowCount: number;
   colCount: number;
