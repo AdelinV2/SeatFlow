@@ -6,224 +6,227 @@
 
 ## 1. Goal
 
-Resolve compiler errors, test failures, runtime bugs, business-logic defects, review findings, concurrency races, integration failures, and regressions by identifying and correcting the **root cause** with the smallest safe change.
+Resolve compiler errors, failing tests, runtime defects, review findings, regressions, integration failures, races, and broken business behavior by identifying and correcting the **root cause with the smallest safe change**.
 
-A bug is not considered fixed until the failure is reproduced where practical, the root cause is understood, regression coverage exists when meaningful, and relevant verification passes.
+A bug is not fixed merely because the symptom disappears. Reproduce/validate where practical, understand the failing contract, add meaningful regression evidence, and rerun the relevant quality gates.
+
+Provider/model/effort selection is centralized in `.ai/MODEL_ROUTER.md`.
 
 ---
 
 ## 2. Core Rules
 
-1. **Reproduce before fixing whenever practical.** For a reported behavioral defect without an adequate test, write the smallest failing regression test first.
-2. **Fix the cause, not the symptom.** Do not add broad catches, null guards, retries, sleeps, or fallback behavior unless they are correct by contract.
-3. **Never delete or disable a failing test to make CI green.** Do not weaken assertions or replace meaningful integration behavior with mocks merely to hide the failure.
-4. **Minimal surgical edits.** Avoid unrelated refactors while debugging.
-5. **Preserve architecture and invariants.** A bug fix must not create a new contract, migration policy, consistency model, or security rule without planning/ADR review.
-6. **Use evidence.** Error traces, failing tests, SQL state, request/response data, logs, metrics, and code paths are stronger than guesses.
-7. **One hypothesis at a time.** Do not make many speculative edits and then infer which one fixed the problem.
-8. **Tests passing is necessary but not always sufficient.** Explicitly reason about concurrency, payments, security, idempotency, retries, migrations, and distributed consistency.
+1. Reproduce before fixing whenever practical.
+2. Fix root cause, not symptom.
+3. Never delete/disable/weaken a meaningful failing test to obtain green output.
+4. Keep edits surgical; avoid unrelated refactors.
+5. Preserve architecture, contracts, and invariants.
+6. Use evidence: traces, failing tests, SQL state, logs, requests/responses, events, metrics, and code paths.
+7. Test one concrete hypothesis at a time.
+8. Passing tests are necessary but may be insufficient for concurrency, payments, security, idempotency, migrations, retries, and distributed state.
+9. Preserve unrelated user working-tree changes.
 
 ---
 
-## 3. Issue Classification
+## 3. Classify the Failure
 
-Classify the failure before editing:
+Classify before editing:
 
-- Compilation / type / dependency error
-- Runtime exception
-- Validation / API contract error
-- Business invariant violation
-- Persistence / migration / transaction error
-- Concurrency / locking / race condition
-- Kafka / outbox / retry / ordering issue
-- Payment / Stripe / idempotency issue
-- Authentication / authorization / security issue
-- Frontend state / rendering / routing / request race
-- WebSocket / reconnect / stale-state issue
-- CI / Docker / environment / observability issue
-- Performance/resource issue with measurable impact
+- compile/type/dependency;
+- runtime exception;
+- validation/API contract;
+- business invariant;
+- persistence/migration/transaction;
+- concurrency/locking/race;
+- Kafka/outbox/retry/order;
+- payment/Stripe/idempotency;
+- authentication/authorization/security;
+- frontend state/render/routing/request race;
+- WebSocket/reconnect/stale state;
+- CI/Docker/environment/observability;
+- measurable performance/resource problem.
 
-Also classify **risk** as Low / Medium / High / Critical. Critical bugs involving money, security, double booking, corrupted state, destructive migrations, or distributed correctness require the stronger review path defined in `.ai/MODEL_ROUTER.md`.
+Also classify risk `Low | Medium | High | Critical` and verification strength.
+
+Critical money/security/double-booking/data-integrity/distributed-consistency failures require the stronger routing/review path from `.ai/MODEL_ROUTER.md`.
 
 ---
 
 ## 4. Root-Cause Sequence
 
 ```text
-1. Read the exact failure report, review finding, stack trace, or failing test.
-2. Read the relevant task, ADRs, architecture docs, and AGENTS rules.
-3. Identify the expected contract/invariant.
-4. Trace the failing path from input/event/state to the observed failure.
-5. Reproduce with the narrowest deterministic test or command available.
-6. Confirm the regression test fails for the expected reason.
-7. Form a concrete root-cause hypothesis.
-8. Inspect adjacent call sites/state transitions/DB constraints as needed to validate the hypothesis.
-9. Apply the smallest correct fix.
-10. Run the regression test.
-11. Run relevant neighboring/module/integration tests.
-12. Review the diff for new failure modes and unintended scope.
+1. Read the exact failure/review finding and expected contract.
+2. Read relevant task, ADRs, architecture, AGENTS rules.
+3. Trace the failing path from input/event/state to observed result.
+4. Reproduce with the narrowest deterministic test/command when practical.
+5. Confirm the reproduction fails for the expected reason.
+6. Form one concrete root-cause hypothesis.
+7. Inspect adjacent call sites/state/DB constraints/contracts to validate it.
+8. Apply the smallest correct fix.
+9. Run the regression test.
+10. Run affected neighboring/module/integration checks.
+11. Inspect the complete diff for new failure modes/unintended scope.
 ```
 
-If reproduction is impossible because the issue depends on production-only timing or infrastructure, document the evidence and create the strongest deterministic approximation available. Do not fabricate certainty.
+If a production-only timing/infrastructure issue cannot be reproduced exactly, document the evidence and create the strongest deterministic approximation available. Never fabricate certainty.
 
 ---
 
-## 5. Review Findings Workflow
+## 5. Review Findings Ledger
 
-When the issue comes from `.ai/workflows/05-code-review.md`, the reviewer may create a temporary local file:
+When the issue comes from `.ai/workflows/05-code-review.md`, use:
 
 `.ai/tmp/review-<task-or-branch>.md`
 
-That file is the working ledger for the repair pass.
-
 For every accepted finding:
 
-1. Change status from `OPEN` to `IN_PROGRESS` before working on it.
-2. Reproduce or otherwise validate the finding.
-3. Apply the targeted fix.
-4. Add or strengthen a regression test when the defect can recur and a meaningful automated oracle exists.
-5. Record the verification command/evidence.
-6. Mark the finding `RESOLVED` only after verification passes.
-7. If a finding is invalid, mark `REJECTED_WITH_REASON` and explain concretely why; do not silently ignore it.
+1. set `OPEN -> IN_PROGRESS` before work;
+2. validate/reproduce the finding;
+3. apply the targeted root-cause fix;
+4. add/strengthen regression coverage when meaningful;
+5. record exact verification evidence;
+6. set `RESOLVED` only after verification passes;
+7. if invalid, set `REJECTED_WITH_REASON` with concrete evidence rather than silently ignoring it.
 
-After all findings are `RESOLVED` or legitimately `REJECTED_WITH_REASON`:
-
-- rerun the required task verification and affected regression checks;
-- request re-review for substantive/high-risk fixes;
-- ensure no new accepted findings remain;
-- **delete the temporary `.ai/tmp/review-*.md` file only after the repair/re-review cycle is complete.**
-
-The temporary file itself must contain a prominent note that it must be deleted after all accepted findings are resolved. It must never be committed.
+Delete the temporary ledger only after all accepted findings are resolved, required re-review is complete, and verification passes. Never commit it.
 
 ---
 
-## 6. Debugging Heuristics by Failure Type
+## 6. Routing Semantics
+
+The workflow does not select a model itself. Resolve through `.ai/MODEL_ROUTER.md`.
+
+Operational intent:
+
+- **clear/localized/reproducible fix** -> Muse route first (`Free -> Go`) with effort proportional to scope;
+- **tool/browser-heavy frontend bug** -> Gemini High is often the best route;
+- **difficult/ambiguous backend root cause** -> Terra High, Fast OFF;
+- **critical concurrency/payment/security/data-integrity bug** -> Sol High critical reasoning/review path, Fast OFF.
+
+### Quality failure is not availability failure
+
+If Muse Free produces a buggy fix, do **not** switch to Muse Go merely because the paid route exists. Free -> Go is an availability fallback. For quality failures, follow diagnosis/escalation rules.
+
+### Escalation trigger
+
+After one meaningful repair attempt fails and the root cause remains unclear, escalate **diagnosis**, not blindly implementation:
+
+`Muse/Gemini repair failed -> Terra High root-cause analysis -> targeted repair`
+
+Use stronger Sol escalation only when the risk is critical or Terra leaves severe unresolved ambiguity.
+
+---
+
+## 7. Failure-Type Heuristics
 
 ### Concurrency / Double Booking
 
-Check transaction boundaries, DB uniqueness, locking mode/order, isolation assumptions, stale reads, retry behavior, and whether the invariant is enforced atomically in PostgreSQL. Reproduce with concurrent actors, not sequential mocks.
+Inspect transaction boundaries, uniqueness, locking mode/order, isolation assumptions, stale reads, retries, and whether PostgreSQL atomically enforces the invariant. Reproduce with truly overlapping actors, not sequential mocks.
 
 ### Idempotency / Payments
 
-Check key scope, uniqueness, replay behavior, state transitions, webhook ordering, duplicate delivery, partial failure between external provider and DB state, and refund/payment terminal states. Never "fix" duplicate processing by swallowing exceptions blindly.
+Inspect key scope/uniqueness, replays, state transitions, webhook order, duplicate delivery, partial external-call/DB failure windows, and terminal states. Do not hide duplicate processing with broad catches.
 
 ### Kafka / Outbox
 
-Check transaction ownership, outbox persistence, event IDs, consumer idempotency, duplicate delivery, ordering assumptions, retry/DLQ behavior, and whether side effects can execute more than once.
+Inspect transaction ownership, outbox persistence, event IDs, consumer idempotency, duplicates/order, retry/DLQ behavior, and exactly-once assumptions.
 
 ### Database / Flyway
 
-Check current schema, migration order, nullability/defaults, constraints/indexes, backward compatibility, data backfill assumptions, and whether entity mappings match DDL exactly.
+Inspect actual schema/migration order, nullability/defaults, constraints/indexes, backfill assumptions, entity/DDL alignment, and compatibility.
 
 ### Frontend State
 
-Check request races, stale signals/computed state, optimistic updates, server reconciliation, loading/error/empty states, route lifecycle, WebSocket reconnect behavior, duplicated subscriptions/requests, and cleanup of resources.
+Inspect request races, stale Signals/computed state, optimistic updates, rollback/reconciliation, loading/error/empty states, reconnects, duplicated subscriptions/requests, and cleanup.
 
 ### Security
 
-Check authentication, role/ownership authorization, IDOR paths, input validation, token/secret exposure, sensitive logging, CSRF/CORS assumptions where relevant, and trust boundaries between frontend and backend.
+Inspect authentication, roles, ownership/IDOR, validation, secrets/logging, trust boundaries, webhook verification, and alternate-path privilege escalation.
 
 ---
 
-## 7. Anti-Patterns
+## 8. Anti-Patterns
 
 Do not:
 
-- add arbitrary retry loops or `sleep()` to hide races;
-- catch `Exception` and continue without a defined recovery contract;
-- return success when the operation actually failed;
+- add arbitrary sleeps/retry loops to hide races;
+- catch broad exceptions and return success without a recovery contract;
 - remove DB constraints because application code conflicts with them;
-- make tests less strict to accommodate wrong behavior;
-- duplicate shared abstractions instead of using `backend/common/`;
-- rewrite a whole class because one branch is wrong;
-- mix speculative cleanup into a targeted bug fix;
-- assume a flaky test is "just flaky" without investigating the failure mode.
+- weaken tests to fit incorrect behavior;
+- duplicate shared abstractions;
+- rewrite a whole subsystem for a localized defect;
+- mix speculative cleanup into a targeted repair;
+- dismiss a flaky test without investigating its failure mode.
 
 ---
 
-## 8. Completion Criteria
+## 9. Verification
 
-A bug/review finding is complete only when:
+For each fix:
 
-- the expected contract is explicit;
-- root cause is identified with evidence;
-- the fix is minimal and architecture-compliant;
+1. narrow reproduction/regression test;
+2. targeted task verification;
+3. affected module/service tests;
+4. integration/concurrency/browser checks justified by the defect;
+5. complete diff inspection;
+6. review-ledger evidence update when applicable.
+
+For P0/P1/critical fixes, passing the narrow test is never the final gate.
+
+---
+
+## 10. Next Stage
+
+### If P0/P1 or critical/high-risk behavior was fixed
+
+Route to `.ai/workflows/05-code-review.md` for mandatory independent re-review.
+
+### If localized P2/P3 work is resolved with strong verification
+
+Use targeted re-review when required by the review protocol, then proceed to `.ai/workflows/04-testing-and-qa.md`.
+
+### If the repair is blocked/not converging
+
+Return to supervisor/planning/diagnosis rather than looping indefinitely.
+
+---
+
+## 11. Orchestrated Handoff
+
+When delegation is available, the fixer returns structured state to the supervisor:
+
+```text
+STAGE: FIX
+TASK: ...
+PROVIDER/MODEL/EFFORT: ...
+FAST MODE: ...
+FINDINGS ADDRESSED: ...
+ROOT CAUSE: ...
+FILES TOUCHED: ...
+REGRESSION TESTS: ...
+VERIFICATION: ...
+LEDGER STATUS: ...
+RE-REVIEW REQUIRED: yes/no + reason
+UNRESOLVED RISKS: ...
+```
+
+The supervisor launches re-review/QA directly.
+
+### Manual fallback
+
+If delegation is unavailable, provide a Next Stage Handoff with the exact workflow, router-derived model route, branch/task/ledger path, and a ready-to-run prompt.
+
+---
+
+## 12. Completion Criteria for a Repair Pass
+
+A repair pass is complete only when:
+
+- expected contract is explicit;
+- root cause is supported by evidence;
+- fix is minimal and architecture-compliant;
 - regression coverage exists when meaningful;
-- targeted verification passes;
-- affected broader checks pass;
-- the final diff does not introduce unrelated changes;
-- substantive/high-risk review findings have been re-reviewed;
-- any temporary `.ai/tmp/review-*.md` ledger has been deleted after all findings are resolved.
-
----
-
-## 9. Next Stage Handoff
-
-Once fixes are applied and self-verified, determine the appropriate next stage:
-
-### 9.1 Branch A: If P0/P1 Findings or Critical Invariants Were Addressed
-
-Mandatory re-review is required before QA. Hand off to **Workflow 05: Code Review** (`.ai/workflows/05-code-review.md`) Section 8.
-
-#### AI Model & Reasoning Effort Selection
-
-Consult `.ai/MODEL_ROUTER.md`:
-
-| Scope of Fixed Defects | Recommended Route | Alternative Route | Escalation / High Risk |
-|---|---|---|---|
-| **Substantive Defect Re-Review** | **GPT-5.6 Terra High** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra xHigh** |
-| **Critical Invariant Re-Review** (Holds, Double Booking, Payments, Security) | **GPT-5.6 Sol High** | **GPT-5.6 Terra xHigh** | **GPT-5.6 Sol xHigh** (if ambiguity remains) |
-
-#### Prompt Template for Re-Review
-
-Copy and paste the following prompt:
-
-```markdown
-You are the Independent Code Reviewer for SeatFlow performing a Re-Review.
-Task: [TASK-P<XX>-<YYY>: <Task Title>]
-Branch: `feat/p<XX>-<YYY>-<task-desc>`
-Review findings ledger: `.ai/tmp/review-p<XX>-<YYY>.md`
-
-Instructions:
-1. Follow `.ai/workflows/05-code-review.md` Section 8 (Re-Review Rules).
-2. Inspect the fixes applied for findings marked `RESOLVED`:
-   - Verify that each reported root cause is genuinely fixed.
-   - Verify that the fix did not introduce new defects or regressions nearby.
-   - Inspect the automated regression tests added during the repair pass.
-3. If any finding remains unresolved or new issues emerge, update `.ai/tmp/review-p<XX>-<YYY>.md`.
-4. Conclude with a clear re-review verdict: `APPROVE` or `CHANGES REQUIRED`.
-```
-
----
-
-### 9.2 Branch B: If All Findings Are Resolved, Verified & Ledger Is Deleted
-
-When all findings are resolved, re-review (if required) is complete, and `.ai/tmp/review-*.md` has been deleted, hand off to **Workflow 04: Testing, QA & Final Quality Gate** (`.ai/workflows/04-testing-and-qa.md`).
-
-#### AI Model & Reasoning Effort Selection
-
-| Quality Gate | Recommended Route | Alternative Route | Escalation |
-|---|---|---|---|
-| **Final QA Gate** | **Gemini 3.8 Flash High** | **GPT-5.6 Terra High** | **Muse Spark 1.3 xHigh** |
-
-#### Prompt Template for Final QA
-
-Copy and paste the following prompt:
-
-```markdown
-You are the QA / Test Engineer for SeatFlow.
-Execute the final quality gate for task: [TASK-P<XX>-<YYY>: <Task Title>]
-Branch: `feat/p<XX>-<YYY>-<task-desc>`
-Task specification: `.ai/tasks/phase-<XX>-<service-name>/<YYY>-<task-desc>.md`
-
-Instructions:
-1. Follow `.ai/workflows/04-testing-and-qa.md`.
-2. Confirm that `.ai/tmp/` contains no active review ledger.
-3. Run the full verification suite:
-   - Task verification command: `<verification-command>`
-   - Module test suite: `<mvn test / npm test>`
-   - Build / typecheck / lint
-   - Concurrency and integration tests where applicable.
-4. Verify diff hygiene: no stray debug logs, commented code, or credentials.
-5. Provide final decision: `PASS`, `PASS WITH NON-BLOCKING NOTES`, or `FAIL`.
-```
+- targeted and broader required verification passes;
+- unrelated user changes are preserved;
+- required re-review is completed or ready to begin;
+- temporary ledger lifecycle is respected.
