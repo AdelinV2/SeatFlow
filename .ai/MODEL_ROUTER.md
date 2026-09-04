@@ -2,450 +2,564 @@
 
 ## Purpose
 
-Use this file to choose the best AI model and reasoning effort for a SeatFlow software-development task.
+This file is the **single source of truth for AI provider, model, reasoning-effort, fallback, and escalation selection in SeatFlow**.
 
-Optimize for **code quality and successful task completion per unit of usage, latency, context, retry effort, and failure risk**. Do not select the strongest model by default. SeatFlow deliberately separates planning, implementation, review, bug fixing, and verification so each stage can use the model that best fits that stage.
+Optimize for:
 
-The execution behavior of each stage is defined in `.ai/workflows/`; model routing does not replace those protocols.
+1. correctness and escaped-defect risk;
+2. implementation success per unit of quota/cost;
+3. independence between implementation and review;
+4. harness/tool fit;
+5. deterministic verification strength;
+6. latency only after the above are acceptable.
 
-Current preferred subscriptions/providers:
+Do **not** choose the strongest or most expensive model by default. SeatFlow deliberately separates planning, implementation, review, fixing, and QA so premium reasoning is spent where it changes expected correctness rather than on every line of code.
 
-- **Codex Plus:** GPT-5.6 Luna / Terra / Sol
-- **Antigravity Pro:** Gemini 3.8 Flash Medium / High; Gemini 3.1 Pro High; Claude Sonnet 4.6 Thinking; Claude Opus 4.6 Thinking
-- **OpenCode Go:** Muse Spark 1.3 Contributor, Hy4 preview, GLM-5.3 and other secondary models
-
-If a named effort/variant is unavailable in the current harness, use the nearest supported configuration. OpenCode variants are model-specific; never invent a variant name that is not present in the current catalog.
-
----
-
-## 1. Classify the Task First
-
-Estimate:
-
-- **Complexity:** 1-5
-- **Failure risk:** Low / Medium / High / Critical
-- **Context:** Small (<20K), Medium (20-100K), Large (100-300K), Very Large (300K+)
-- **Agentic demand:** Low / Medium / High
-- **Verification strength:** Strong / Partial / Weak
-- **Dominant requirement:** speed, deterministic implementation, frontend/visual quality, architecture, debugging, review, long-context, or critical correctness
-
-Do **not** increase reasoning effort merely because a task is long. Increase it when ambiguity, hidden correctness risk, cross-service reasoning, or expensive failure justifies the extra compute.
-
-### Recommendation vocabulary
-
-- **Recommended** = best default route for the task as currently understood.
-- **Alternative** = a peer route that is still a good choice when quota, provider availability, privacy, harness behavior, latency, or model-family diversity makes the recommendation inconvenient. An alternative is **not** necessarily stronger.
-- **Escalate to** = a stronger/more expensive route used only after a concrete trigger such as unresolved ambiguity, a failed meaningful repair loop, weak verification, or critical risk.
-
-Always provide an **Alternative** when recommending a model.
+Workflow behavior lives in `.ai/workflows/`. Autonomous sequencing lives in `.ai/ORCHESTRATOR.md`. Poracode-specific execution details live in `.ai/integrations/PORACODE.md`.
 
 ---
 
-## 2. Primary SeatFlow Model Roles
+## 1. Active Harnesses and Preferred Model Families
 
-### Muse Spark 1.3 Contributor — Default Implementation Worker
+### Codex Plus
 
-Muse Spark 1.3 is the default model for the majority of **substantive, well-specified, test-verifiable implementation work**, including Java/Spring backend work.
+Primary roles: independent backend judgment, difficult debugging, substantive review, critical correctness.
 
-**Substantive implementation default:** `xHigh` when exposed by the current OpenCode catalog.  
-**Small/mechanical implementation:** `High` when exposed.  
-If these names are unavailable, use the strongest practical non-Max variant exposed by the provider for substantive work.
+- GPT-5.6 Luna
+- GPT-5.6 Terra
+- GPT-5.6 Sol
+
+**Global Codex rule:** standard speed only. `Fast mode = OFF` unless the user explicitly requests Fast for that run.
+
+### Antigravity Pro
+
+Primary roles: supervisor/coordinator, routine planning, frontend/browser/visual work, fast independent analysis, normal final QA.
+
+- Gemini 3.8 Flash Medium
+- Gemini 3.8 Flash High
+- Gemini 3.1 Pro High
+- Claude Sonnet 4.6 Thinking
+- Claude Opus 4.6 Thinking
+
+Gemini 3.8 Flash is the preferred Antigravity family for SeatFlow because speed, large context, tool/browser fit, and coding capability make it efficient for orchestration and frontend-heavy work.
+
+### OpenCode Zen / OpenCode Go
+
+Primary role: high-volume implementation, repair, tests, deterministic refactors, terminal-heavy execution.
+
+Preferred logical route:
+
+`MUSE_1_3 = Muse Spark 1.3 Free -> Muse Spark 1.3 Contributor (Go) -> task alternative`
+
+Current exact selections:
+
+- Free: `opencode/muse-spark-1.3-contributor-free`
+- Go: `opencode-go/muse-spark-1.3-contributor`
+
+Other secondary OpenCode Go models may be used only when the route below explicitly calls for them or when the preferred model is unavailable/unsuitable.
+
+---
+
+## 2. Classify Before Routing
+
+For each stage estimate:
+
+- **Complexity:** `1-5`
+- **Failure risk:** `Low | Medium | High | Critical`
+- **Context:** `Small (<20K) | Medium (20-100K) | Large (100-300K) | Very Large (300K+)`
+- **Agentic demand:** `Low | Medium | High`
+- **Verification strength:** `Strong | Partial | Weak`
+- **Dominant requirement:** one or more of:
+  - deterministic implementation
+  - architecture/design judgment
+  - backend transaction/concurrency reasoning
+  - frontend/browser/visual work
+  - difficult debugging
+  - independent review
+  - critical correctness
+  - large-context exploration
+  - low-risk utility/documentation
+
+Do not raise effort simply because a task is long. Raise effort when ambiguity, hidden failure risk, cross-service reasoning, weak verification, or expensive failure justifies it.
+
+---
+
+## 3. Recommendation Vocabulary
+
+### Recommended
+
+Best default route for the current stage.
+
+### Alternative
+
+A peer route usable immediately when quota, provider availability, privacy, harness behavior, latency, or model-family diversity makes the recommendation inconvenient.
+
+An Alternative is **not** automatically stronger.
+
+### Fallback
+
+A route used because the preferred provider/model is unavailable or disallowed, not because its previous output was wrong.
+
+### Escalation
+
+A stronger/more expensive reasoning route justified by a concrete quality/risk trigger such as:
+
+- unresolved ambiguity;
+- meaningful repair loop failed;
+- verification is weak/inconclusive;
+- task risk changed materially;
+- P0/P1 finding remains unresolved;
+- hidden-failure cost is critical.
+
+Never confuse availability fallback with quality escalation.
+
+---
+
+## 4. Mandatory Muse Spark 1.3 Resolver
+
+Whenever a table or workflow below says `Muse 1.3 High` or `Muse 1.3 xHigh`, resolve the **provider route first**:
+
+```text
+1. OpenCode / Muse Spark 1.3 Contributor Free
+   model: opencode/muse-spark-1.3-contributor-free
+
+      if unavailable / rate-limited / disabled / privacy-prohibited
+                         |
+                         v
+2. OpenCode Go / Muse Spark 1.3 Contributor
+   model: opencode-go/muse-spark-1.3-contributor
+
+      if unavailable / region-restricted / privacy-prohibited
+                         |
+                         v
+3. Use the task-specific Alternative from this router
+```
+
+### 4.1 Free-first invariant
+
+If Muse is selected for the stage and the Free route is available, **use Free first**.
+
+Do not consume OpenCode Go Muse allowance while the Free route is healthy unless:
+
+- user explicitly asks for Go Contributor;
+- Free is unavailable/rate-limited/provider-blocked;
+- a current provider limitation makes the Go route materially more reliable;
+- privacy policy prohibits the route and the Go route is independently verified to satisfy that policy.
+
+### 4.2 Free -> Go is not escalation
+
+Switching from Free Muse 1.3 to Go Muse 1.3 is an **availability fallback**, not a quality escalation.
+
+A buggy result, failed test, or reviewer finding does not by itself justify Free -> Go. Follow the normal repair/debugging route.
+
+### 4.3 Muse effort
+
+When exposed by the selected OpenCode catalog:
+
+- `High` — small/mechanical implementation, narrow fixes, routine migrations from a fixed spec
+- `xHigh` — default substantive implementation, multi-file tasks, serious fixes, repo exploration/edit/test loops, larger refactors
+
+Do not invent an effort/variant not exposed by the provider. If `xHigh` is absent, use the strongest practical non-Max effort and report the actual selection.
+
+---
+
+## 5. Primary Role Policy
+
+### 5.1 Supervisor / Orchestration
+
+**Recommended:** `Gemini 3.8 Flash Medium` through Antigravity for pure coordination.
+
+Use `Gemini 3.8 Flash High` when the supervisor itself must perform meaningful repository analysis, resolve stage ambiguity, or coordinate a large cross-service task.
+
+Do not use Terra/Sol merely to keep track of stages.
+
+### 5.2 Routine Planning
+
+**Recommended:** `Gemini 3.8 Flash High`.
 
 Best for:
 
-- implementing complete SeatFlow task files
-- Java 21 / Spring Boot service implementation
-- repositories, DTOs, mappers, controllers and service layers
-- Flyway migrations from an already-defined schema
-- Kafka/outbox implementation from an already-defined contract
-- unit, slice, integration and concurrency tests
-- Angular/TypeScript implementation when Gemini is unavailable or quota-constrained
-- deterministic refactors
-- reproducible bug fixes
-- Docker / CI / routine observability
-- large cross-file implementation
-- autonomous repo exploration and edit/test/fix loops
+- turning an already-known architecture into an implementation sequence;
+- broad repo exploration;
+- frontend planning;
+- large-context task decomposition;
+- quick plan validation before Muse execution.
 
-### Java/Spring routing rule
+**Alternative:** `GPT-5.6 Terra High`.
 
-**Java or Spring by itself is NOT a reason to route implementation away from Muse.**
+### 5.3 Backend Architecture / ADR / Subtle Design Judgment
 
-The published Muse Spark 1.3 DeepSWE methodology does not contain Java, so there is no apples-to-apples public Java benchmark versus GPT-5.6. That is an evidence limitation, not evidence that Muse is weak at Java. SeatFlow should therefore use Muse for Java implementation when the architecture and invariants are already specified and verification is reasonably strong.
-
-For subtle transaction semantics, concurrency, payments, security, distributed consistency, or irreversible data changes, use Terra/Sol for the **decision/review layer**. The implementation may still be Muse xHigh when the task is explicit and testable.
-
-**Privacy rule:** Muse Spark 1.3 Contributor may use prompts/completions for model training and is not ZDR. Never send secrets, credentials, private production data, customer data, or proprietary/sensitive material through the Contributor route. Public SeatFlow source code is acceptable; secrets are not.
-
----
-
-### Gemini 3.8 Flash High — Frontend Default / Fast Frontier Alternative
-
-Gemini 3.8 Flash High is the default for frontend, browser-heavy and visual work, and is the strongest general alternative to Muse for implementation when speed, Antigravity tooling, privacy/provider constraints, or model-family diversity matter.
-
-**Serious work:** `Gemini 3.8 Flash High`  
-**Simple/low-risk work:** `Gemini 3.8 Flash Medium`
-
-Best for:
-
-- Angular / TypeScript / Tailwind implementation
-- screenshot/mock-driven UI work
-- responsive layout and visual iteration
-- browser-heavy debugging
-- frontend state/UI exploration
-- autonomous tool loops
-- large-context repo exploration
-- fast independent implementation attempts
-- backend implementation when Muse is unavailable or undesirable and the task is strongly test-verifiable
-
-Use High for substantive work. Use Medium for simple components, styling tweaks, extraction, quick exploration, or bounded low-risk changes.
-
-Gemini is also a valuable independent second model for review/debugging because correlated mistakes are less likely when the implementer used Muse or GPT-5.6.
-
----
-
-### GPT-5.6 Terra — Default Planner / Reviewer / Difficult Debugger
-
-Terra is the normal SeatFlow authority for **planning, substantive review, difficult root-cause debugging, architecture judgment, and subtle backend reasoning**. It is not the default implementation model merely because the code is Java.
-
-**Small review / bounded judgment:** `Terra Medium`  
-**Default planning / review / difficult debugging:** `Terra High`  
-**Unusually difficult multi-service diagnosis / ADR:** `Terra xHigh`
-
-Best for:
-
-- feature/task planning
-- ADRs
-- backend architecture
-- Spring/JPA transaction reasoning
-- Kafka/outbox reasoning
-- API design
-- difficult debugging
-- code review
-- migration design/review
-- cross-service root-cause analysis
-- interpreting flaky or incomplete verification
-
-For the project's “very good code quality” target, `Terra High` is the normal final reviewer for non-critical substantive backend changes. Use `Terra Medium` only for small/mechanical reviews.
-
-Do not route a complete deterministic Java task to Terra High for implementation when Muse xHigh can execute it and Terra can be preserved for the higher-value planning/review layer.
-
----
-
-### GPT-5.6 Sol — Critical Correctness Authority
-
-Sol is **not** the normal implementation default. Use it when hidden mistakes can materially affect money, security, data integrity, reservation correctness, or production safety.
-
-**Critical default:** `Sol High`  
-**Severe / unresolved critical issue:** `Sol xHigh`  
-**Final exceptional escalation:** `Sol Max`
+**Recommended:** `GPT-5.6 Terra High`, Fast OFF.
 
 Use for:
 
-- zero-double-booking and reservation locking
-- 15-minute hold semantics under concurrency
-- Stripe / payment / refund / idempotency state machines
-- authentication / authorization / security-sensitive changes
-- distributed consistency / ordering / race conditions
-- dangerous migrations with data-integrity risk
-- critical production incidents
-- final review of the above areas
+- JPA transaction/locking semantics;
+- API/data model design with trade-offs;
+- Kafka/outbox semantics;
+- cross-service contract design;
+- migration strategy;
+- difficult architecture contradictions.
 
-Preferred critical workflow:
+**Alternative:** `Gemini 3.8 Flash High`.
 
-`Sol High risk/architecture analysis -> explicit task spec -> Muse 1.3 xHigh implementation -> exhaustive tests -> Sol High final review`
+**Escalate:** `Terra xHigh` only for unusually difficult unresolved architecture; `Sol High` when the design directly controls critical money/security/data-integrity/concurrency invariants.
 
-Use Terra High as the implementation alternative when the task still requires substantial design judgment while coding.
+### 5.4 Deterministic Backend / General Implementation
+
+**Recommended:** `Muse 1.3 xHigh` using the mandatory Free -> Go resolver.
+
+Java/Spring alone is **not** a reason to route away from Muse.
+
+Use Muse for:
+
+- complete well-specified task implementation;
+- Java 21 / Spring Boot services;
+- DTOs, mappers, repositories, controllers, services;
+- Flyway migrations from approved DDL/contracts;
+- Kafka/outbox code from an approved contract;
+- unit/integration/concurrency test implementation;
+- Docker/CI/observability work;
+- deterministic refactoring;
+- large multi-file edit/test/fix loops.
+
+**Alternative:** `Gemini 3.8 Flash High`.
+
+Use Terra/Sol primarily as decision/review layers, not bulk code writers, unless implementation still contains unresolved design judgment.
+
+### 5.5 Frontend / Browser / Visual Implementation
+
+**Recommended:** `Gemini 3.8 Flash High` through Antigravity.
+
+Best for:
+
+- Angular / TypeScript / Tailwind;
+- screenshot/mock-driven work;
+- responsive interaction;
+- browser-heavy debugging;
+- frontend signals/state/UI exploration;
+- visual iteration.
+
+**Alternative:** `Muse 1.3 xHigh` via the Free -> Go resolver.
+
+### 5.6 Clear Localized Bug Fix
+
+**Recommended:** `Muse 1.3 High` or `xHigh` according to scope, Free -> Go resolver.
+
+Require reproduction/regression evidence when practical.
+
+**Alternative:** `Gemini 3.8 Flash High`.
+
+After one meaningful failed repair where root cause remains unclear, **escalate diagnosis** to Terra High rather than blindly repeating Muse.
+
+### 5.7 Difficult Root-Cause Debugging
+
+**Recommended:** `GPT-5.6 Terra High`, Fast OFF.
+
+Best for ambiguous backend failures, transaction semantics, cross-service root cause, and interpreting weak/flaky evidence.
+
+**Alternative:** `Gemini 3.8 Flash High`, especially when tool/browser/repo exploration dominates.
+
+**Escalate:** `Terra xHigh` or `Sol High` only if the remaining ambiguity is unusually difficult or becomes critical-risk.
+
+### 5.8 Independent Review
+
+**Small/mechanical review:** `GPT-5.6 Terra Medium`, Fast OFF.
+
+**Substantive review:** `GPT-5.6 Terra High`, Fast OFF.
+
+**Critical money/security/concurrency/data-integrity review:** `GPT-5.6 Sol High`, Fast OFF.
+
+**Alternative normal reviewer:** `Gemini 3.8 Flash High` when Codex quota is constrained or independent model-family diversity is desirable.
+
+Reviewer independence matters more than using the most expensive model twice.
+
+### 5.9 Critical Correctness Authority
+
+Use `GPT-5.6 Sol High`, Fast OFF when hidden mistakes can plausibly cause:
+
+- double booking;
+- incorrect 15-minute hold semantics under concurrency;
+- money loss or broken payment/refund state;
+- broken idempotency;
+- authorization/security exposure;
+- corrupted persistent state;
+- distributed ordering/consistency violations;
+- unsafe destructive migrations.
+
+Use `Sol xHigh` only after `Sol High` leaves material unresolved ambiguity or the incident is genuinely severe.
+
+`Sol Max` is an exceptional final escalation, not a routine stage.
+
+### 5.10 Utility / Documentation / Status
+
+Prefer `Gemini 3.8 Flash Medium` for routine repository status, documentation drafting, extraction, and simple coordination because it preserves Codex quota.
+
+Use `GPT-5.6 Luna Low/Medium`, Fast OFF when Codex-specific context/tooling is useful.
+
+`Luna High` is a bounded fallback for small coding/judgment tasks, not the normal reviewer for substantive SeatFlow changes.
+
+Do not use Luna Max or Luna High Fast as a default workaround for difficult reasoning. Move to Terra instead.
 
 ---
 
-### GPT-5.6 Luna — Utility / Small Low-Risk Worker
+## 6. Routing Table
 
-Use for:
-
-- documentation
-- extraction/status
-- boilerplate
-- tiny deterministic fixes
-- quick low-risk checks
-
-**Default:** `Luna Low/Medium`  
-**Bounded coding fallback:** `Luna High`
-
-Do not use Luna Max as a routine path. For hard reasoning, move to Terra High rather than trying to compensate with extreme effort.
-
----
-
-## 3. Secondary / Diversity Models
-
-### Hy4 preview
-
-Use as an OpenCode Go fallback when Muse behaves poorly on a long-horizon/tool-heavy task or when an independent open-model-family attempt is useful before spending premium quota.
-
-Good fit:
-
-- terminal-heavy implementation
-- large-context debugging
-- independent verification/repair attempt
-
-Known preview behavior includes overthinking/over-verification, so Hy4 is not the final authority for critical SeatFlow invariants.
-
-### GLM-5.3
-
-Credible terminal-heavy fallback. It is materially more expensive in OpenCode Go allowance than Muse and does not currently justify replacing Muse as the default implementation worker.
-
-### Gemini 3.1 Pro / Claude Sonnet 4.6 Thinking / Claude Opus 4.6 Thinking
-
-Use mainly for independent second opinions when model-family diversity is valuable. Do not add extra passes merely for ceremony.
-
----
-
-## 4. SeatFlow Routing Table
-
-| SeatFlow task | Recommended | Alternative | Review / escalation |
+| SeatFlow stage/task | Recommended | Alternative | Escalation / review |
 |---|---|---|---|
-| Documentation / extraction / status | Luna Low/Medium | Gemini 3.8 Medium | Terra High only if reasoning becomes non-trivial |
-| Create normal atomic task `.md` | Terra High | Gemini 3.8 High | Sol High if critical invariant/ADR |
-| Architecture / ADR | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
-| Tiny mechanical backend change | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium if review needed |
-| Normal substantive backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High after failed repair/ambiguity; Terra High review |
-| CRUD / DTO / mapper / repository / controller task | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review if substantive |
+| Supervisor only / stage coordination | Gemini 3.8 Medium | Luna Low/Medium | Gemini 3.8 High if supervisor must analyze deeply |
+| Routine task planning | Gemini 3.8 High | Terra High | Terra High/xHigh when backend design ambiguity dominates |
+| Create atomic task `.md` | Gemini 3.8 High | Terra High | Sol High if critical invariant/ADR decision |
+| Backend architecture / ADR | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
+| Tiny mechanical backend change | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium review only if meaningful risk |
+| Normal substantive backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review |
+| CRUD / DTO / mapper / repository / controller | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review when substantive |
 | Unit/integration/concurrency test implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High for weak oracle/test strategy |
 | Large cross-file backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review; Sol High if critical risk |
-| Complex Spring/JPA implementation from complete plan | Muse 1.3 xHigh | Terra High | Terra High review; Sol High for money/data-integrity/concurrency |
+| Complex Spring/JPA implementation from complete plan | Muse 1.3 xHigh | Terra High | Terra High review; Sol High critical review |
 | Kafka/outbox implementation from complete contract | Muse 1.3 xHigh | Terra High | Terra High review; Sol High if delivery/ordering invariant changes |
-| Autonomous repo-wide implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review |
-| Angular / TypeScript / Tailwind | Gemini 3.8 High | Muse 1.3 xHigh | Terra High for non-trivial architecture/state/contracts |
-| Simple frontend component/styling | Gemini 3.8 Medium | Muse 1.3 High | Gemini High if complexity grows |
-| Screenshot / visual UI implementation | Gemini 3.8 High | Muse 1.3 xHigh | Terra High only for contract/state risk |
-| Large-context repo exploration | Muse 1.3 xHigh | Gemini 3.8 High | Terra High when subtle backend conclusions matter |
-| Clear localized reproducible bug | Muse 1.3 High/xHigh | Gemini 3.8 High | Terra High after one meaningful failed repair |
-| Normal difficult root-cause debugging | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical risk appears |
-| Tool-heavy/browser-heavy debugging | Gemini 3.8 High | Muse 1.3 xHigh | Terra High for ambiguous root cause |
-| Cross-service root-cause debugging | Terra High/xHigh | Gemini 3.8 High | Sol High if critical invariant involved |
+| Angular / TypeScript / Tailwind | Gemini 3.8 High | Muse 1.3 xHigh | Terra High review for non-trivial state/contracts |
+| Simple frontend styling/component | Gemini 3.8 Medium | Muse 1.3 High | Gemini High if scope grows |
+| Screenshot/browser-heavy UI | Gemini 3.8 High | Muse 1.3 xHigh | Terra High only for contract/state risk |
+| Large-context repo exploration | Gemini 3.8 High | Muse 1.3 xHigh | Terra High when subtle backend conclusions matter |
+| Clear localized reproducible bug | Muse 1.3 High/xHigh | Gemini 3.8 High | Terra High diagnosis after failed meaningful repair |
+| Difficult backend root cause | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
+| Browser/tool-heavy debugging | Gemini 3.8 High | Muse 1.3 xHigh | Terra High if root cause ambiguous |
+| Cross-service root cause | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
 | Intermittent concurrency/distributed bug | Sol High | Terra xHigh | Sol xHigh if unresolved |
-| Routine small PR review | Terra Medium | Gemini 3.8 High | Terra High if meaningful findings appear |
-| Substantive PR review | Terra High | Gemini 3.8 High | Sol High if critical domain touched |
-| Security/payment/concurrency final review | Sol High | Terra xHigh | Sol xHigh if unresolved ambiguity remains |
-| Mechanical refactor | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium if behavior risk appears |
-| Large repo-wide refactor | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review |
-| Routine DB migration implementation from approved schema | Muse 1.3 High/xHigh | Terra High | Terra High review |
-| Dangerous production/data migration | Sol High for design/review + Muse xHigh execution | Terra xHigh for design/review | Sol xHigh if unresolved |
-| CI / Docker / Grafana / Loki / Prometheus | Muse 1.3 xHigh | Gemini 3.8 High | Terra High for hard root cause |
-| Hard production incident | Terra High | Gemini 3.8 High | Sol High/xHigh if money/security/data integrity affected |
+| Routine small review | Terra Medium | Gemini 3.8 High | Terra High if meaningful issue surface appears |
+| Substantive code review | Terra High | Gemini 3.8 High | Sol High for critical domain |
+| Security/payment/concurrency final review | Sol High | Terra xHigh | Sol xHigh if unresolved |
+| Mechanical refactor execution | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium review if behavior risk |
+| Large repo-wide refactor execution | Muse 1.3 xHigh | Gemini 3.8 High | Terra High planning/review |
+| Routine DB migration from approved schema | Muse 1.3 High/xHigh | Terra High | Terra High review |
+| Dangerous/destructive migration | Sol High design/review + Muse xHigh execution | Terra xHigh design/review | Sol xHigh if unresolved |
+| CI / Docker / observability | Muse 1.3 xHigh | Gemini 3.8 High | Terra High hard diagnosis |
+| Normal final QA | Gemini 3.8 High | Terra High | Terra High if hidden backend semantics dominate |
+| Critical final QA / hidden-invariant verification | Terra High + required deterministic tests | Gemini 3.8 High | Sol High final judgment when critical |
+| Documentation / extraction / status | Gemini 3.8 Medium | Luna Low/Medium | Terra only if reasoning becomes non-trivial |
+
+All Muse entries implicitly mean **Free first, then Go Contributor**.
+All Codex entries implicitly mean **Fast OFF** unless explicitly requested by the user.
 
 ---
 
-## 5. SeatFlow Risk Overrides
+## 7. Reviewer Independence Matrix
 
-Do not let the implementation worker become the final decision authority for:
+Default implementation -> review pairing:
 
-- zero double-booking
-- 15-minute reservation holds under concurrency
-- PostgreSQL source-of-truth semantics
-- transactional outbox / Kafka delivery guarantees
-- reservation/payment/refund idempotency
-- Stripe webhook/payment state transitions
-- authentication/authorization/security
-- distributed consistency and race conditions
-- irreversible/destructive migrations
+| Implementer | Preferred independent reviewer |
+|---|---|
+| OpenCode / Muse | Codex / Terra (Sol if critical) |
+| Antigravity / Gemini | Codex / Terra (Sol if critical) |
+| Codex / GPT | Antigravity / Gemini for normal risk; separate Codex critical authority only when risk requires it |
+
+Avoid same-model self-review for substantive work.
+
+A second reviewer is justified when:
+
+- critical invariant is involved;
+- first review found P0/P1;
+- verification is weak;
+- implementation changed materially during fixes;
+- model-family diversity addresses a realistic hidden-failure risk.
+
+Do not add extra passes merely to look rigorous.
+
+---
+
+## 8. Risk Overrides
+
+The implementation worker must not become the final decision authority for:
+
+- zero double-booking;
+- reservation hold concurrency/expiry;
+- PostgreSQL source-of-truth semantics;
+- transactional outbox / Kafka guarantees;
+- reservation/payment/refund idempotency;
+- Stripe state transitions/webhooks;
+- authentication/authorization/security;
+- distributed consistency/order/races;
+- destructive or hard-to-repair migrations.
 
 Rules:
 
-1. **Java/Spring alone is not a risk override.**
-2. `Terra High` is the normal minimum decision/review layer for subtle backend invariants.
-3. Use `Sol High` when failure can cause money loss, security exposure, corrupted state, double booking, or difficult-to-repair production damage.
-4. Use `Sol xHigh` only when High leaves unresolved ambiguity or the issue is genuinely severe.
-5. Sol is a **risk override**, not a blanket implementation setting.
+1. Java/Spring alone is not a risk override.
+2. Terra High is the normal decision/review floor for subtle non-critical backend invariants.
+3. Sol High is required when plausible failure can cause money/security/data-corruption/double-booking severity.
+4. Sol xHigh is reserved for unresolved severe ambiguity.
+5. Sol is a risk override, not a blanket implementation model.
 
 ---
 
-## 6. Verification-First Rule
+## 9. Verification-First Routing
 
-When compiler + tests + lint + integration/browser checks are strong:
+When compiler + meaningful tests + integration/browser checks provide a strong oracle:
 
-- favor Muse 1.3 xHigh for substantive implementation;
-- favor Gemini 3.8 High for frontend/visual/browser-heavy implementation;
-- preserve Terra/Sol for planning, review and ambiguous/critical reasoning.
+- favor Muse xHigh for substantive backend/general implementation;
+- favor Gemini 3.8 High for frontend/browser implementation;
+- preserve Terra/Sol for planning, diagnosis, review, and critical judgment.
 
 When correctness is weakly observable:
 
-- move the decision/review layer to Terra High;
-- use Sol High for critical hidden failure modes.
+- raise planning/review authority to Terra High;
+- use Sol High for critical hidden failure modes;
+- do not compensate for weak verification merely by increasing the implementation model's effort.
 
-For every non-trivial implementation:
+For every non-trivial change:
 
-1. run the task's deterministic verification command;
+1. run the task's deterministic verification;
 2. run relevant regression/integration checks;
-3. perform independent review using `.ai/workflows/05-code-review.md`;
-4. use `.ai/tmp/review-<task-or-branch>.md` for actionable findings;
-5. resolve findings through `.ai/workflows/03-bug-fixing.md`;
+3. perform independent review via `.ai/workflows/05-code-review.md`;
+4. create `.ai/tmp/review-<task-or-branch>.md` for actionable findings;
+5. repair through `.ai/workflows/03-bug-fixing.md`;
 6. re-review P0/P1 and other substantive/high-risk fixes;
-7. delete the temporary ledger only after accepted findings are resolved and verification/re-review completes;
-8. pass `.ai/workflows/04-testing-and-qa.md` before task completion.
-
-Passing tests are evidence, not proof, for concurrency, payments, security, migrations, and distributed semantics.
+7. remove the temporary ledger only after resolution/re-review;
+8. pass `.ai/workflows/04-testing-and-qa.md`.
 
 ---
 
-## 7. Standard Quality Workflows
+## 10. Standard Pipelines
 
 ### Normal backend task
 
-`Terra High task spec -> Muse 1.3 xHigh implementation -> tests -> Terra High review -> Muse xHigh fixes if needed -> final QA`
-
-**Alternative implementation:** `Gemini 3.8 High`.
+`Gemini High plan if needed -> Muse xHigh (Free -> Go) implement -> tests -> Terra High review (Fast OFF) -> Muse fixes -> re-review if needed -> Gemini High QA`
 
 ### Small mechanical backend task
 
-`Muse 1.3 High -> targeted tests -> Terra Medium review only if substantive`
-
-**Alternative:** `Gemini 3.8 Medium/High`.
+`Muse High (Free -> Go) -> targeted tests -> optional Terra Medium review -> QA proportional to risk`
 
 ### Large backend / cross-file task
 
-`Terra High task spec -> Muse 1.3 xHigh implementation -> full verification -> Terra High review -> fixes/re-review -> final QA`
+`Gemini High or Terra High plan -> Muse xHigh (Free -> Go) -> full verification -> Terra High review -> fixes/re-review -> Gemini High QA`
 
-**Alternative implementation:** `Gemini 3.8 High`.
+Use Terra for planning when backend architecture/transaction semantics, not mere size, is the dominant difficulty.
 
 ### Frontend feature
 
-`Terra High or Gemini High plan -> Gemini 3.8 High implementation -> browser/tests -> Terra High review when state/contracts are non-trivial -> final QA`
+`Gemini High plan/implementation -> browser/tests -> Terra High independent review when state/contracts are substantive -> Gemini High QA`
 
-**Alternative implementation:** `Muse 1.3 xHigh`.
+Alternative implementation: Muse xHigh (Free -> Go).
 
 ### Reproducible bug
 
-`Muse 1.3 High/xHigh reproduce + regression test + fix -> tests -> review when substantive/high-risk -> final QA`
+`Muse High/xHigh reproduce + regression test + fix -> verify -> review when substantive/high-risk`
 
-**Alternative:** `Gemini 3.8 High`.
-
-If one meaningful repair loop fails: `Terra High root-cause analysis -> targeted repair`.
+After one meaningful failed repair with unclear root cause: `Terra High diagnosis -> targeted repair`.
 
 ### Hard backend bug
 
-`Terra High root cause -> Muse xHigh targeted fix -> review -> final QA`
+`Terra High diagnosis -> Muse xHigh targeted fix -> Terra review -> QA`
 
-**Alternative diagnosis:** `Gemini 3.8 High` when tool/repo exploration dominates.
+Alternative diagnosis: Gemini High when tool/repository exploration dominates.
 
 ### Critical reservation/payment/security task
 
-`Sol High risk analysis -> explicit task spec -> Muse 1.3 xHigh implementation -> exhaustive tests -> Sol High final review -> fixes/re-review -> final QA`
+`Sol High risk analysis (Fast OFF) -> explicit deterministic spec -> Muse xHigh (Free -> Go) implementation -> exhaustive tests -> Sol High final review (Fast OFF) -> fixes/re-review -> QA`
 
-**Alternative implementation:** `Terra High` when implementation still requires design judgment.
+If implementation still requires active architecture decisions, use Terra High as implementation alternative rather than asking Muse to invent the design.
 
 ### Repo-wide refactor
 
-`Terra High plan -> Muse 1.3 xHigh execution using 06-refactoring -> full verification -> Terra High review -> final QA`
-
-**Alternative execution:** `Gemini 3.8 High`.
+`Terra High or Gemini High plan -> Muse xHigh execution -> full verification -> Terra High independent review -> QA`
 
 ---
 
-## 8. Review Execution Rule
+## 11. Effort Policy
 
-When assigned code review, follow `.ai/workflows/05-code-review.md` rather than giving a generic prose review.
+### Muse Spark 1.3
 
-The reviewer must prioritize concrete bugs, invariant violations, security/data-integrity risks, contract mismatches, test gaps, and meaningful improvements. Findings require plausible evidence/failure scenarios and P0-P3 severity.
+- High: small/mechanical work
+- xHigh: default substantive implementation/fix/refactor
+- Max: do not assume; use only if explicitly present and specifically justified
 
-Prefer reviewer diversity when practical:
+### Gemini 3.8 Flash
 
-- Muse implementation -> Terra or Gemini review
-- Gemini implementation -> Terra review
-- Terra implementation -> Gemini or Sol review depending risk
-- critical implementation -> Sol final review
+- Medium: supervision, simple UI, quick exploration, docs/status
+- High: substantive planning, frontend/backend implementation, browser/tool loops, large-context work, normal QA
 
----
+### GPT-5.6 Terra
 
-## 9. Alternative Policy
+- Medium: small bounded review/judgment
+- High: substantive review, difficult debugging, backend architecture
+- xHigh: unusually hard unresolved architecture/multi-service diagnosis
+- Max: not routine
 
-The alternative should be **usable immediately**, not just a weaker emergency fallback.
+### GPT-5.6 Sol
 
-Choose the alternative when:
+- High: critical risk analysis/review authority
+- xHigh: unresolved/severe critical issue
+- Max: exceptional final escalation only
 
-- recommended model quota is constrained;
-- provider/harness is unavailable or behaving poorly;
-- Contributor privacy rules prohibit Muse;
-- latency/tooling makes another harness materially better;
-- a second model family is desirable to reduce correlated mistakes.
+### GPT-5.6 Luna
 
-State the trade-off in one sentence. Example:
-
-`Alternative: Gemini 3.8 Flash High — slightly less preferred for this backend task, but excellent agentic/tool performance and faster execution.`
-
-Do not label a model as an alternative if it would materially violate the task's risk requirements.
-
----
-
-## 10. Escalation Policy
-
-### Bounded/substantive implementation
-
-`Muse 1.3 xHigh -> one meaningful repair loop -> Terra High diagnosis/re-plan`
-
-Do not escalate merely because the task is Java.
-
-### Frontend/tool-heavy implementation
-
-`Gemini 3.8 High -> one meaningful repair loop -> Terra High root-cause/architecture analysis`
-
-### Serious backend reasoning
-
-`Terra High -> Terra xHigh -> Sol High -> Sol xHigh -> Sol Max`
-
-### Critical correctness
-
-Start at `Sol High` for the decision/review layer. Do not waste time retrying weaker decision models when expected failure cost is high.
+- Low/Medium: utility/docs/extraction when Codex is useful
+- High: bounded fallback only
+- Fast: OFF unless user explicitly asks
 
 ---
 
-## 11. Usage / Privacy Principle
+## 12. Privacy Policy
 
-Use:
+Muse Spark 1.3 Contributor routes are treated conservatively as potentially training/non-ZDR routes.
 
-`Effective Cost = usage + retries + latency + developer review time + context churn + expected failure cost`
+Do not send:
 
-OpenCode Go makes Muse Spark 1.3 Contributor exceptionally inexpensive for high-volume implementation. This is a reason to use more useful reasoning effort on substantive implementation, not a reason to lower quality.
+- secrets/credentials/tokens/private keys;
+- real `.env` contents;
+- private production/customer dumps;
+- payment credentials or sensitive PII;
+- other confidential data prohibited by repository policy.
 
-Never paste `.env`, API keys, Stripe secrets, production credentials, private user data, or other secrets into any model prompt.
+When sensitive context is necessary, select a privacy-compatible alternative based on current provider metadata.
 
----
-
-## 12. Response Format
-
-When asked which model to use, respond:
-
-**Recommended:** MODEL — EFFORT
-
-**Why:** 2-4 sentences tied to the task's real failure mode, agentic demand and verification strength.
-
-**Alternative:** MODEL — EFFORT  
-**Trade-off:** one concise sentence explaining why it is a good peer option and what is lost/gained.
-
-**Task profile:**
-- Complexity: X/5
-- Risk: Low/Medium/High/Critical
-- Context: Small/Medium/Large/Very Large
-- Agentic demand: Low/Medium/High
-- Verification: Strong/Partial/Weak
-
-**Implementation model:** only if different from the recommended reasoning/review model.
-
-**Review model:** only if the task needs a separate quality gate.
-
-**Escalate to:** stronger model only under a concrete trigger condition.
-
-Never use “Java/Spring” alone as justification to recommend Terra/Sol implementation over Muse.
+Never assume Free and Go have different privacy guarantees merely because one is paid.
 
 ---
 
-## 13. Reference Rule
+## 13. Availability and Catalog Drift
 
-Consult `.ai/AI_MODEL_REFERENCE.md` when:
+Model availability changes.
 
-- the choice is ambiguous or disputed;
-- the task is expensive or high-risk;
-- a model or benchmark changed recently;
-- context is very large;
-- the user asks for benchmark/usage justification.
+- Query the actual harness catalog when uncertain.
+- Do not invent model IDs or efforts.
+- Do not silently substitute another model.
+- Record actual provider/model/effort in orchestrated stage output.
+- Update `.ai/integrations/PORACODE.md` when exact Poracode/OpenCode IDs change.
 
-For ordinary routing, do not load the reference file unnecessarily.
+OpenCode Go's currently documented Muse ID is `opencode-go/muse-spark-1.3-contributor`; OpenCode Zen's Free route is `opencode/muse-spark-1.3-contributor-free` as verified in Poracode/OpenCode selection.
+
+---
+
+## 14. Selection Output Contract
+
+When asked which AI should perform a SeatFlow stage, return:
+
+```text
+Recommended: <provider / model / effort>
+Why: <2-4 sentences tied to risk, task type, verification, and quota>
+Fallback: <availability fallback, if relevant>
+Alternative: <peer route>
+Trade-off: <concise difference>
+Review model: <if independent review required>
+Escalate to: <model only after a concrete trigger>
+Fast mode: OFF | N/A
+Task profile: complexity / risk / context / agentic demand / verification
+```
+
+If `Muse 1.3` is Recommended, explicitly state:
+
+`Free first -> OpenCode Go Contributor if Free unavailable`.
+
+---
+
+## 15. Detailed Evidence
+
+Consult `.ai/AI_MODEL_REFERENCE.md` only when:
+
+- the route is ambiguous/disputed;
+- the user requests benchmarks/economics;
+- a provider/model changed materially;
+- the task is unusually high-risk;
+- quantitative justification is needed.
+
+Do not load the detailed reference for ordinary stage routing. Preserve context for the task itself.
