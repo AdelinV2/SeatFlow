@@ -25,7 +25,11 @@
   >
     <div>
       <div class="flex items-center gap-3">
-        <h1 class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]">
+        <h1
+          id="designerHeading"
+          tabindex="-1"
+          class="text-3xl font-extrabold tracking-tight text-[var(--color-text-primary)]"
+        >
           {{ venue()?.name || 'Venue Seat Layout Designer' }}
         </h1>
         <span
@@ -94,6 +98,7 @@
 
       <!-- Save Draft Button -->
       <button
+        id="designerSaveButton"
         type="button"
         (click)="saveLayout()"
         [disabled]="!isDirty() || isSaving()"
@@ -132,7 +137,8 @@
       <button
         type="button"
         (click)="openAddSectionModal()"
-        class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs border border-dashed border-indigo-400/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 transition-all"
+        [disabled]="isSaving()"
+        class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs border border-dashed border-indigo-400/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 transition-all disabled:opacity-40"
       >
         <svg
           class="size-4"
@@ -157,7 +163,7 @@
     <button
       type="button"
       (click)="undo()"
-      [disabled]="!canUndo()"
+      [disabled]="!canUndo() || isSaving()"
       aria-label="Undo layout change"
       title="Undo layout change (Ctrl+Z)"
       class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
@@ -167,7 +173,7 @@
     <button
       type="button"
       (click)="redo()"
-      [disabled]="!canRedo()"
+      [disabled]="!canRedo() || isSaving()"
       aria-label="Redo layout change"
       title="Redo layout change (Ctrl+Y)"
       class="btn-spring min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border border-[var(--color-border)] bg-[var(--color-canvas)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
@@ -230,9 +236,12 @@
   <!-- Load / Validation Error Alert -->
   @if (loadError() || validationError()) {
     <div
+      id="saveValidationSummary"
+      tabindex="-1"
       role="alert"
       aria-live="polite"
-      class="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm font-semibold flex items-center gap-3 animate-fade-in-up"
+      data-testid="save-validation-summary"
+      class="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm font-semibold flex items-start gap-3 animate-fade-in-up"
     >
       <svg
         class="size-5 shrink-0 text-rose-500"
@@ -247,6 +256,36 @@
       </svg>
       <span>{{ validationError() || loadError() }}</span>
     </div>
+  }
+
+  <!-- Server field validation details (400): escaped text only, never innerHTML -->
+  @if (serverValidationErrors().length > 0) {
+    <div
+      role="alert"
+      aria-live="polite"
+      data-testid="save-field-errors"
+      class="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-sm"
+    >
+      <p class="font-bold">Server validation failed. Review the highlighted fields:</p>
+      <ul class="mt-2 list-disc pl-5 space-y-1">
+        @for (detail of serverValidationErrors(); track $index) {
+          <li>
+            <span class="font-mono font-bold">{{ detail.field }}</span>
+            <span>: {{ detail.message }}</span>
+          </li>
+        }
+      </ul>
+      @if (saveCorrelationId()) {
+        <p class="mt-2 text-xs font-mono">Reference: {{ saveCorrelationId() }}</p>
+      }
+    </div>
+  } @else if (saveCorrelationId() && validationError()) {
+    <p
+      data-testid="save-correlation-id"
+      class="mb-6 text-xs font-mono text-[var(--color-text-muted)]"
+    >
+      Reference: {{ saveCorrelationId() }}
+    </p>
   }
 
   @if (isLoading()) {
