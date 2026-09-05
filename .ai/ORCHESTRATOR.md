@@ -303,6 +303,20 @@ Default limits:
 - one meaningful retry after a failed repair when the root cause is understood;
 - escalate/re-plan when the same issue survives or the failure indicates missing design judgment.
 
+### 7.1 Delegated-Run Lifecycle Invariant
+
+A bounded harness/MCP wait is not the same thing as an agent execution timeout.
+
+When a delegated run exists:
+
+- `running` after a wait window means **keep waiting**, not retry/fallback;
+- lack of streamed progress text is not a failure signal by itself;
+- never start a duplicate writer while the original child is still alive;
+- after an ambiguous transport error, query the run/status when possible before declaring the stage failed;
+- only explicit terminal failure/cancellation or a concrete provider/session failure should trigger fallback/escalation.
+
+When Poracode is active, `.ai/integrations/PORACODE.md` defines the exact Crossagents polling, silent-provider, and OpenCode native-subagent rules.
+
 Stop and report a blocker when:
 
 - required provider/model access is unavailable and no allowed fallback exists;
@@ -333,6 +347,8 @@ Prefer sequential execution when agents would:
 - resolve findings from an implementation that is still changing.
 
 When multiple writing agents are used concurrently, isolate them with Git worktrees.
+
+Provider identity does not make two Poracode Crossagents nested: an OpenCode/Muse supervisor may launch multiple OpenCode/Muse Poracode Crossagents concurrently when their work is independent. OpenCode's own native `task`/subagent mechanism remains disabled for SeatFlow orchestration; all inter-agent delegation goes through the active orchestration layer.
 
 ---
 
