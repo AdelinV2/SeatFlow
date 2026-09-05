@@ -15,16 +15,20 @@ import com.seatflow.event.client.SeatMapVenueSection;
 import com.seatflow.event.client.SeatMapVenueSeat;
 import com.seatflow.event.mapper.EventMapper;
 import com.seatflow.event.mapper.EventPricingTierMapper;
+import com.seatflow.event.mapper.EventSessionMapper;
 import com.seatflow.event.messaging.event.EventCancelledEvent;
 import com.seatflow.event.messaging.event.EventCompletedEvent;
 import com.seatflow.event.messaging.event.EventCreatedEvent;
 import com.seatflow.event.messaging.event.EventPublishedEvent;
 import com.seatflow.event.model.entity.Event;
+import com.seatflow.event.model.entity.EventSession;
 import com.seatflow.event.model.entity.OutboxEvent;
 import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventSessionStatus;
 import com.seatflow.event.model.enums.EventStatus;
 import com.seatflow.event.repository.EventPricingTierRepository;
 import com.seatflow.event.repository.EventRepository;
+import com.seatflow.event.repository.EventSessionRepository;
 import com.seatflow.event.repository.OutboxEventRepository;
 import com.seatflow.event.repository.projection.EventPriceRangeSummaryProjection;
 import com.seatflow.event.service.EventService;
@@ -32,6 +36,7 @@ import com.seatflow.event.web.dto.request.CreateEventRequest;
 import com.seatflow.event.web.dto.request.UpdateEventRequest;
 import com.seatflow.event.web.dto.response.EventDetailResponse;
 import com.seatflow.event.web.dto.response.EventSeatMapResponse;
+import com.seatflow.event.web.dto.response.EventSessionResponse;
 import com.seatflow.event.web.dto.response.EventSummaryResponse;
 import com.seatflow.event.web.dto.response.PricingTierResponse;
 import com.seatflow.event.web.dto.response.SeatMapSectionResponse;
@@ -71,8 +76,10 @@ public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final EventPricingTierRepository pricingTierRepository;
+    private final EventSessionRepository eventSessionRepository;
     private final EventMapper eventMapper;
     private final EventPricingTierMapper tierMapper;
+    private final EventSessionMapper eventSessionMapper;
     private final SeatMapClient seatMapClient;
     private final ObjectMapper objectMapper;
     private final W3cTraceContextPropagator w3cTraceContextPropagator;
@@ -90,7 +97,7 @@ public class EventServiceImpl implements EventService {
                 new EventCreatedEvent(saved.getId(), saved.getVenueId(), saved.getTitle(),
                         saved.getCategory(), saved.getEventDate(), Instant.now()));
         log.info("Event draft created. eventId={}, venueId={}", saved.getId(), saved.getVenueId());
-        return eventMapper.toDetailResponse(saved);
+        return withSessions(eventMapper.toDetailResponse(saved), saved.getId(), true);
     }
 
     @Override
@@ -123,7 +130,7 @@ public class EventServiceImpl implements EventService {
         eventMapper.updateEntity(request, event);
         event.setUpdatedAt(Instant.now());
         Event saved = eventRepository.save(event);
-        return eventMapper.toDetailResponse(saved);
+        return withSessions(eventMapper.toDetailResponse(saved), saved.getId(), true);
     }
 
     private void applyTransition(EventStatus current, EventStatus requested, Event event) {
@@ -132,6 +139,12 @@ public class EventServiceImpl implements EventService {
                 if (requested == EventStatus.PUBLISHED) {
                     if (!pricingTierRepository.existsByEvent_Id(event.getId())) {
                         throw new ValidationException("Cannot publish an event without pricing tiers", ErrorCode.INVALID_REQUEST);
+                    }
+                    if (!eventSessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                            event.getId(), EventSessionStatus.SCHEDULED, Instant.now())) {
+                        throw new ValidationException(
+                                "Cannot publish an event without at least one future scheduled session",
+                                ErrorCode.INVALID_REQUEST);
                     }
                     publishOutbox(EVENT_PUBLISHED, event.getId(),
                             new EventPublishedEvent(event.getId(), event.getVenueId(), event.getTitle(),
@@ -213,7 +226,7 @@ public class EventServiceImpl implements EventService {
         };
         Page<Event> page = eventRepository.findAll(spec, pageable);
         List<EventDetailResponse> content = page.getContent().stream()
-                .map(eventMapper::toDetailResponse)
+                .map(event -> withSessions(eventMapper.toDetailResponse(event), event.getId(), true))
                 .toList();
         return PagedResult.of(content, page.getNumber(), page.getSize(), page.getTotalElements());
     }
@@ -226,7 +239,7 @@ public class EventServiceImpl implements EventService {
         if (event.getStatus() != EventStatus.PUBLISHED || !event.getEventDate().isAfter(Instant.now())) {
             throw new ResourceNotFoundException("Event", eventId);
         }
-        return eventMapper.toDetailResponse(event);
+        return withSessions(eventMapper.toDetailResponse(event), event.getId(), false);
     }
 
     @Override
@@ -234,7 +247,7 @@ public class EventServiceImpl implements EventService {
     public EventDetailResponse getEventForAdministration(UUID eventId) {
         Event event = eventRepository.findWithPricingTiersById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId));
-        return eventMapper.toDetailResponse(event);
+        return withSessions(eventMapper.toDetailResponse(event), event.getId(), true);
     }
 
     @Override
@@ -291,15 +304,45 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional
     public int completeExpiredEvents(Instant now, int batchSize) {
-        List<Event> expired = eventRepository.findPublishedExpiredForUpdate(now, PageRequest.of(0, batchSize));
-        for (Event event : expired) {
+        List<Event> completable = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, batchSize));
+        for (Event event : completable) {
+            List<EventSession> ended = eventSessionRepository.findByEvent_IdAndStatusAndEndsAtLessThanEqual(
+                    event.getId(), EventSessionStatus.SCHEDULED, now);
+            for (EventSession session : ended) {
+                session.setStatus(EventSessionStatus.COMPLETED);
+            }
             event.setStatus(EventStatus.COMPLETED);
             event.setUpdatedAt(now);
             publishOutbox(EVENT_COMPLETED, event.getId(),
                     new EventCompletedEvent(event.getId(), event.getVenueId(), event.getTitle(),
                             event.getEventDate(), now));
+            log.info("Auto-completed event after all sessions ended. eventId={}, sessionsCompleted={}",
+                    event.getId(), ended.size());
         }
-        return expired.size();
+        return completable.size();
+    }
+
+    private EventDetailResponse withSessions(EventDetailResponse base, UUID eventId, boolean adminView) {
+        List<EventSessionResponse> sessions = adminView ? allSessionResponses(eventId) : visibleSessionResponses(eventId);
+        return new EventDetailResponse(base.id(), base.venueId(), base.title(), base.description(),
+                base.category(), base.bannerUrl(), base.eventDate(), base.status(),
+                base.pricingTiers(), sessions, base.createdAt(), base.updatedAt());
+    }
+
+    private List<EventSessionResponse> allSessionResponses(UUID eventId) {
+        return eventSessionRepository.findByEvent_IdOrderByStartsAtAscIdAsc(eventId).stream()
+                .map(eventSessionMapper::toResponse)
+                .toList();
+    }
+
+    private List<EventSessionResponse> visibleSessionResponses(UUID eventId) {
+        Instant now = Instant.now();
+        return eventSessionRepository
+                .findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        eventId, EventSessionStatus.SCHEDULED, now).stream()
+                .filter(session -> session.getStartsAt().isAfter(now))
+                .map(eventSessionMapper::toResponse)
+                .toList();
     }
 
     private boolean venueExists(UUID venueId) {

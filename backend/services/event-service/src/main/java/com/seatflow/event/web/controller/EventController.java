@@ -5,8 +5,10 @@ import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
 import com.seatflow.event.model.enums.EventCategory;
 import com.seatflow.event.service.EventService;
+import com.seatflow.event.service.EventSessionService;
 import com.seatflow.event.web.dto.response.EventDetailResponse;
 import com.seatflow.event.web.dto.response.EventSeatMapResponse;
+import com.seatflow.event.web.dto.response.EventSessionResponse;
 import com.seatflow.event.web.dto.response.EventSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -38,6 +41,8 @@ public class EventController {
     private static final Set<String> ALLOWED_SORTS = Set.of("eventDate", "title", "createdAt");
 
     private final EventService eventService;
+
+    private final EventSessionService eventSessionService;
 
     @GetMapping
     @Operation(summary = "List published upcoming events",
@@ -68,6 +73,19 @@ public class EventController {
     })
     public ResponseEntity<EventDetailResponse> getEvent(@PathVariable UUID eventId) {
         return ResponseEntity.ok(eventService.getPublishedEvent(eventId));
+    }
+
+    @GetMapping("/{eventId}/sessions")
+    @Operation(summary = "List booking-visible event sessions",
+            description = "Returns only future non-cancelled sessions of a published event for booking selection.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Sessions retrieved",
+                content = @Content(schema = @Schema(implementation = EventSessionResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Event not found or not visible",
+                content = @Content(schema = @Schema(implementation = EventDetailResponse.class)))
+    })
+    public ResponseEntity<List<EventSessionResponse>> listSessions(@PathVariable UUID eventId) {
+        return ResponseEntity.ok(eventSessionService.listSessionsForCustomer(eventId));
     }
 
     @GetMapping("/{eventId}/seat-map")

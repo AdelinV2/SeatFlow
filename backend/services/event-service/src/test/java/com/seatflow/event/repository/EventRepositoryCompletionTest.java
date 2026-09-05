@@ -1,7 +1,9 @@
 package com.seatflow.event.repository;
 
 import com.seatflow.event.model.entity.Event;
+import com.seatflow.event.model.entity.EventSession;
 import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventSessionStatus;
 import com.seatflow.event.model.enums.EventStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +47,9 @@ class EventRepositoryCompletionTest {
     @Autowired
     private EventRepository eventRepository;
 
+    @Autowired
+    private EventSessionRepository eventSessionRepository;
+
     private Event event(EventStatus status, Instant eventDate) {
         return Event.builder()
                 .venueId(UUID.randomUUID())
@@ -56,25 +61,72 @@ class EventRepositoryCompletionTest {
                 .build();
     }
 
-    @Test
-    void findPublishedExpiredForUpdateReturnsPastPublishedAndExcludesOthers() {
-        Event pastPublished = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, Instant.now().minusSeconds(3600)));
-        eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, Instant.now().plusSeconds(3600)));
-        eventRepository.saveAndFlush(event(EventStatus.COMPLETED, Instant.now().minusSeconds(3600)));
-        eventRepository.saveAndFlush(event(EventStatus.DRAFT, Instant.now().minusSeconds(3600)));
-
-        List<Event> result = eventRepository.findPublishedExpiredForUpdate(Instant.now(), PageRequest.of(0, 50));
-
-        assertThat(result).extracting(Event::getId).containsExactly(pastPublished.getId());
+    private void session(Event event, EventSessionStatus status, Instant startsAt, Instant endsAt) {
+        eventSessionRepository.saveAndFlush(EventSession.builder()
+                .event(event)
+                .startsAt(startsAt)
+                .endsAt(endsAt)
+                .status(status)
+                .legacyBackfill(false)
+                .build());
     }
 
     @Test
-    void findPublishedExpiredForUpdateRespectsBatchSize() {
+    void findPublishedCompletableReturnsEventWhenAllSessionsEnded() {
+        Instant now = Instant.now();
+        Event past = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.plusSeconds(86400)));
+        session(past, EventSessionStatus.SCHEDULED, now.minusSeconds(7200), now.minusSeconds(3600));
+
+        List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 50));
+
+        assertThat(result).extracting(Event::getId).containsExactly(past.getId());
+    }
+
+    @Test
+    void findPublishedCompletableExcludesEventWhileLaterSessionRemains() {
+        Instant now = Instant.now();
+        Event multi = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600)));
+        session(multi, EventSessionStatus.SCHEDULED, now.minusSeconds(7200), now.minusSeconds(3600));
+        session(multi, EventSessionStatus.SCHEDULED, now.plusSeconds(86400), now.plusSeconds(86400 + 7200));
+
+        List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 50));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findPublishedCompletableIgnoresCancelledSessions() {
+        Instant now = Instant.now();
+        Event cancelledOnly = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600)));
+        session(cancelledOnly, EventSessionStatus.CANCELLED, now.plusSeconds(86400), now.plusSeconds(86400 + 7200));
+
+        List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 50));
+
+        assertThat(result).extracting(Event::getId).containsExactly(cancelledOnly.getId());
+    }
+
+    @Test
+    void findPublishedCompletableFallsBackToLegacyDateForSessionlessEvents() {
+        Instant now = Instant.now();
+        Event legacyPast = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600)));
+        eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.plusSeconds(3600)));
+        eventRepository.saveAndFlush(event(EventStatus.COMPLETED, now.minusSeconds(3600)));
+        eventRepository.saveAndFlush(event(EventStatus.DRAFT, now.minusSeconds(3600)));
+
+        List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 50));
+
+        assertThat(result).extracting(Event::getId).containsExactly(legacyPast.getId());
+    }
+
+    @Test
+    void findPublishedCompletableRespectsBatchSize() {
+        Instant now = Instant.now();
         for (int i = 0; i < 3; i++) {
-            eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, Instant.now().minusSeconds(3600 + i)));
+            Event past = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600 + i)));
+            session(past, EventSessionStatus.SCHEDULED, now.minusSeconds(7200 + i), now.minusSeconds(3600 + i));
         }
 
-        List<Event> result = eventRepository.findPublishedExpiredForUpdate(Instant.now(), PageRequest.of(0, 2));
+        List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 2));
 
         assertThat(result).hasSize(2);
     }

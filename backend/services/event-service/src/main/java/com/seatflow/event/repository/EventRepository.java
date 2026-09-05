@@ -26,8 +26,30 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     @EntityGraph(attributePaths = "pricingTiers")
     Optional<Event> findWithPricingTiersById(UUID id);
 
-    @Query(value = "SELECT e FROM Event e WHERE e.status = com.seatflow.event.model.enums.EventStatus.PUBLISHED AND e.eventDate <= :now ORDER BY e.eventDate ASC")
+    /**
+     * Session-aware completion candidates.
+     *
+     * <p>An event may complete only when no non-cancelled session still ends in the
+     * future. Events without any non-cancelled session fall back to the legacy
+     * {@code eventDate} boundary so pre-Phase-12 behavior is preserved until every
+     * event owns sessions. Never completes an event while a later session remains.
+     */
+    @Query(value = """
+            SELECT e FROM Event e
+            WHERE e.status = com.seatflow.event.model.enums.EventStatus.PUBLISHED
+            AND NOT EXISTS (
+                SELECT s FROM com.seatflow.event.model.entity.EventSession s
+                WHERE s.event = e
+                AND s.status <> com.seatflow.event.model.enums.EventSessionStatus.CANCELLED
+                AND s.endsAt > :now)
+            AND (
+                EXISTS (
+                    SELECT s FROM com.seatflow.event.model.entity.EventSession s
+                    WHERE s.event = e
+                    AND s.status <> com.seatflow.event.model.enums.EventSessionStatus.CANCELLED)
+                OR e.eventDate <= :now)
+            ORDER BY e.eventDate ASC""")
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2")})
-    List<Event> findPublishedExpiredForUpdate(@Param("now") Instant now, Pageable pageable);
+    List<Event> findPublishedCompletableForUpdate(@Param("now") Instant now, Pageable pageable);
 }
