@@ -1,6 +1,7 @@
 package com.seatflow.ticket.model.common;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,7 +11,11 @@ public record IssueTicketsCommand(
     UUID userId,              // Null for guest purchasers (ADR-001)
     String customerEmail,
     String attendeeName,
+    UUID eventSessionId,      // Immutable showing identity (P12-004)
     UUID eventId,
+    Instant sessionStartsAt,  // Immutable showing snapshot (P12-004)
+    Instant sessionEndsAt,    // Immutable showing snapshot (P12-004)
+    String sessionTimezone,   // Nullable IANA ZoneId metadata (P12-004)
     List<SeatTicketItem> seats,
     String currency
 ) {

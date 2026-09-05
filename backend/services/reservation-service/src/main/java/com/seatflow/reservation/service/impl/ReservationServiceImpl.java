@@ -184,6 +184,12 @@ public class ReservationServiceImpl implements ReservationService {
         // Inventory identity comes from the trusted booking context, never client input.
         reservation.setEventSessionId(bookingContext.eventSessionId());
         reservation.setEventId(bookingContext.eventId());
+        // Immutable showing snapshot (P12-004): captured once from trusted backend
+        // state at hold time; carried forward to confirm/payment/ticket/notification.
+        // Timezone stays null until a trusted source exposes it (nullable per contract).
+        reservation.setSessionStartsAt(bookingContext.startsAt());
+        reservation.setSessionEndsAt(bookingContext.endsAt());
+        reservation.setSessionTimezone(null);
         reservation.setTotalAmount(authoritativeTotal);
         reservation.setExpiresAt(Instant.now().plus(HOLD_DURATION));
 
@@ -552,6 +558,9 @@ public class ReservationServiceImpl implements ReservationService {
                 new ArrayList<>(seatIds),
                 reservation.getTotalAmount(),
                 paymentId,
+                reservation.getSessionStartsAt(),
+                reservation.getSessionEndsAt(),
+                reservation.getSessionTimezone(),
                 Instant.now()));
 
         AfterCommitMetrics.afterCommit(this::safeIncrementConfirmed);

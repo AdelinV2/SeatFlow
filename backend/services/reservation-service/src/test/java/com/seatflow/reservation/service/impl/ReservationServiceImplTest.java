@@ -130,7 +130,9 @@ class ReservationServiceImplTest {
 
     private ReservationResponse sampleResponse(UUID id, UUID sessionId, UUID eventId) {
         return new ReservationResponse(id, sessionId, eventId, null, "guest@example.com", ReservationStatus.PENDING,
-                Instant.now().plusSeconds(900), new BigDecimal("50.00"), 1, List.of(), Instant.now());
+                Instant.now().plusSeconds(900), new BigDecimal("50.00"), 1,
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000), null,
+                List.of(), Instant.now());
     }
 
     @Test
@@ -688,5 +690,79 @@ class ReservationServiceImplTest {
         assertThat(res.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(res.getSeatHolds()).allMatch(h -> h.getStatus() == SeatHoldStatus.SOLD);
         verify(outboxEventRepository).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void createReservationPersistsSessionScheduleSnapshotFromTrustedBookingContext() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        List<UUID> seatIds = List.of(seatId);
+        CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-snapshot");
+
+        Instant startsAt = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsAt = Instant.parse("2026-10-05T21:00:00Z");
+        SessionBookingContextDto context = new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED", startsAt, endsAt, null, null, UUID.randomUUID());
+        lenient().when(eventClient.getSessionBookingContext(sessionId)).thenReturn(context);
+
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
+                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        when(reservationMapper.toEntity(any(), any())).thenReturn(stubReservation(null, sessionId, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
+        when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
+        when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-snapshot")).thenReturn(Optional.empty());
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), eq(seatIds))).thenReturn(List.of());
+        org.mockito.ArgumentCaptor<Reservation> reservationCaptor = org.mockito.ArgumentCaptor.forClass(Reservation.class);
+        when(reservationRepository.saveAndFlush(reservationCaptor.capture())).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            r.setId(reservationId);
+            return r;
+        });
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(reservationId, sessionId, eventId));
+
+        service.createReservation(request, null);
+
+        Reservation persisted = reservationCaptor.getValue();
+        assertThat(persisted.getEventSessionId()).isEqualTo(sessionId);
+        assertThat(persisted.getSessionStartsAt()).isEqualTo(startsAt);
+        assertThat(persisted.getSessionEndsAt()).isEqualTo(endsAt);
+    }
+
+    @Test
+    void confirmReservationOutboxCarriesStoredSessionSnapshot() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        Instant startsAt = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsAt = Instant.parse("2026-10-05T21:00:00Z");
+        SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).eventSessionId(sessionId).eventId(eventId).seatId(seatId)
+                .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
+        Reservation res = stubReservation(id, sessionId, eventId, userId, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
+        res.setSessionStartsAt(startsAt);
+        res.setSessionEndsAt(endsAt);
+        when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
+        when(reservationRepository.save(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        com.fasterxml.jackson.databind.ObjectMapper realMapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        lenient().when(objectMapper.writeValueAsString(any()))
+                .thenAnswer(inv -> realMapper.writeValueAsString(inv.getArgument(0)));
+        org.mockito.ArgumentCaptor<OutboxEvent> outboxCaptor = org.mockito.ArgumentCaptor.forClass(OutboxEvent.class);
+        lenient().when(outboxEventRepository.save(outboxCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.confirmReservation(id, paymentId);
+
+        OutboxEvent outbox = outboxCaptor.getValue();
+        assertThat(outbox.getEventType()).isEqualTo("ReservationConfirmedEvent");
+        com.fasterxml.jackson.databind.JsonNode payload = realMapper.readTree(outbox.getPayload());
+        assertThat(payload.get("payload").get("eventSessionId").asText()).isEqualTo(sessionId.toString());
+        assertThat(payload.get("payload").get("sessionStartsAt").asText()).isEqualTo(startsAt.toString());
+        assertThat(payload.get("payload").get("sessionEndsAt").asText()).isEqualTo(endsAt.toString());
     }
 }

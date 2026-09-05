@@ -78,20 +78,27 @@ class PaymentCompletedEventListenerIntegrationTest {
     void issuesTicketsAndOutboxEventsAndIsIdempotent() throws Exception {
         UUID paymentId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         String email = "buyer@example.com";
+        Instant sessionStartsAt = Instant.parse("2026-10-05T19:00:00Z");
+        Instant sessionEndsAt = Instant.parse("2026-10-05T21:00:00Z");
 
         UUID seatId1 = UUID.randomUUID();
         UUID seatId2 = UUID.randomUUID();
         ReservationClientResponse reservation = new ReservationClientResponse(
                 reservationId,
+                sessionId,
                 eventId,
                 userId,
                 email,
                 "CONFIRMED",
                 new BigDecimal("100.00"),
                 2,
+                sessionStartsAt,
+                sessionEndsAt,
+                null,
                 List.of(
                         new ReservationClientResponse.HeldSeatClientDto(UUID.randomUUID(), seatId1, "HELD", new BigDecimal("50.00")),
                         new ReservationClientResponse.HeldSeatClientDto(UUID.randomUUID(), seatId2, "HELD", new BigDecimal("50.00"))
@@ -107,7 +114,11 @@ class PaymentCompletedEventListenerIntegrationTest {
                 reservationId,
                 userId,
                 email,
+                sessionId,
                 eventId,
+                sessionStartsAt,
+                sessionEndsAt,
+                null,
                 new BigDecimal("100.00"),
                 new BigDecimal("19.00"),
                 new BigDecimal("81.00"),
@@ -130,6 +141,11 @@ class PaymentCompletedEventListenerIntegrationTest {
             assertThat(ticket.getPrice()).isEqualByComparingTo("50.00");
             assertThat(ticket.getTaxAmount()).isEqualByComparingTo("9.50");
             assertThat(ticket.getNetAmount()).isEqualByComparingTo("40.50");
+            // P12-004: session-A reservation yields session-A tickets with immutable snapshot.
+            assertThat(ticket.getEventSessionId()).isEqualTo(sessionId);
+            assertThat(ticket.getEventId()).isEqualTo(eventId);
+            assertThat(ticket.getSessionStartsAt()).isEqualTo(sessionStartsAt);
+            assertThat(ticket.getSessionEndsAt()).isEqualTo(sessionEndsAt);
         }
 
         assertThat(outboxEventRepository.count()).isEqualTo(2);

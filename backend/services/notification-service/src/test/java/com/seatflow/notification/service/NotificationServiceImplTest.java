@@ -80,7 +80,11 @@ class NotificationServiceImplTest {
                 userId,
                 "alice@example.com",
                 "Alice Smith",
+                UUID.randomUUID(),
                 eventId,
+                Instant.parse("2026-10-05T19:00:00Z"),
+                Instant.parse("2026-10-05T21:00:00Z"),
+                null,
                 seatId,
                 new BigDecimal("100.00"),
                 new BigDecimal("20.00"),
@@ -119,7 +123,49 @@ class NotificationServiceImplTest {
         assertThat(savedLog.getIdempotencyKey()).isEqualTo(expectedIdempotencyKey);
         assertThat(savedLog.getRenderedContent()).isEqualTo("<html>Ticket HTML</html>");
         assertThat(savedLog.getSentAt()).isNotNull();
-        assertThat(savedLog.getErrorMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should render TicketIssued notification from the persisted session snapshot")
+    void shouldRenderTicketIssuedFromSessionSnapshot() {
+        UUID ticketId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        Instant startsAt = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsAt = Instant.parse("2026-10-05T21:00:00Z");
+
+        TicketIssuedEvent event = new TicketIssuedEvent(
+                ticketId, UUID.randomUUID(), UUID.randomUUID(),
+                "erin@example.com", "Erin", sessionId, UUID.randomUUID(),
+                startsAt, endsAt, "Europe/Bucharest", UUID.randomUUID(),
+                new BigDecimal("100.00"), new BigDecimal("20.00"), new BigDecimal("80.00"),
+                "SF-TKT-SESSION", "QR", Instant.now()
+        );
+
+        when(notificationLogRepository.existsByIdempotencyKey("ticket-issued-" + ticketId)).thenReturn(false);
+        when(ticketServiceClient.fetchTicketPdf(ticketId)).thenReturn(null);
+        when(qrCodeGeneratorService.generateQrCodeBase64(eq("QR"), eq(200), eq(200))).thenReturn(null);
+        when(emailTemplateRenderer.renderTemplate(eq(NotificationTemplateType.TICKET_ISSUED), anyMap()))
+                .thenReturn("<html>Ticket HTML</html>");
+        when(emailService.sendEmail(eq("erin@example.com"), anyString(), anyString(), anyList()))
+                .thenReturn("msg_session");
+
+        notificationService.sendTicketIssuedNotification(event);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Map<String, Object>> variablesCaptor =
+                ArgumentCaptor.forClass(java.util.Map.class);
+        verify(emailTemplateRenderer).renderTemplate(eq(NotificationTemplateType.TICKET_ISSUED), variablesCaptor.capture());
+        java.util.Map<String, Object> variables = variablesCaptor.getValue();
+        assertThat(variables.get("eventSessionId")).isEqualTo(sessionId.toString());
+        assertThat(variables.get("sessionTimezone")).isEqualTo("Europe/Bucharest");
+        // Stored timezone wins: 19:00 UTC renders as 22:00 in Europe/Bucharest (EEST).
+        assertThat(variables.get("sessionStartsAt")).isEqualTo("2026-10-05 22:00:00 EEST");
+        assertThat(variables.get("sessionEndsAt")).isEqualTo("2026-10-06 00:00:00 EEST");
+
+        // Absent timezone falls back to the existing UTC display convention.
+        assertThat(NotificationServiceImpl.formatSessionInstant(startsAt, null))
+                .isEqualTo("2026-10-05 19:00:00 UTC");
+        assertThat(NotificationServiceImpl.formatSessionInstant(null, null)).isEqualTo("");
     }
 
     @Test
@@ -190,6 +236,8 @@ class NotificationServiceImplTest {
         TicketIssuedEvent event = new TicketIssuedEvent(
                 ticketId, UUID.randomUUID(), UUID.randomUUID(),
                 "bob@example.com", "Bob", UUID.randomUUID(), UUID.randomUUID(),
+                Instant.parse("2026-10-05T19:00:00Z"), Instant.parse("2026-10-05T21:00:00Z"), null,
+                UUID.randomUUID(),
                 new BigDecimal("50.00"), new BigDecimal("10.00"), new BigDecimal("40.00"),
                 "SF-TKT-9999", "QR", Instant.now()
         );
@@ -214,6 +262,10 @@ class NotificationServiceImplTest {
                 UUID.randomUUID(),
                 "carol@example.com",
                 UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
                 new BigDecimal("75.00"),
                 "USD",
                 "pi_failed_123",

@@ -55,7 +55,9 @@ class ReservationControllerTest {
 
     private ReservationResponse sampleResponse(UUID id, UUID sessionId, UUID eventId, UUID userId) {
         return new ReservationResponse(id, sessionId, eventId, userId, "guest@example.com", ReservationStatus.PENDING,
-                Instant.now().plus(Duration.ofMinutes(15)), new BigDecimal("50.00"), 1, List.of(), Instant.now());
+                Instant.now().plus(Duration.ofMinutes(15)), new BigDecimal("50.00"), 1,
+                Instant.now().plus(Duration.ofDays(1)), Instant.now().plus(Duration.ofDays(1)).plus(Duration.ofHours(2)), null,
+                List.of(), Instant.now());
     }
 
     private String validBody(UUID sessionId, UUID eventId, UUID seatId, String idempotencyKey) {

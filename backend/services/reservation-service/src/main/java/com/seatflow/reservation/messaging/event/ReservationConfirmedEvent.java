@@ -18,6 +18,9 @@ public record ReservationConfirmedEvent(
         List<UUID> seatIds,
         BigDecimal totalAmount,
         UUID paymentId,
+        Instant sessionStartsAt,
+        Instant sessionEndsAt,
+        String sessionTimezone,
         Instant occurredAt
 ) implements DomainEvent {
 }

@@ -97,7 +97,9 @@ class ReservationMetricsTest {
     private com.seatflow.reservation.web.dto.response.ReservationResponse response(UUID id, UUID sessionId, UUID eventId) {
         return new com.seatflow.reservation.web.dto.response.ReservationResponse(id, sessionId, eventId, null,
                 "guest@example.com", ReservationStatus.PENDING, Instant.now().plusSeconds(900),
-                new BigDecimal("50.00"), 1, List.of(), Instant.now());
+                new BigDecimal("50.00"), 1,
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000), null,
+                List.of(), Instant.now());
     }
 
     @Test

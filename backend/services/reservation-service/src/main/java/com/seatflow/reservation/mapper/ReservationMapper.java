@@ -25,6 +25,9 @@ public interface ReservationMapper {
     @Mapping(target = "totalAmount", ignore = true)
     @Mapping(target = "eventId", ignore = true)
     @Mapping(target = "eventSessionId", ignore = true)
+    @Mapping(target = "sessionStartsAt", ignore = true)
+    @Mapping(target = "sessionEndsAt", ignore = true)
+    @Mapping(target = "sessionTimezone", ignore = true)
     @Mapping(target = "seatCount", expression = "java(request.seatIds().size())")
     Reservation toEntity(CreateReservationRequest request, UUID userId);
 
@@ -47,6 +50,9 @@ public interface ReservationMapper {
                 reservation.getExpiresAt(),
                 reservation.getTotalAmount(),
                 reservation.getSeatCount(),
+                reservation.getSessionStartsAt(),
+                reservation.getSessionEndsAt(),
+                reservation.getSessionTimezone(),
                 seats,
                 reservation.getCreatedAt()
         );
