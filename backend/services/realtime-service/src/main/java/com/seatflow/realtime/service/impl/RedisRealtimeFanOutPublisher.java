@@ -46,14 +46,17 @@ public class RedisRealtimeFanOutPublisher implements RealtimeFanOutPublisher {
         if (!StringUtils.hasText(sourceEventId) || payload == null) {
             throw new IllegalArgumentException("sourceEventId and payload are required for Redis fan-out");
         }
+        if (payload.eventSessionId() == null) {
+            throw new IllegalArgumentException("payload eventSessionId is required for Redis fan-out");
+        }
         try {
             RedisSeatStatusEnvelope envelope = new RedisSeatStatusEnvelope(
                     sourceEventId, UUID.randomUUID(), instanceId, Instant.now(), payload);
             String body = objectMapper.writeValueAsString(envelope);
             redisTemplate.convertAndSend(properties.channel(), body);
             publishedCounter.increment();
-            log.info("Published realtime Redis update: sourceEventId={}, messageId={}, eventId={}, status={}, seatCount={}",
-                    sourceEventId, envelope.messageId(), payload.eventId(), payload.status(), payload.seatIds().size());
+            log.info("Published realtime Redis update: sourceEventId={}, messageId={}, eventSessionId={}, eventId={}, status={}, seatCount={}",
+                    sourceEventId, envelope.messageId(), payload.eventSessionId(), payload.eventId(), payload.status(), payload.seatIds().size());
         } catch (JsonProcessingException | RuntimeException exception) {
             errorCounter.increment();
             throw new IllegalStateException("Failed to publish realtime update to Redis", exception);

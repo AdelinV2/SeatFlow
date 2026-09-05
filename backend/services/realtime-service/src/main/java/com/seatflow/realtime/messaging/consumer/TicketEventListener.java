@@ -8,6 +8,7 @@ import com.seatflow.realtime.enums.SeatStatus;
 import com.seatflow.realtime.messaging.event.TicketIssuedEvent;
 import com.seatflow.realtime.dto.SeatStatusUpdateMessage;
 import com.seatflow.realtime.service.RealtimeFanOutPublisher;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -21,6 +22,7 @@ public class TicketEventListener {
     private final RealtimeFanOutPublisher realtimeFanOutPublisher;
     private final ObjectMapper objectMapper;
     private final KafkaListenerTraceScope kafkaListenerTraceScope;
+    private final MeterRegistry meterRegistry;
 
     @KafkaListener(
             topics = EventTopics.TICKET_EVENTS,
@@ -37,8 +39,24 @@ public class TicketEventListener {
                     envelope.eventType(), envelope.eventId(), envelope.aggregateId());
             if ("TicketIssued".equals(envelope.eventType())) {
                 TicketIssuedEvent event = convertPayload(envelope.payload(), TicketIssuedEvent.class);
+                if (event.eventSessionId() == null) {
+                    meterRegistry.counter("seatflow.realtime.ticket.discarded").increment();
+                    log.warn("Discarding ticket realtime event without eventSessionId: "
+                            + "legacy event-only messages are never routed by session inference. "
+                            + "sourceEventId={}, eventId={}", envelope.eventId(), event.eventId());
+                    return;
+                }
+                if (event.seatId() == null) {
+                    meterRegistry.counter("seatflow.realtime.ticket.discarded").increment();
+                    log.warn("Discarding ticket realtime event with no seat: sourceEventId={}, eventSessionId={}",
+                            envelope.eventId(), event.eventSessionId());
+                    return;
+                }
+                // Realtime is fan-out only: duplicate Kafka deliveries repeat the same public seat
+                // state and never mutate authoritative booking state.
                 realtimeFanOutPublisher.publish(envelope.eventId(),
-                        SeatStatusUpdateMessage.of(event.eventId(), event.seatId(), SeatStatus.SOLD));
+                        SeatStatusUpdateMessage.of(event.eventSessionId(), event.eventId(), event.seatId(),
+                                SeatStatus.SOLD));
             } else {
                 log.debug("Ignoring ticket event type: {}", envelope.eventType());
             }

@@ -26,7 +26,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // In-memory message broker destination prefix for topic subscriptions (e.g. /topic/events/{eventId}/seats)
+        // In-memory message broker destination prefix for topic subscriptions
+        // (canonical: /topic/sessions/{eventSessionId}/seats; see SeatStatusBroadcaster)
         registry.enableSimpleBroker("/topic");
 
         // Application prefix for messages routed to @MessageMapping methods

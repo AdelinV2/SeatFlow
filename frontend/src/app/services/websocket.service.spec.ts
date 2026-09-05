@@ -144,7 +144,7 @@ describe('WebSocketService', () => {
       onConflict,
     );
     expect(clients[0].subscribe).toHaveBeenCalledTimes(2);
-    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe('/topic/events/event-1/seats');
+    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe('/topic/sessions/event-1/seats');
     expect(lifecycleCalls).toEqual(['subscribe', 'reconcile', 'subscribe', 'reconcile']);
   });
 
@@ -155,6 +155,7 @@ describe('WebSocketService', () => {
 
     clients[0].messageCallback?.({
       body: JSON.stringify({
+        eventSessionId: 'event-1',
         eventId: 'event-1',
         seatId: 'seat-1',
         status: 'HELD',
@@ -163,6 +164,7 @@ describe('WebSocketService', () => {
     } as IMessage);
 
     expect(service.lastSeatUpdate()).toEqual({
+      eventSessionId: 'event-1',
       eventId: 'event-1',
       seatId: 'seat-1',
       status: 'HELD',
@@ -178,6 +180,7 @@ describe('WebSocketService', () => {
 
     clients[0].messageCallback?.({
       body: JSON.stringify({
+        eventSessionId: 'event-1',
         eventId: 'event-1',
         seatIds: ['seat-1', 'seat-2'],
         status: 'HELD',
@@ -191,6 +194,7 @@ describe('WebSocketService', () => {
       ['seat-2', 'HELD'],
     ]);
     expect(service.lastSeatUpdate()).toEqual({
+      eventSessionId: 'event-1',
       eventId: 'event-1',
       seatId: 'seat-2',
       status: 'HELD',
@@ -306,7 +310,7 @@ describe('WebSocketService', () => {
     // Simulate incoming update for seat-2
     clients[0].messageCallback?.({
       body: JSON.stringify({
-        eventId: 'event-1',
+        eventSessionId: 'event-1',
         seatId: 'seat-2',
         status: 'HELD',
         timestamp: '2026-08-28T10:00:00Z',
@@ -315,6 +319,100 @@ describe('WebSocketService', () => {
 
     expect(initialConflict).not.toHaveBeenCalled();
     expect(updatedConflict).toHaveBeenCalledOnceWith('seat-2');
+  });
+
+  it('should subscribe to the canonical session topic via connectForSession', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+
+    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-A/seats',
+    );
+    expect(seatStateService.reconcileAvailability).toHaveBeenCalledWith(
+      'session-A',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should ignore updates from a foreign session without changing seat state', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+
+    clients[0].messageCallback?.({
+      body: JSON.stringify({
+        eventSessionId: 'session-B',
+        eventId: 'event-1',
+        seatId: 'seat-9',
+        status: 'HELD',
+        timestamp: '2026-08-28T10:00:00Z',
+      }),
+    } as IMessage);
+
+    expect(service.lastSeatUpdate()).toBeNull();
+    expect(seatStateService.updateSeatStatus).not.toHaveBeenCalled();
+  });
+
+  it('should ignore updates with a missing eventSessionId without changing seat state', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+
+    clients[0].messageCallback?.({
+      body: JSON.stringify({
+        eventId: 'event-1',
+        seatId: 'seat-9',
+        status: 'HELD',
+        timestamp: '2026-08-28T10:00:00Z',
+      }),
+    } as IMessage);
+
+    expect(service.lastSeatUpdate()).toBeNull();
+    expect(seatStateService.updateSeatStatus).not.toHaveBeenCalled();
+  });
+
+  it('should ignore updates with a null eventSessionId without changing seat state', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+
+    clients[0].messageCallback?.({
+      body: JSON.stringify({
+        eventSessionId: null,
+        eventId: 'event-1',
+        seatId: 'seat-9',
+        status: 'HELD',
+        timestamp: '2026-08-28T10:00:00Z',
+      }),
+    } as IMessage);
+
+    expect(service.lastSeatUpdate()).toBeNull();
+    expect(seatStateService.updateSeatStatus).not.toHaveBeenCalled();
+  });
+
+  it('should apply updates with a matching eventSessionId', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+
+    clients[0].messageCallback?.({
+      body: JSON.stringify({
+        eventSessionId: 'session-A',
+        eventId: 'event-1',
+        seatId: 'seat-9',
+        status: 'HELD',
+        timestamp: '2026-08-28T10:00:00Z',
+      }),
+    } as IMessage);
+
+    expect(service.lastSeatUpdate()).not.toBeNull();
+    expect(seatStateService.updateSeatStatus).toHaveBeenCalledOnceWith('seat-9', 'HELD');
+  });
+
+  it('should keep the compatibility connectForEvent alias on the session topic', () => {
+    service.connectForEvent('session-A');
+    configs[0].onConnect?.({} as never);
+
+    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-A/seats',
+    );
   });
 
   it('should ignore messages with missing or non-string seat identifiers', () => {
