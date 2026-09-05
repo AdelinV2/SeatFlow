@@ -57,12 +57,12 @@ class ReservationServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3", "4", "5");
+                .containsExactly("1", "2", "3", "4", "5", "6");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true, true);
     }
 
     @Test
@@ -79,19 +79,19 @@ class ReservationServiceApplicationTests {
                         "chk_res_seat_count",
                         "uq_reservations_idempotency_key");
 
-        // Partial unique index (Zero Double-Booking guarantee) is a plain index, not a pg_constraint row.
+        // Session-scoped partial unique index (Zero Double-Booking guarantee per session) is a plain index, not a pg_constraint row.
         List<String> indexNames = jdbcTemplate.queryForList(
                 """
                 SELECT indexname
                 FROM pg_indexes
                 WHERE indexname IN (
-                    'uq_active_seat_hold',
+                    'uq_active_seat_hold_session',
                     'idx_seat_holds_pricing_tier_id',
                     'idx_seat_holds_held_status')
                 """, String.class);
 
         assertThat(indexNames).containsExactlyInAnyOrder(
-                "uq_active_seat_hold",
+                "uq_active_seat_hold_session",
                 "idx_seat_holds_pricing_tier_id",
                 "idx_seat_holds_held_status");
     }

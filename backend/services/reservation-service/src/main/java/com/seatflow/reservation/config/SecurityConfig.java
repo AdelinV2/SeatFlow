@@ -35,7 +35,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/reservations").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reservations/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/reservations/*/cancel").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/reservations/events/*/availability").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/event-sessions/*/seats/availability").permitAll()
                         // Documentation
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()

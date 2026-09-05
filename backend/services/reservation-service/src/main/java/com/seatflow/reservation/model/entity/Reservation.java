@@ -22,7 +22,7 @@ import java.util.UUID;
         },
         indexes = {
                 @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
-                @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+                @Index(name = "idx_res_session_status", columnList = "event_session_id, status"),
                 @Index(name = "idx_res_user_status", columnList = "user_id, status"),
                 @Index(name = "idx_res_customer_email", columnList = "customer_email"),
                 @Index(name = "idx_res_created_at", columnList = "created_at")
@@ -51,9 +51,13 @@ public class Reservation {
     @ToString.Include
     private String customerEmail;
 
-    @Column(name = "event_id", nullable = false)
+    @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
-    private UUID eventId;
+    private UUID eventId; // Legacy compat/audit column (P12-003). Non-authoritative; derived from trusted booking-context.
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    private UUID eventSessionId; // Authoritative inventory partition since P12-003 (ADR-011).
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)

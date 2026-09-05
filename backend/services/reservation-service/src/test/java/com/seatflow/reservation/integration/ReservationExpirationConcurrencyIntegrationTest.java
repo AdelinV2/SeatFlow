@@ -2,6 +2,7 @@ package com.seatflow.reservation.integration;
 
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.model.entity.Reservation;
 import com.seatflow.reservation.model.entity.SeatHold;
 import com.seatflow.reservation.model.enums.ReservationStatus;
@@ -138,12 +139,17 @@ class ReservationExpirationConcurrencyIntegrationTest {
                 .count()).isEqualTo(50);
 
         UUID releasedSeat = seatIds.get(0);
+        UUID sessionId = UUID.randomUUID();
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID()));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(new EventPricingDetails(
                 eventId, "PUBLISHED", Instant.now().plusSeconds(3600), List.of(releasedSeat),
                 Map.of(releasedSeat, new BigDecimal("10.00"))));
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(eventId, "newguest@seatflow.com",
+                new CreateReservationRequest(sessionId, eventId, "newguest@seatflow.com",
                         List.of(releasedSeat), List.of(new BigDecimal("10.00")), "idem-subsequent"),
                 UUID.randomUUID());
 

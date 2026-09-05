@@ -30,8 +30,10 @@ class SeatHoldMapperTest {
 
     @Test
     void toResponseShouldMapAllFields() {
+        UUID sessionId = UUID.randomUUID();
         SeatHold hold = SeatHold.builder()
                 .id(UUID.randomUUID())
+                .eventSessionId(sessionId)
                 .eventId(UUID.randomUUID())
                 .seatId(UUID.randomUUID())
                 .status(SeatHoldStatus.SOLD)
@@ -41,6 +43,7 @@ class SeatHoldMapperTest {
         SeatHoldResponse response = mapper.toResponse(hold);
 
         assertThat(response.id()).isEqualTo(hold.getId());
+        assertThat(response.eventSessionId()).isEqualTo(sessionId);
         assertThat(response.seatId()).isEqualTo(hold.getSeatId());
         assertThat(response.status()).isEqualTo(SeatHoldStatus.SOLD);
         assertThat(response.price()).isEqualByComparingTo("75.50");

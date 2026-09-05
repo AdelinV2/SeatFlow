@@ -6,7 +6,6 @@ import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
 import com.seatflow.reservation.web.dto.request.SeatPricingSelectionRequest;
 import com.seatflow.reservation.web.dto.response.ReservationResponse;
-import com.seatflow.reservation.web.dto.response.SeatAvailabilityResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -124,17 +123,5 @@ public class ReservationController {
         UUID authenticatedUserId = UserContext.getCurrentUserId().map(UUID::fromString).orElse(null);
         reservationService.cancelReservation(reservationId, authenticatedUserId, customerEmailProof);
         return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/events/{eventId}/availability")
-    @Operation(
-        summary = "Get real-time seat availability for an event",
-        description = "Returns list of currently held and sold seat statuses for the specified event."
-    )
-    @ApiResponse(responseCode = "200", description = "Seat availability list retrieved",
-        content = @Content(schema = @Schema(implementation = SeatAvailabilityResponse.class)))
-    public ResponseEntity<SeatAvailabilityResponse> getSeatAvailability(@PathVariable UUID eventId) {
-        SeatAvailabilityResponse response = reservationService.getSeatAvailability(eventId);
-        return ResponseEntity.ok(response);
     }
 }

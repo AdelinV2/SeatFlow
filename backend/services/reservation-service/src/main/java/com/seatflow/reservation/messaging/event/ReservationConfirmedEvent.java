@@ -11,6 +11,7 @@ import java.util.UUID;
 @Schema(description = "Event published when a reservation hold is confirmed after successful payment")
 public record ReservationConfirmedEvent(
         UUID reservationId,
+        UUID eventSessionId,
         UUID eventId,
         UUID userId,
         String customerEmail,

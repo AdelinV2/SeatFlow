@@ -5,6 +5,7 @@ import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.messaging.event.PaymentCompletedEvent;
 import com.seatflow.reservation.messaging.event.UserRegisteredEvent;
 import com.seatflow.reservation.model.entity.Reservation;
@@ -80,6 +81,7 @@ class KafkaConsumerIntegrationTest {
 
     @Test
     void paymentCompletedConfirmsReservationAndMarksSeatsSold() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId1 = UUID.randomUUID();
         UUID seatId2 = UUID.randomUUID();
@@ -87,13 +89,14 @@ class KafkaConsumerIntegrationTest {
         List<BigDecimal> prices = List.of(new BigDecimal("10.00"), new BigDecimal("20.00"));
         String idempotencyKey = "idem-pay-" + UUID.randomUUID();
 
+        stubBookableSession(sessionId, eventId);
         EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
                 Instant.now().plusSeconds(3600), seatIds,
                 Map.of(seatId1, new BigDecimal("10.00"), seatId2, new BigDecimal("20.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(eventId, "guest@seatflow.com", seatIds, prices, idempotencyKey), null);
+                new CreateReservationRequest(sessionId, eventId, "guest@seatflow.com", seatIds, prices, idempotencyKey), null);
         UUID reservationId = response.id();
         assertThat(response.status()).isEqualTo(ReservationStatus.PENDING);
 
@@ -113,6 +116,7 @@ class KafkaConsumerIntegrationTest {
 
     @Test
     void userRegisteredLinksGuestReservationsToNewAccount() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
@@ -120,13 +124,14 @@ class KafkaConsumerIntegrationTest {
         String idempotencyKey = "idem-user-" + UUID.randomUUID();
         String guestEmail = "guest-link-" + UUID.randomUUID() + "@seatflow.com";
 
+        stubBookableSession(sessionId, eventId);
         EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
                 Instant.now().plusSeconds(3600), seatIds,
                 Map.of(seatId, new BigDecimal("15.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(eventId, guestEmail, seatIds, prices, idempotencyKey), null);
+                new CreateReservationRequest(sessionId, eventId, guestEmail, seatIds, prices, idempotencyKey), null);
         UUID reservationId = response.id();
         assertThat(reservationId).isNotNull();
 
@@ -141,8 +146,14 @@ class KafkaConsumerIntegrationTest {
         assertThat(linked.getUserId()).isEqualTo(newUserId);
     }
 
-    private Reservation awaitStatus(UUID id, ReservationStatus expected, Duration timeout) throws InterruptedException {
-        long deadline = System.nanoTime() + timeout.toNanos();
+    private void stubBookableSession(UUID sessionId, UUID eventId) {
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID()));
+    }
+
+    private Reservation awaitStatus(UUID id, ReservationStatus expected, Duration timeout) throws InterruptedException {        long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             Reservation r = reservationRepository.findWithSeatHoldsById(id).orElse(null);
             if (r != null && r.getStatus() == expected) {

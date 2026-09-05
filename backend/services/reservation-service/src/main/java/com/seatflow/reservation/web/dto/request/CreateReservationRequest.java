@@ -11,11 +11,19 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Request body to create a 15-minute seat reservation hold. Maximum 10 seats per reservation.")
+@Schema(description = "Request body to create a 15-minute seat reservation hold. Maximum 10 seats per reservation. "
+        + "The event session is the authoritative inventory key (ADR-011).")
 public record CreateReservationRequest(
 
-        @Schema(description = "UUID of the target event", example = "123e4567-e89b-12d3-a456-426614174000")
-        @NotNull(message = "eventId is required")
+        @Schema(description = "UUID of the target event session (authoritative booking key)",
+                example = "123e4567-e89b-12d3-a456-426614174000")
+        @NotNull(message = "eventSessionId is required")
+        UUID eventSessionId,
+
+        @Schema(description = "Optional legacy event UUID for compatibility only. Never authoritative: "
+                + "when present it must equal the parent event derived from eventSessionId, "
+                + "otherwise the request is rejected. Removed in P12-007.",
+                example = "123e4567-e89b-12d3-a456-426614174000")
         UUID eventId,
 
         @Schema(description = "Contact email for the reservation. Required for guests; authenticated users may omit to use their JWT email (ADR-001).",

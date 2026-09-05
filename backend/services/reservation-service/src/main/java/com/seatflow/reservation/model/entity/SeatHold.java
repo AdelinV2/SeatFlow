@@ -16,8 +16,8 @@ import java.util.UUID;
         name = "seat_holds",
         indexes = {
                 @Index(name = "idx_holds_reservation_id", columnList = "reservation_id"),
-                @Index(name = "idx_holds_event_seat", columnList = "event_id, seat_id"),
-                @Index(name = "idx_holds_event_status", columnList = "event_id, status")
+                @Index(name = "idx_holds_session_seat", columnList = "event_session_id, seat_id"),
+                @Index(name = "idx_holds_session_status", columnList = "event_session_id, status")
         }
 )
 @Getter
@@ -42,7 +42,11 @@ public class SeatHold {
 
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
-    private UUID eventId;
+    private UUID eventId; // Legacy compat/audit column (P12-003). Non-authoritative; derived from trusted booking-context.
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    private UUID eventSessionId; // Authoritative inventory partition since P12-003 (ADR-011).
 
     @Column(name = "seat_id", nullable = false, updatable = false)
     @ToString.Include

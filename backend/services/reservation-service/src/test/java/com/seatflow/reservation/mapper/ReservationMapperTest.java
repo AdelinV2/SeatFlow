@@ -37,9 +37,9 @@ class ReservationMapperTest {
     @Test
     void toEntityShouldMapRequestAndApplyDefaults() {
         UUID userId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
         CreateReservationRequest request = new CreateReservationRequest(
-                eventId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
                 "guest@example.com",
                 java.util.List.of(UUID.randomUUID(), UUID.randomUUID()),
                 java.util.List.of(new BigDecimal("40.00"), new BigDecimal("60.00")),
@@ -48,7 +48,9 @@ class ReservationMapperTest {
 
         Reservation entity = mapper.toEntity(request, userId);
 
-        assertThat(entity.getEventId()).isEqualTo(eventId);
+        // Inventory identity is set from trusted booking-context in the service, never mapped from the request.
+        assertThat(entity.getEventSessionId()).isNull();
+        assertThat(entity.getEventId()).isNull();
         assertThat(entity.getCustomerEmail()).isEqualTo("guest@example.com");
         assertThat(entity.getUserId()).isEqualTo(userId);
         assertThat(entity.getIdempotencyKey()).isEqualTo("idem-1");
@@ -63,18 +65,22 @@ class ReservationMapperTest {
     @Test
     void toResponseShouldMapEntityAndSeatHolds() {
         UUID reservationId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID seatHoldId = UUID.randomUUID();
         SeatHold hold = SeatHold.builder()
                 .id(seatHoldId)
-                .eventId(reservationId)
+                .eventSessionId(sessionId)
+                .eventId(eventId)
                 .seatId(seatId)
                 .status(SeatHoldStatus.HELD)
                 .price(new BigDecimal("25.00"))
                 .build();
         Reservation reservation = Reservation.builder()
                 .id(reservationId)
-                .eventId(UUID.randomUUID())
+                .eventSessionId(sessionId)
+                .eventId(eventId)
                 .customerEmail("guest@example.com")
                 .status(ReservationStatus.PENDING)
                 .expiresAt(Instant.now().plusSeconds(900))
@@ -87,12 +93,15 @@ class ReservationMapperTest {
         ReservationResponse response = mapper.toResponse(reservation);
 
         assertThat(response.id()).isEqualTo(reservationId);
+        assertThat(response.eventSessionId()).isEqualTo(sessionId);
+        assertThat(response.eventId()).isEqualTo(eventId);
         assertThat(response.customerEmail()).isEqualTo("guest@example.com");
         assertThat(response.status()).isEqualTo(ReservationStatus.PENDING);
         assertThat(response.seatCount()).isEqualTo(1);
         assertThat(response.seats()).hasSize(1);
         SeatHoldResponse seat = response.seats().getFirst();
         assertThat(seat.id()).isEqualTo(seatHoldId);
+        assertThat(seat.eventSessionId()).isEqualTo(sessionId);
         assertThat(seat.seatId()).isEqualTo(seatId);
         assertThat(seat.status()).isEqualTo(SeatHoldStatus.HELD);
         assertThat(seat.price()).isEqualByComparingTo("25.00");

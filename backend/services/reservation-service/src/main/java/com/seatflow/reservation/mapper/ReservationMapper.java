@@ -23,6 +23,8 @@ public interface ReservationMapper {
     @Mapping(target = "status", constant = "PENDING")
     @Mapping(target = "expiresAt", ignore = true)
     @Mapping(target = "totalAmount", ignore = true)
+    @Mapping(target = "eventId", ignore = true)
+    @Mapping(target = "eventSessionId", ignore = true)
     @Mapping(target = "seatCount", expression = "java(request.seatIds().size())")
     Reservation toEntity(CreateReservationRequest request, UUID userId);
 
@@ -37,6 +39,7 @@ public interface ReservationMapper {
                     .toList();
         return new ReservationResponse(
                 reservation.getId(),
+                reservation.getEventSessionId(),
                 reservation.getEventId(),
                 reservation.getUserId(),
                 reservation.getCustomerEmail(),
@@ -55,6 +58,7 @@ public interface ReservationMapper {
         }
         return new SeatHoldResponse(
                 seatHold.getId(),
+                seatHold.getEventSessionId(),
                 seatHold.getSeatId(),
                 seatHold.getStatus(),
                 seatHold.getPrice(),
