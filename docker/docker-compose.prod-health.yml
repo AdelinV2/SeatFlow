@@ -98,6 +98,7 @@ services:
       start_period: 600s
 
   tempo:
-    # Observed production cold start crossed the original 256 MiB cgroup limit
-    # while the host retained ample memory. Keep the increase scoped to production.
-    mem_limit: 384m
+    # Tempo can temporarily spike during WAL replay and block compaction. The
+    # production host retains ample memory headroom, so keep this override scoped
+    # to production and allow enough cgroup memory to avoid OOM restart loops.
+    mem_limit: 768m
