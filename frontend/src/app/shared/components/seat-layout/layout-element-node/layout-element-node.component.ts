@@ -31,8 +31,12 @@ export class LayoutElementNodeComponent {
   readonly handleSize = 10;
   readonly halfHandle = 5;
 
+  readonly normalizedType = computed(() => {
+    return (this.element()?.type || '').toUpperCase();
+  });
+
   readonly isValidType = computed(() => {
-    return isValidLayoutElementType(this.element()?.type);
+    return isValidLayoutElementType(this.normalizedType());
   });
 
   readonly transformString = computed(() => {

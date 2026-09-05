@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, ActivatedRoute } from '@angular/router';
@@ -1555,6 +1556,133 @@ describe('VenueGridDesignerComponent', () => {
         expect(JSON.stringify(component.sections())).toBe(draftBefore);
         expect(history.canUndo()).toBeTrue();
         expect(component.venue()?.layoutVersion).toBe(1);
+      });
+    });
+
+    describe('Customer preview (TASK-P11-012)', () => {
+      it('starts in editor mode without a preview banner', () => {
+        expect(component.isPreviewMode()).toBeFalse();
+        const root: HTMLElement = fixture.nativeElement;
+        expect(root.querySelector('[data-testid="designer-preview-banner"]')).toBeNull();
+        expect(root.querySelector('app-layout-canvas')).toBeTruthy();
+      });
+
+      it('renders the unsaved draft read-only with banner and geometry parity', () => {
+        editorState.replaceDraft((draft) => {
+          draft.elements = [
+            {
+              elementId: 'stage-1',
+              type: 'STAGE',
+              label: 'Main Stage',
+              geometry: { x: 0, y: 0, width: 400, height: 60, rotationDeg: 0 },
+              zIndex: 0,
+            },
+          ];
+          return draft;
+        });
+
+        component.enterPreview();
+        fixture.detectChanges();
+
+        const root: HTMLElement = fixture.nativeElement;
+        const banner = root.querySelector('[data-testid="designer-preview-banner"]');
+        expect(banner?.textContent).toContain('Customer preview');
+        expect(banner?.textContent).toContain('not simulated');
+
+        const previewDebug = fixture.debugElement.query(By.css('app-seat-map'))!;
+        expect(previewDebug).toBeTruthy();
+        expect(previewDebug.componentInstance.previewMode()).toBeTrue();
+
+        // Stable IDs flow through; draft geometry matches the customer path.
+        expect(component.previewSeats().length).toBe(4);
+        expect(component.previewSeats().map((seat) => seat.id)).toEqual([
+          's-00',
+          's-01',
+          's-10',
+          's-11',
+        ]);
+        expect(component.previewSections()[0]).toEqual(
+          jasmine.objectContaining({
+            sectionId: 'sec-1',
+            positionX: 10,
+            positionY: 20,
+            width: 400,
+            height: 300,
+            rotationDeg: 0,
+            zIndex: 1,
+          }),
+        );
+        expect(component.previewElements()).toEqual([
+          jasmine.objectContaining({
+            elementId: 'stage-1',
+            type: 'STAGE',
+            label: 'Main Stage',
+          }),
+        ]);
+        expect(component.previewElements()[0].geometry).toEqual({
+          x: 0,
+          y: 0,
+          width: 400,
+          height: 60,
+          rotationDeg: 0,
+        });
+        // Preview carries no event prices.
+        expect(component.previewSeats().every((seat) => seat.price === 0)).toBeTrue();
+      });
+
+      it('restores draft, history, and selection when leaving preview', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        const draftBefore = JSON.stringify(component.sections());
+        const history = TestBed.inject(LayoutHistoryService);
+        expect(history.canUndo()).toBeTrue();
+
+        component.enterPreview();
+        fixture.detectChanges();
+        expect(component.isPreviewMode()).toBeTrue();
+
+        component.exitPreview();
+        fixture.detectChanges();
+
+        expect(component.isPreviewMode()).toBeFalse();
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+        expect(history.canUndo()).toBeTrue();
+        expect(component.selectedSeatKeys()).toEqual(new Set(['s-00']));
+        const root: HTMLElement = fixture.nativeElement;
+        expect(root.querySelector('[data-testid="designer-preview-banner"]')).toBeNull();
+        expect(root.querySelector('app-layout-canvas')).toBeTruthy();
+      });
+
+      it('renders null-ID draft seats with stable fallback keys and no mutation', () => {
+        editorState.replaceDraft((draft) => {
+          const sections = draft.sections as VenueSectionLayout[];
+          sections[0].seats = [
+            ...sections[0].seats,
+            {
+              seatId: null,
+              rowLabel: 'C',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 2,
+              positionX: 20,
+              positionY: 100,
+              isActive: true,
+            },
+          ];
+          return draft;
+        });
+        const draftBefore = JSON.stringify(component.sections());
+
+        component.enterPreview();
+        fixture.detectChanges();
+
+        const fallback = component.previewSeats().find((seat) => seat.id.startsWith('draft-'));
+        expect(fallback).toBeTruthy();
+        expect(fallback?.status).toBe('AVAILABLE');
+        expect(fixture.nativeElement.querySelector('app-seat-map')).toBeTruthy();
+
+        component.exitPreview();
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
       });
     });
   });

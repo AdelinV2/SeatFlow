@@ -225,9 +225,10 @@ function assertValidSection(value: unknown, path: string): void {
   if (!Number.isInteger(value['zIndex'])) {
     throw invalid(`${path}.zIndex`, `must be an integer (got ${JSON.stringify(value['zIndex'])})`);
   }
-  const shapeMetadata = value['shapeMetadata'];
+  let shapeMetadata = value['shapeMetadata'];
   if (shapeMetadata === undefined) {
-    throw invalid(`${path}.shapeMetadata`, 'is required (expected object | null, got undefined)');
+    shapeMetadata = null;
+    (value as Record<string, unknown>)['shapeMetadata'] = null;
   }
   if (shapeMetadata !== null && !isPlainObject(shapeMetadata)) {
     throw invalid(

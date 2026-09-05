@@ -6,8 +6,7 @@
   min-height: calc(100vh - 4rem);
   padding: clamp(1rem, 3vw, 2.5rem) clamp(1rem, 4vw, 4rem) 9rem;
   background:
-    radial-gradient(circle at 8% 5%, rgb(99 102 241 / 10%), transparent 25rem),
-    var(--color-canvas);
+    radial-gradient(circle at 8% 5%, rgb(99 102 241 / 10%), transparent 25rem), var(--color-canvas);
 }
 
 .page-content {

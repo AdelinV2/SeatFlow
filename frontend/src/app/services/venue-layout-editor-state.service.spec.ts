@@ -708,12 +708,12 @@ describe('VenueLayoutEditorStateService', () => {
         pattern: /sections\[0\]\.zIndex/,
       },
       {
-        name: 'missing section shapeMetadata',
+        name: 'non-object section shapeMetadata',
         mutate: (layout) => {
           const draft = layout as unknown as Record<string, unknown>;
-          delete ((draft['sections'] as Record<string, unknown>[])[0] as Record<string, unknown>)[
+          ((draft['sections'] as Record<string, unknown>[])[0] as Record<string, unknown>)[
             'shapeMetadata'
-          ];
+          ] = 'not-an-object';
         },
         pattern: /sections\[0\]\.shapeMetadata/,
       },

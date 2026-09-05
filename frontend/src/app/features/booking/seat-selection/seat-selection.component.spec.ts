@@ -210,4 +210,175 @@ describe('SeatSelectionComponent', () => {
     expect(formatted).toContain('•');
     expect(formatted).not.toMatch(/AM|PM/);
   });
+
+  describe('advanced geometry flattening (TASK-P11-012)', () => {
+    const advancedResponse: EventSeatMapResponse = {
+      eventId: 'event-1',
+      venueId: 'venue-1',
+      eventTitle: 'Live at SeatFlow',
+      eventDate: '2026-10-10T18:00:00Z',
+      venueName: 'Main Hall',
+      venueCapacity: 100,
+      totalConfiguredSeats: 3,
+      layoutVersion: 7,
+      layoutElements: [
+        {
+          elementId: 'stage-1',
+          type: 'STAGE',
+          label: 'Main Stage',
+          geometry: { x: 0, y: 0, width: 528, height: 60, rotationDeg: 0 },
+          zIndex: 0,
+        },
+      ],
+      sections: [
+        {
+          sectionId: 'section-1',
+          name: 'Orchestra',
+          rowCount: 1,
+          colCount: 10,
+          isActive: true,
+          positionX: 10.5,
+          positionY: 20,
+          width: 440.5,
+          height: 44,
+          rotationDeg: 15,
+          zIndex: 3,
+          seats: [
+            {
+              seatId: 'seat-x1',
+              rowLabel: 'A',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 0,
+              isActive: true,
+              positionX: 44.5,
+              positionY: 12,
+            },
+          ],
+          pricingTiers: [
+            {
+              id: 'tier-a',
+              sectionId: 'section-1',
+              categoryName: 'Categoria A',
+              price: 150,
+              currency: 'RON',
+            },
+          ],
+        },
+        {
+          sectionId: 'section-legacy',
+          name: 'Legacy Hall',
+          rowCount: 2,
+          colCount: 10,
+          seats: [
+            {
+              seatId: 'seat-legacy',
+              rowLabel: 'B',
+              seatNumber: 3,
+              gridX: 2,
+              gridY: 1,
+              isActive: true,
+            },
+          ],
+          pricingTiers: [
+            {
+              id: 'tier-legacy',
+              sectionId: 'section-legacy',
+              categoryName: 'Standard',
+              price: 80,
+              currency: 'RON',
+            },
+          ],
+        },
+        {
+          sectionId: 'section-closed',
+          name: 'Closed Loft',
+          rowCount: 1,
+          colCount: 1,
+          isActive: false,
+          seats: [
+            {
+              seatId: 'seat-closed',
+              rowLabel: 'A',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 0,
+              isActive: true,
+            },
+          ],
+          pricingTiers: [
+            {
+              id: 'tier-closed',
+              sectionId: 'section-closed',
+              categoryName: 'Standard',
+              price: 80,
+              currency: 'RON',
+            },
+          ],
+        },
+      ],
+    };
+
+    function loadAdvanced(): void {
+      const eventApi = TestBed.inject(EventApiService) as jasmine.SpyObj<EventApiService>;
+      eventApi.getEventSeatMap.and.returnValue(of(advancedResponse));
+      component.retryLoad();
+    }
+
+    it('copies continuous geometry without changing IDs, pricing, currency, or status', () => {
+      loadAdvanced();
+
+      const seat = component.seats().find((current) => current.id === 'seat-x1')!;
+      expect(seat).toEqual(
+        jasmine.objectContaining({
+          id: 'seat-x1',
+          sectionId: 'section-1',
+          sectionName: 'Orchestra',
+          price: 150,
+          currency: 'RON',
+          status: 'AVAILABLE',
+          isActive: true,
+          positionX: 44.5,
+          positionY: 12,
+          sectionPositionX: 10.5,
+          sectionPositionY: 20,
+          sectionWidth: 440.5,
+          sectionHeight: 44,
+          sectionRotationDeg: 15,
+          sectionZIndex: 3,
+          categoryName: 'Categoria A',
+          pricingTierId: 'tier-a',
+        }),
+      );
+    });
+
+    it('derives legacy grid fallbacks matching the event-service adapter defaults', () => {
+      loadAdvanced();
+
+      const seat = component.seats().find((current) => current.id === 'seat-legacy')!;
+      expect(seat.positionX).toBe(88);
+      expect(seat.positionY).toBe(44);
+      expect(seat.sectionPositionX).toBe(0);
+      expect(seat.sectionPositionY).toBe(0);
+      expect(seat.sectionWidth).toBe(440);
+      expect(seat.sectionHeight).toBe(88);
+      expect(seat.sectionRotationDeg).toBe(0);
+      expect(seat.sectionZIndex).toBe(0);
+    });
+
+    it('excludes inactive sections while preserving the layout elements contract', () => {
+      loadAdvanced();
+
+      expect(component.seats().some((seat) => seat.id === 'seat-closed')).toBeFalse();
+      expect(component.seatMap()?.layoutVersion).toBe(7);
+      expect(component.seatMap()?.layoutElements?.length).toBe(1);
+      expect(component.seatMap()?.layoutElements?.[0]).toEqual(
+        jasmine.objectContaining({
+          elementId: 'stage-1',
+          type: 'STAGE',
+          label: 'Main Stage',
+        }),
+      );
+    });
+  });
 });

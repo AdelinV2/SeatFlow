@@ -50,6 +50,178 @@ export const DEFAULT_LAYOUT_BOUNDS: LayoutBounds = {
 
 export type CornerHandle = 'nw' | 'ne' | 'se' | 'sw';
 
+/**
+ * Visual seat radius rendered by the shared section node (seat-circle r).
+ * Used only to balance seat content inside the section box; seat data
+ * (positionX/positionY/gridX/gridY) is never rewritten.
+ */
+export const SEAT_VISUAL_RADIUS = 13;
+
+/** Standard 8-color theme palette for venue sections and pricing tiers. */
+export const SECTION_PALETTE: readonly string[] = [
+  '#6366f1', // Royal Indigo
+  '#f97316', // Sunset Coral / Orange
+  '#059669', // Jewel Emerald
+  '#8b5cf6', // Deep Violet
+  '#0ea5e9', // Ocean Cyan
+  '#f43f5e', // Ruby Rose
+  '#f59e0b', // Amber Gold
+  '#d946ef', // Fuchsia Pink
+];
+
+/**
+ * Resolves the visual color of a section from its shapeMetadata.color,
+ * falling back deterministically to SECTION_PALETTE based on index.
+ */
+export function resolveSectionColor(
+  sectionOrMeta: { shapeMetadata?: unknown } | Record<string, unknown> | null | undefined,
+  fallbackIndex = 0,
+): string {
+  if (!sectionOrMeta) {
+    return SECTION_PALETTE[Math.abs(fallbackIndex) % SECTION_PALETTE.length];
+  }
+  const meta = (
+    typeof sectionOrMeta === 'object' && sectionOrMeta !== null && 'shapeMetadata' in sectionOrMeta
+      ? (sectionOrMeta as { shapeMetadata?: unknown }).shapeMetadata
+      : sectionOrMeta
+  ) as Record<string, unknown> | null;
+  if (meta && typeof meta === 'object' && typeof meta['color'] === 'string' && meta['color'].trim().length > 0) {
+    return meta['color'].trim();
+  }
+  return SECTION_PALETTE[Math.abs(fallbackIndex) % SECTION_PALETTE.length];
+}
+
+/** Standard horizontal padding between section boundary and seat edges. */
+export const SECTION_PADDING_X = 28;
+
+/** Standard bottom padding between seat edges and section boundary. */
+export const SECTION_PADDING_BOTTOM = 28;
+
+/** Standard top padding reserved above seat edges, cleanly accommodating the section title (centered at y=14). */
+export const SECTION_PADDING_TOP = 28;
+
+/** Legacy alias for backwards compatibility with tests/code referencing SECTION_TITLE_BAND. */
+export const SECTION_TITLE_BAND = SECTION_PADDING_TOP;
+
+export interface SectionContentOffset {
+  dx: number;
+  dy: number;
+}
+
+export interface EffectiveSectionDimensions {
+  width: number;
+  height: number;
+  contentMinX: number;
+  contentMinY: number;
+  contentW: number;
+  contentH: number;
+}
+
+/**
+ * Computes the effective dimensions of a section, ensuring the boundary box
+ * symmetrically encloses all seats with balanced padding on all sides.
+ */
+export function computeEffectiveSectionDimensions(section: {
+  width?: number;
+  height?: number;
+  seats?: readonly { positionX?: number; positionY?: number }[];
+}): EffectiveSectionDimensions {
+  const seats = section?.seats ?? [];
+  const rawWidth = Number.isFinite(section?.width) ? (section.width as number) : 0;
+  const rawHeight = Number.isFinite(section?.height) ? (section.height as number) : 0;
+
+  if (seats.length === 0) {
+    return {
+      width: Math.max(MIN_DIMENSION, rawWidth),
+      height: Math.max(MIN_DIMENSION, rawHeight),
+      contentMinX: 0,
+      contentMinY: 0,
+      contentW: 0,
+      contentH: 0,
+    };
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const seat of seats) {
+    if (!Number.isFinite(seat?.positionX) || !Number.isFinite(seat?.positionY)) {
+      continue;
+    }
+    minX = Math.min(minX, seat.positionX!);
+    minY = Math.min(minY, seat.positionY!);
+    maxX = Math.max(maxX, seat.positionX!);
+    maxY = Math.max(maxY, seat.positionY!);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return {
+      width: Math.max(MIN_DIMENSION, rawWidth),
+      height: Math.max(MIN_DIMENSION, rawHeight),
+      contentMinX: 0,
+      contentMinY: 0,
+      contentW: 0,
+      contentH: 0,
+    };
+  }
+
+  const pad = SEAT_VISUAL_RADIUS;
+  const contentMinX = minX - pad;
+  const contentMinY = minY - pad;
+  const contentW = maxX - minX + pad * 2;
+  const contentH = maxY - minY + pad * 2;
+
+  const minRequiredW = contentW + SECTION_PADDING_X * 2;
+  const minRequiredH = contentH + SECTION_PADDING_TOP + SECTION_PADDING_BOTTOM;
+
+  const width = Math.max(rawWidth, minRequiredW);
+  const height = Math.max(rawHeight, minRequiredH);
+
+  return {
+    width: Number(width.toFixed(3)),
+    height: Number(height.toFixed(3)),
+    contentMinX,
+    contentMinY,
+    contentW,
+    contentH,
+  };
+}
+
+/**
+ * Computes the visual-only offset that balances seat content inside its
+ * section box with symmetrical padding on all 4 sides.
+ *
+ * Horizontally centers seats so left and right margins are balanced.
+ * Vertically balances seats between the title band at top and bottom margin.
+ *
+ * Data invariant: seat/grid coordinates, stable keys, rotation, and keyboard
+ * navigation are untouched — consumers apply this as a transform on the
+ * seats layer only. Empty seat lists yield a zero offset.
+ */
+export function sectionContentOffset(section: {
+  width?: number;
+  height?: number;
+  seats?: readonly { positionX?: number; positionY?: number }[];
+}): SectionContentOffset {
+  const dims = computeEffectiveSectionDimensions(section);
+  if (dims.contentW === 0 || dims.contentH === 0) {
+    return { dx: 0, dy: 0 };
+  }
+
+  const dx = (dims.width - dims.contentW) / 2 - dims.contentMinX;
+  const verticalSlack = Math.max(
+    0,
+    dims.height - SECTION_PADDING_TOP - SECTION_PADDING_BOTTOM - dims.contentH,
+  );
+  const dy = SECTION_PADDING_TOP + verticalSlack / 2 - dims.contentMinY;
+
+  return {
+    dx: Number(dx.toFixed(3)),
+    dy: Number(dy.toFixed(3)),
+  };
+}
+
 export interface ResizeResult {
   positionX: number;
   positionY: number;
@@ -270,7 +442,8 @@ export function layoutBounds(
 
   if (hasSections) {
     for (const sec of sections) {
-      includeItem(sec.positionX, sec.positionY, sec.width, sec.height, sec.rotationDeg);
+      const dims = computeEffectiveSectionDimensions(sec);
+      includeItem(sec.positionX, sec.positionY, dims.width, dims.height, sec.rotationDeg);
     }
   }
 

@@ -11,11 +11,12 @@
   (click)="onClick($event)"
   (keydown)="onKeyDown($event)"
   [attr.tabindex]="editable() ? 0 : -1"
-  [attr.role]="editable() ? 'button' : 'img'"
+  [attr.role]="editable() ? 'button' : null"
+  [attr.aria-hidden]="!editable() ? true : null"
   [attr.aria-label]="(element().label || element().type) + (selected() ? ' (selected)' : '')"
 >
   @if (isValidType()) {
-    @switch (element().type) {
+    @switch (normalizedType()) {
       @case ('STAGE') {
         <svg:rect
           class="stage-rect"

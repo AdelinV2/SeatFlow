@@ -64,6 +64,8 @@
       fill: var(--seat-color, #6366f1);
       stroke: rgba(255, 255, 255, 0.35);
       stroke-width: 1.5px;
+      transform-box: fill-box;
+      transform-origin: center;
       transition:
         fill 0.15s ease,
         stroke 0.15s ease,
@@ -105,6 +107,47 @@
       stroke-width: 2.5px;
       stroke-dasharray: 4 2;
       filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+    }
+
+    /* Transparent pointer hit area: 44-unit effective touch target (customer). */
+    .seat-hit-area {
+      fill: transparent;
+      stroke: none;
+    }
+
+    /* Dimmed when another pricing-tier legend category is highlighted (customer). */
+    &.seat-dimmed {
+      opacity: 0.28;
+    }
+
+    /* Live-conflict flag from availability reconciliation (customer). */
+    &.seat-conflicted .seat-circle {
+      stroke: #f43f5e;
+      stroke-width: 3px;
+    }
+
+    /* Customer selected seats: accent fill + spring pop (rotation stays visual-only). */
+    &.customer-seat.selected .seat-circle {
+      fill: #6366f1;
+      stroke: #e0e7ff;
+      stroke-width: 2.5px;
+      filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.8));
+      animation: customer-seat-pop 0.35s ease-out;
+    }
+
+    @keyframes customer-seat-pop {
+      0% {
+        transform: scale(1.28);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &.customer-seat.selected .seat-circle {
+        animation: none;
+      }
     }
 
     /* Fixed: Zero CSS transform on SVG <g> to eliminate hover oscillation / teleporting */

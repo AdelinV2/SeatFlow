@@ -19,10 +19,7 @@
         <div>
           <p class="eyebrow">{{ map.venueName }}</p>
           <h1>{{ map.eventTitle }}</h1>
-          <p>
-            {{ map.eventDate | sfDate: 'full' }} ·
-            {{ map.totalConfiguredSeats }} seats
-          </p>
+          <p>{{ map.eventDate | sfDate: 'full' }} · {{ map.totalConfiguredSeats }} seats</p>
         </div>
         <span class="live-status" [class.connected]="connectionStatus() === 'CONNECTED'">
           <i></i>
@@ -61,6 +58,7 @@
       <app-seat-map
         [seats]="seats()"
         [sectionsData]="map.sections ?? []"
+        [layoutElements]="map.layoutElements ?? map.elements ?? []"
         [maxSeats]="maxSeats"
         [selectedSeatIds]="selectedSeatIds()"
         [conflictingSeatIds]="conflictingSeatIds()"

@@ -374,8 +374,10 @@
       <span class="size-2.5 rounded-full border-2 border-amber-400"></span>
       <span class="font-medium">Selected</span>
     </div>
-    <span class="text-slate-600 hidden sm:inline">•</span>
-    <span class="text-slate-400 hidden sm:inline">Double-click or Alt+click to toggle seat</span>
+    @if (editable()) {
+      <span class="text-slate-600 hidden sm:inline">•</span>
+      <span class="text-slate-400 hidden sm:inline">Double-click or Alt+click to toggle seat</span>
+    }
   </div>
 
   <!-- SVG Viewport with Pan and Zoom Canvas -->
@@ -420,6 +422,8 @@
             [toolMode]="currentMode()"
             [paintColor]="paintColor()"
             [selectedSeatKeys]="selectedSeatKeys()"
+            [customerSeatStates]="customerSeatStates()"
+            [rovingActiveSeatKey]="rovingActiveSeatKey()"
             (sectionClick)="onSectionClick($event)"
             (sectionPointerDown)="onSectionPointerDown($event)"
             (handlePointerDown)="onHandlePointerDown($event)"

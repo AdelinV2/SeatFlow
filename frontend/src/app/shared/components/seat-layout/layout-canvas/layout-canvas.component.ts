@@ -47,7 +47,12 @@ import {
   snap,
   sortedLayoutItems,
 } from '../../../utils/layout-geometry';
-import { SectionNodeComponent } from '../section-node/section-node.component';
+import {
+  CustomerSeatPresentation,
+  SectionNodeComponent,
+} from '../section-node/section-node.component';
+
+export type { CustomerSeatPresentation };
 import { LayoutElementNodeComponent } from '../layout-element-node/layout-element-node.component';
 import {
   isValidLayoutElementType,
@@ -124,6 +129,27 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
   readonly toolMode = input<'select' | 'toggle' | 'paint'>('select');
   readonly paintColor = input<string>('');
   readonly selectedSeatKeys = input<ReadonlySet<string>>(new Set<string>());
+  /**
+   * Customer presentation overrides per stable seat key (TASK-P11-012).
+   * Null preserves pure editor rendering. Read-only consumers pass booking
+   * statuses, tier colors, labels, dimming, and conflict flags.
+   */
+  readonly customerSeatStates = input<ReadonlyMap<string, CustomerSeatPresentation> | null>(null);
+  /**
+   * Roving-tabindex anchor for customer keyboard navigation. Null preserves
+   * the legacy behavior where every interactive seat is tabbable.
+   */
+  readonly rovingActiveSeatKey = input<string | null>(null);
+  /**
+   * One-shot auto-fit for read-only consumers (TASK-P11-012 FIX A).
+   * When true, the canvas fits sections AND layout elements into the viewport
+   * on the first arrival of non-empty data. Manual pan/zoom afterwards is
+   * preserved: the fit runs at most once per component instance (plus explicit
+   * Fit-button calls), never on status/selection updates. Editor canvases keep
+   * the default false so draft edits never yank the designer's viewport.
+   * No animation is used (reduced-motion safe: transform is set directly).
+   */
+  readonly autoFitOnLoad = input<boolean>(false);
 
   // Outputs
   readonly sectionTransformChanged = output<SectionTransformChangeEvent>();
@@ -227,6 +253,24 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
       const mode = this.toolMode();
       this.internalToolMode.set(mode);
     });
+    // One-shot read-only auto-fit: runs when autoFitOnLoad is enabled and the
+    // first non-empty sections/elements payload arrives. The done-flag guards
+    // against re-fitting on every status update or selection change, so manual
+    // touch/mouse pan/zoom afterwards is never overridden. Signal writes are
+    // natively allowed in effects (Angular 22); the fit sets zoom/pan directly
+    // with no animation (reduced-motion safe). tryAutoFit consumes the one-shot
+    // only against a real measured rect, so data arriving before first layout
+    // (zero-size rect) retries instead of locking in the fallback geometry.
+    effect(() => {
+      if (!this.autoFitOnLoad() || this.autoFitDone) {
+        return;
+      }
+      const hasContent = this.sections().length > 0 || this.internalElements().length > 0;
+      if (!hasContent) {
+        return;
+      }
+      this.tryAutoFit();
+    });
   }
 
   // World transform string for the root content group
@@ -261,6 +305,11 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
 
   private capturedElement: Element | null = null;
   private capturedPointerId: number | null = null;
+  /**
+   * One-shot guard for autoFitOnLoad. Set on first fit so later input
+   * emissions (live seat statuses, selection, legend highlight) never re-fit.
+   */
+  private autoFitDone = false;
 
   private readonly wheelHandler = (event: WheelEvent): void => {
     this.onWheel(event);
@@ -270,6 +319,15 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     const viewport = this.svgViewport()?.nativeElement;
     if (viewport) {
       viewport.addEventListener('wheel', this.wheelHandler, { passive: false });
+    }
+    // Backstop for data that arrived before the viewport was measurable: the
+    // constructor effect skips zero-size rects without consuming the one-shot,
+    // so this retries the fit once the viewport can actually be measured.
+    if (this.autoFitOnLoad() && !this.autoFitDone) {
+      const hasContent = this.sections().length > 0 || this.internalElements().length > 0;
+      if (hasContent) {
+        this.tryAutoFit();
+      }
     }
   }
 
@@ -1274,6 +1332,24 @@ export class LayoutCanvasComponent implements AfterViewInit, OnDestroy {
     this.capturedElement = null;
     this.capturedPointerId = null;
     this.pinchStartDistance = 0;
+  }
+
+  /**
+   * One-shot auto-fit that only runs against a really measured viewport rect.
+   * Returns true when the fit ran (consuming the one-shot); false when the
+   * viewport is not laid out yet, leaving the one-shot pending so the next
+   * trigger (AfterViewInit backstop or a later input emission) retries with
+   * real dimensions instead of locking in fallback geometry.
+   */
+  private tryAutoFit(): boolean {
+    const el = this.svgViewport()?.nativeElement;
+    const rect = el?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return false;
+    }
+    this.autoFitDone = true;
+    this.fitToLayout();
+    return true;
   }
 
   private getContainerRect(): { left: number; top: number; width: number; height: number } {

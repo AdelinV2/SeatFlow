@@ -1,9 +1,37 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { VenueSectionLayout, VenueSectionSeat } from '../../../../models/venue.model';
-import { CornerHandle } from '../../../utils/layout-geometry';
+import {
+  CornerHandle,
+  computeEffectiveSectionDimensions,
+  resolveSectionColor,
+  sectionContentOffset,
+} from '../../../utils/layout-geometry';
 
 export type CanvasToolMode = 'select' | 'toggle' | 'paint';
+
+/**
+ * Customer-facing seat presentation override (TASK-P11-012).
+ *
+ * Lets read-only consumers (customer seat map, admin preview) reuse the
+ * shared spatial renderer while presenting booking statuses, pricing-tier
+ * colors, accessible labels/tooltips, legend highlight dimming, and conflict
+ * flags. Editor flows leave `customerSeatStates` unset and keep the exact
+ * legacy behavior (section/shape colors, all-interactive tabindex).
+ */
+export interface CustomerSeatPresentation {
+  status: 'AVAILABLE' | 'HELD' | 'SOLD' | 'RESERVED' | 'DISABLED';
+  /** Tier color for AVAILABLE seats, muted gray for held/sold/unavailable. */
+  color?: string;
+  /** Full accessible label (section, row, seat, category, price, status). */
+  ariaLabel?: string;
+  /** Native SVG tooltip text (category, price, status). */
+  tooltip?: string;
+  /** True when another legend category is highlighted. */
+  dimmed?: boolean;
+  /** True when a live update flagged this seat as conflicted. */
+  conflicted?: boolean;
+}
 
 @Component({
   selector: 'g[app-section-node], app-section-node',
@@ -21,6 +49,13 @@ export class SectionNodeComponent {
   readonly toolMode = input<CanvasToolMode>('select');
   readonly paintColor = input<string>('');
   readonly selectedSeatKeys = input<ReadonlySet<string>>(new Set<string>());
+  readonly customerSeatStates = input<ReadonlyMap<string, CustomerSeatPresentation> | null>(null);
+  /**
+   * When non-null, interactive seats use roving tabindex: only the seat whose
+   * stable key matches receives `tabindex="0"`, all others get `-1`.
+   * Null preserves the legacy behavior (every interactive seat focusable).
+   */
+  readonly rovingActiveSeatKey = input<string | null>(null);
 
   readonly sectionClick = output<{ event: MouseEvent; section: VenueSectionLayout }>();
   readonly sectionPointerDown = output<{ event: PointerEvent; section: VenueSectionLayout }>();
@@ -67,13 +102,17 @@ export class SectionNodeComponent {
   readonly handleSize = 10;
   readonly halfHandle = 5;
 
+  readonly effectiveDimensions = computed(() => computeEffectiveSectionDimensions(this.section()));
+  readonly effectiveWidth = computed(() => this.effectiveDimensions().width);
+  readonly effectiveHeight = computed(() => this.effectiveDimensions().height);
+
   readonly transformString = computed(() => {
     const s = this.section();
     const px = Number.isFinite(s.positionX) ? s.positionX : 0;
     const py = Number.isFinite(s.positionY) ? s.positionY : 0;
     const rot = Number.isFinite(s.rotationDeg) ? s.rotationDeg : 0;
-    const w = Number.isFinite(s.width) ? s.width : 0;
-    const h = Number.isFinite(s.height) ? s.height : 0;
+    const w = this.effectiveWidth();
+    const h = this.effectiveHeight();
     return `translate(${px} ${py}) rotate(${rot} ${w / 2} ${h / 2})`;
   });
 
@@ -81,14 +120,23 @@ export class SectionNodeComponent {
     return this.editable() || this.section().isActive;
   });
 
+  /**
+   * Visual-only centering of seat content inside the section box
+   * (TASK-P11-012 FIX B). Applied as a transform on the seats layer so seat
+   * data, stable keys, rotation, and grid keyboard navigation stay exact.
+   * Shared by editor, customer, and admin preview renderers.
+   */
+  readonly contentOffset = computed(() => sectionContentOffset(this.section()));
+
   /** Computes unique rows with their Y center position for canvas row guides. */
   readonly rowHeaders = computed(() => {
     const sec = this.section();
+    const dy = this.contentOffset().dy;
     const map = new Map<string, { rowLabel: string; y: number; count: number }>();
     for (const seat of sec.seats || []) {
       const existing = map.get(seat.rowLabel);
       if (!existing) {
-        map.set(seat.rowLabel, { rowLabel: seat.rowLabel, y: seat.positionY, count: 1 });
+        map.set(seat.rowLabel, { rowLabel: seat.rowLabel, y: seat.positionY + dy, count: 1 });
       } else {
         existing.count++;
       }
@@ -99,11 +147,12 @@ export class SectionNodeComponent {
   /** Computes unique columns with their X center position for canvas column guides. */
   readonly colHeaders = computed(() => {
     const sec = this.section();
+    const dx = this.contentOffset().dx;
     const map = new Map<number, { colIndex: number; x: number; count: number }>();
     for (const seat of sec.seats || []) {
       const existing = map.get(seat.gridX);
       if (!existing) {
-        map.set(seat.gridX, { colIndex: seat.gridX, x: seat.positionX, count: 1 });
+        map.set(seat.gridX, { colIndex: seat.gridX, x: seat.positionX + dx, count: 1 });
       } else {
         existing.count++;
       }
@@ -122,14 +171,43 @@ export class SectionNodeComponent {
   }
 
   getSectionColor(): string {
-    const meta = this.section().shapeMetadata as Record<string, unknown> | null;
-    if (meta && typeof meta['color'] === 'string' && meta['color']) {
-      return meta['color'];
+    return resolveSectionColor(this.section());
+  }
+
+  customerState(seat: VenueSectionSeat): CustomerSeatPresentation | null {
+    const states = this.customerSeatStates();
+    if (!states) {
+      return null;
     }
-    return '#6366f1'; // Royal indigo default
+    return states.get(this.getSeatKey(seat)) ?? null;
+  }
+
+  seatTabIndex(seat: VenueSectionSeat): number {
+    if (!this.isSeatInteractive(seat)) {
+      return -1;
+    }
+    const rovingKey = this.rovingActiveSeatKey();
+    if (rovingKey === null || rovingKey === undefined) {
+      return 0;
+    }
+    return this.getSeatKey(seat) === rovingKey ? 0 : -1;
+  }
+
+  seatAriaLabel(seat: VenueSectionSeat): string {
+    const override = this.customerState(seat)?.ariaLabel;
+    if (override) {
+      return override;
+    }
+    return (
+      'Row ' + seat.rowLabel + ', Seat ' + seat.seatNumber + (seat.isActive ? '' : ' (inactive)')
+    );
   }
 
   getSeatColor(seat: VenueSectionSeat): string {
+    const customerColor = this.customerState(seat)?.color;
+    if (customerColor) {
+      return customerColor;
+    }
     const meta = this.section().shapeMetadata as Record<string, unknown> | null;
     if (meta && typeof meta['seatColors'] === 'object' && meta['seatColors'] !== null) {
       const seatColors = meta['seatColors'] as Record<string, string>;

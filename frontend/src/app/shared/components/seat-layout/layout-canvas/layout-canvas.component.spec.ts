@@ -878,6 +878,123 @@ describe('LayoutCanvasComponent', () => {
     });
   });
 
+  describe('Auto-fit on load (TASK-P11-012 FIX A)', () => {
+    const VIEWPORT_RECT = {
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 800,
+      x: 0,
+      y: 0,
+      right: 1000,
+      bottom: 800,
+      toJSON: () => ({}),
+    } as unknown as DOMRect;
+
+    const mockViewport = (hostFixture: ComponentFixture<LayoutCanvasComponent>): void => {
+      const svg = hostFixture.nativeElement.querySelector(
+        'svg.layout-canvas-svg',
+      ) as SVGElement | null;
+      expect(svg).toBeTruthy();
+      spyOn(svg!, 'getBoundingClientRect').and.returnValue(VIEWPORT_RECT);
+    };
+
+    it('does not auto-fit when disabled (editor default preserves manual viewport)', () => {
+      const editorFixture = TestBed.createComponent(LayoutCanvasComponent);
+      editorFixture.componentRef.setInput('sections', mockSections);
+      editorFixture.componentRef.setInput('elements', mockElements);
+      editorFixture.detectChanges();
+
+      expect(editorFixture.componentInstance.zoomLevel()).toBe(1.0);
+      expect(editorFixture.componentInstance.panX()).toBe(0);
+      expect(editorFixture.componentInstance.panY()).toBe(0);
+    });
+
+    it('fits sections AND layout elements into the viewport on first data arrival', () => {
+      const readOnlyFixture = TestBed.createComponent(LayoutCanvasComponent);
+      readOnlyFixture.componentRef.setInput('autoFitOnLoad', true);
+      readOnlyFixture.componentRef.setInput('editable', false);
+      readOnlyFixture.componentRef.setInput('sections', []);
+      readOnlyFixture.componentRef.setInput('elements', []);
+      readOnlyFixture.detectChanges();
+      expect(readOnlyFixture.componentInstance.zoomLevel()).toBe(1.0);
+
+      mockViewport(readOnlyFixture);
+      readOnlyFixture.componentRef.setInput('sections', mockSections);
+      readOnlyFixture.componentRef.setInput('elements', mockElements);
+      readOnlyFixture.detectChanges();
+
+      // Bounds incl. STAGE (y=20, above sections at y=100):
+      // min(100,20)..max(600,300) => 500x280 centered at (350,160).
+      // 1000x800 viewport minus 60px padding => zoom min(880/500, 680/280) = 1.76.
+      const canvas = readOnlyFixture.componentInstance;
+      expect(canvas.zoomLevel()).toBeCloseTo(1.76, 2);
+      expect(canvas.panX()).toBeCloseTo(500 - 350 * 1.76, 0);
+      expect(canvas.panY()).toBeCloseTo(400 - 160 * 1.76, 0);
+    });
+
+    it('includes floating elements above sections (STAGE changes the fit center)', () => {
+      const sectionsOnlyFixture = TestBed.createComponent(LayoutCanvasComponent);
+      sectionsOnlyFixture.componentRef.setInput('autoFitOnLoad', true);
+      sectionsOnlyFixture.componentRef.setInput('editable', false);
+      sectionsOnlyFixture.detectChanges();
+      mockViewport(sectionsOnlyFixture);
+      sectionsOnlyFixture.componentRef.setInput('sections', mockSections);
+      sectionsOnlyFixture.componentRef.setInput('elements', []);
+      sectionsOnlyFixture.detectChanges();
+
+      // Sections-only bounds: minY=100 (no STAGE at y=20), centerY=175.
+      const sectionsOnlyPanY = sectionsOnlyFixture.componentInstance.panY();
+      expect(sectionsOnlyFixture.componentInstance.zoomLevel()).toBeCloseTo(1.76, 2);
+      expect(sectionsOnlyPanY).toBeCloseTo(400 - 175 * 1.76, 0);
+
+      // With the STAGE element the vertical center shifts up (160), so panY differs.
+      const withElementsFixture = TestBed.createComponent(LayoutCanvasComponent);
+      withElementsFixture.componentRef.setInput('autoFitOnLoad', true);
+      withElementsFixture.componentRef.setInput('editable', false);
+      withElementsFixture.detectChanges();
+      mockViewport(withElementsFixture);
+      withElementsFixture.componentRef.setInput('sections', mockSections);
+      withElementsFixture.componentRef.setInput('elements', mockElements);
+      withElementsFixture.detectChanges();
+
+      expect(withElementsFixture.componentInstance.panY()).not.toBeCloseTo(sectionsOnlyPanY, 0);
+    });
+
+    it('preserves manual pan/zoom on later updates (no re-fit on status changes)', () => {
+      const readOnlyFixture = TestBed.createComponent(LayoutCanvasComponent);
+      readOnlyFixture.componentRef.setInput('autoFitOnLoad', true);
+      readOnlyFixture.componentRef.setInput('editable', false);
+      readOnlyFixture.detectChanges();
+      mockViewport(readOnlyFixture);
+      readOnlyFixture.componentRef.setInput('sections', mockSections);
+      readOnlyFixture.componentRef.setInput('elements', mockElements);
+      readOnlyFixture.detectChanges();
+
+      const canvas = readOnlyFixture.componentInstance;
+      const fittedZoom = canvas.zoomLevel();
+      expect(fittedZoom).not.toBe(1.0);
+
+      // Manual user pan/zoom after the initial fit.
+      canvas.panX.set(999);
+      canvas.panY.set(-321);
+      canvas.setZoom(2.0);
+
+      // Live status/selection updates re-emit new input arrays; viewport must not move.
+      readOnlyFixture.componentRef.setInput('sections', [...mockSections]);
+      readOnlyFixture.componentRef.setInput('elements', [...mockElements]);
+      readOnlyFixture.componentRef.setInput(
+        'customerSeatStates',
+        new Map([['seat-1', { status: 'SOLD' as const }]]),
+      );
+      readOnlyFixture.detectChanges();
+
+      expect(canvas.zoomLevel()).toBe(2.0);
+      expect(canvas.panX()).toBe(999);
+      expect(canvas.panY()).toBe(-321);
+    });
+  });
+
   describe('Layout Elements Operations and Invariants (TASK-P11-008)', () => {
     it('isolates layout elements from seat selection, capacity, and active seat counts (Booking Contamination)', () => {
       const initialSections = component.sections();

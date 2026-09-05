@@ -22,6 +22,12 @@ import {
   VenueSectionLayout,
   VenueSectionSeat,
 } from '../../../../models/venue.model';
+import {
+  EventSeatMapLayoutElement,
+  Seat,
+  SeatMapSectionResponse,
+} from '../../../../models/seat.model';
+import { SeatMapComponent } from '../../../booking/seat-map/seat-map.component';
 import { ApiErrorResponse, ValidationErrorDetail } from '../../../../models/api-error.model';
 import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import {
@@ -57,6 +63,8 @@ import {
   MIN_POSITION,
   MIN_ROTATION,
   MIN_Z_INDEX,
+  SECTION_PALETTE,
+  resolveSectionColor,
 } from '../../../../shared/utils/layout-geometry';
 import { SectionPropertiesPanelComponent } from '../section-properties-panel/section-properties-panel.component';
 import { PendingChangesAware } from '../../../../core/guards/pending-changes.guard';
@@ -81,6 +89,7 @@ export interface GridMatrixRow {
     SkeletonLoaderComponent,
     LayoutCanvasComponent,
     SectionPropertiesPanelComponent,
+    SeatMapComponent,
   ],
   templateUrl: './venue-grid-designer.component.html',
   styleUrl: './venue-grid-designer.component.scss',
@@ -116,6 +125,12 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   readonly selectedLayoutElement = signal<VenueLayoutElement | null>(null);
   readonly selectedElementIndex = signal<number | null>(null);
   readonly prefersReducedMotion = signal<boolean>(false);
+  /**
+   * TASK-P11-012 customer preview: renders the unsaved draft read-only
+   * through SeatMapComponent. Preview never mutates draft/history/selection.
+   */
+  readonly isPreviewMode = signal<boolean>(false);
+  readonly noPreviewSelection: Set<string> = new Set<string>();
 
   private lastFocusedElement: HTMLElement | null = null;
 
@@ -181,12 +196,89 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
     return Math.min(100, Math.round((this.totalConfiguredActiveSeats() / cap) * 100));
   });
 
-  getSectionColor(sec: VenueSectionLayout): string {
-    const meta = sec.shapeMetadata as Record<string, unknown> | null;
-    if (meta && typeof meta['color'] === 'string' && meta['color']) {
-      return meta['color'];
+  /**
+   * Customer-preview projections of the live draft (TASK-P11-012 §5.3).
+   * Same section/seat/element rendering path as customers: active seats stay
+   * visible without event prices, null seat IDs render with stable fallback
+   * keys and emit no selection/save mutation (previewMode ignores toggles).
+   */
+  readonly previewSeats = computed<Seat[]>(() => {
+    const seats: Seat[] = [];
+    for (const sec of this.sections()) {
+      const sectionKey = getSectionDraftKey(sec);
+      const sectionId = sec.sectionId ?? sectionKey;
+      for (const seat of sec.seats || []) {
+        const active = sec.isActive && seat.isActive;
+        seats.push({
+          id: seat.seatId ?? `draft-${sectionKey}-${seat.gridY}_${seat.gridX}`,
+          sectionId,
+          sectionName: sec.name,
+          rowLabel: seat.rowLabel,
+          seatNumber: seat.seatNumber,
+          gridX: seat.gridX,
+          gridY: seat.gridY,
+          price: 0,
+          currency: 'USD',
+          status: active ? 'AVAILABLE' : 'DISABLED',
+          isActive: active,
+          positionX: seat.positionX ?? seat.gridX * 44,
+          positionY: seat.positionY ?? seat.gridY * 44,
+          sectionPositionX: sec.positionX,
+          sectionPositionY: sec.positionY,
+          sectionWidth: sec.width,
+          sectionHeight: sec.height,
+          sectionRotationDeg: sec.rotationDeg,
+          sectionZIndex: sec.zIndex,
+        });
+      }
     }
-    return '#6366f1';
+    return seats;
+  });
+
+  readonly previewSections = computed<SeatMapSectionResponse[]>(() => {
+    return this.sections().map((sec) => {
+      const sectionKey = getSectionDraftKey(sec);
+      return {
+        sectionId: sec.sectionId ?? sectionKey,
+        name: sec.name,
+        rowCount: sec.rowCount,
+        colCount: sec.colCount,
+        isActive: sec.isActive,
+        positionX: sec.positionX,
+        positionY: sec.positionY,
+        width: sec.width,
+        height: sec.height,
+        rotationDeg: sec.rotationDeg,
+        zIndex: sec.zIndex,
+        shapeMetadata: sec.shapeMetadata,
+        seats: (sec.seats || []).map((seat) => ({
+          seatId: seat.seatId ?? `draft-${sectionKey}-${seat.gridY}_${seat.gridX}`,
+          rowLabel: seat.rowLabel,
+          seatNumber: seat.seatNumber,
+          gridX: seat.gridX,
+          gridY: seat.gridY,
+          isActive: seat.isActive,
+          positionX: seat.positionX,
+          positionY: seat.positionY,
+        })),
+        pricingTiers: [],
+      };
+    });
+  });
+
+  readonly previewElements = computed<EventSeatMapLayoutElement[]>(() => {
+    return this.elements().map((element, index) => ({
+      elementId: element.elementId ?? `draft-element-${index}`,
+      type: element.type,
+      label: element.label,
+      geometry: { ...element.geometry },
+      zIndex: element.zIndex,
+    }));
+  });
+
+  getSectionColor(sec: VenueSectionLayout): string {
+    const idx = this.sections().indexOf(sec);
+    return resolveSectionColor(sec, Math.max(0, idx));
   }
 
   readonly currentSectionActiveCount = computed<number>(() => {
@@ -1977,13 +2069,28 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
 
     this.validationError.set(null);
     try {
+      let initialPosY = 0;
+      const activeSections = this.sections().filter((s) => s.isActive);
+      if (activeSections.length > 0) {
+        const maxY = Math.max(
+          ...activeSections.map(
+            (s) => (s.positionY ?? 0) + (s.height ?? s.rowCount * 44 + 40),
+          ),
+        );
+        initialPosY = maxY + 44;
+      }
+
+      const nextIdx = this.sections().length;
+      const defaultColor = SECTION_PALETTE[nextIdx % SECTION_PALETTE.length];
       const newSection = this.generator.createSection(name, this.sections(), {
         rowCount,
         colCount,
+        positionY: initialPosY,
         generateSeats: shouldGenSeats,
         venueCapacity: this.venue()?.capacity,
         totalActiveSeats: this.totalConfiguredActiveSeats(),
       });
+      newSection.shapeMetadata = { color: defaultColor };
 
       this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
@@ -2417,6 +2524,22 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
 
   fitToLayout(): void {
     this.canvasRef()?.fitToLayout();
+  }
+
+  // --- Customer Preview (TASK-P11-012 §5.3; UX-only, ADMIN persistence unchanged) ---
+
+  togglePreview(): void {
+    this.isPreviewMode.update((preview) => !preview);
+  }
+
+  enterPreview(): void {
+    this.isPreviewMode.set(true);
+  }
+
+  exitPreview(): void {
+    // Preview holds no local state: the draft, history stack, and editor
+    // selection are untouched, so leaving restores them exactly.
+    this.isPreviewMode.set(false);
   }
 
   // --- Legacy Compatibility Method ---

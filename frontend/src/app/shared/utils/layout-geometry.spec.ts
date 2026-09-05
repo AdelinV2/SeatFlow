@@ -24,6 +24,9 @@ import {
   normalizeRotation,
   Point,
   SectionTransform,
+  SECTION_PADDING_TOP,
+  SECTION_TITLE_BAND,
+  sectionContentOffset,
   sectionLocalToWorld,
   snap,
   sortedLayoutItems,
@@ -768,6 +771,73 @@ describe('layout-geometry pure utilities', () => {
       // Let's test with a point roughly at 82 deg
       const rot = calculateRotation(section, { x: 340, y: 180 }, 15);
       expect(rot % 15).toBe(0);
+    });
+  });
+
+  describe('sectionContentOffset (TASK-P11-012 FIX B: shared seat centering)', () => {
+    const gridSeats = (cols: number, rows: number) => {
+      const seats: { positionX: number; positionY: number }[] = [];
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          seats.push({ positionX: x * 44, positionY: y * 44 });
+        }
+      }
+      return seats;
+    };
+
+    it('returns a zero offset for sections without seats', () => {
+      expect(sectionContentOffset({ width: 700, height: 480, seats: [] })).toEqual({
+        dx: 0,
+        dy: 0,
+      });
+    });
+
+    it('balances a 15x10 grid inside a 700x480 box (bug-report geometry)', () => {
+      // Seats span 0..616 x 0..396; box is 700x480.
+      // Symmetrical margins on all 4 sides (~29px).
+      const offset = sectionContentOffset({ width: 700, height: 480, seats: gridSeats(15, 10) });
+      expect(offset.dx).toBeCloseTo(42, 2);
+      expect(offset.dy).toBeCloseTo(42, 2);
+
+      const pad = 13;
+      const leftSlack = 0 - pad + offset.dx;
+      const rightSlack = 700 - (616 + pad + offset.dx);
+      expect(leftSlack).toBeCloseTo(rightSlack, 6);
+
+      const topEdge = 0 - pad + offset.dy;
+      expect(topEdge).toBeGreaterThanOrEqual(SECTION_PADDING_TOP);
+      const bottomSlack = 480 - (396 + pad + offset.dy);
+      expect(bottomSlack).toBeCloseTo(topEdge, 6);
+    });
+
+    it('leaves an already-centered grid unmoved (offset idempotence)', () => {
+      // Content pre-centered in a 170x126 box with symmetrical 28px margins:
+      // seat centers 41..129 x 41..85, i.e. visual edges 28..142 x 28..98.
+      // Centering an already-centered span yields a zero offset.
+      const seats = [
+        { positionX: 41, positionY: 41 },
+        { positionX: 85, positionY: 41 },
+        { positionX: 129, positionY: 41 },
+        { positionX: 41, positionY: 85 },
+        { positionX: 85, positionY: 85 },
+        { positionX: 129, positionY: 85 },
+      ];
+      const offset = sectionContentOffset({ width: 170, height: 126, seats });
+      expect(offset.dx).toBeCloseTo(0, 6);
+      expect(offset.dy).toBeCloseTo(0, 6);
+    });
+
+    it('ignores seats with non-finite coordinates instead of poisoning the offset', () => {
+      const offset = sectionContentOffset({
+        width: 200,
+        height: 200,
+        seats: [
+          { positionX: NaN, positionY: 0 },
+          { positionX: 44, positionY: 44 },
+        ],
+      });
+      expect(Number.isFinite(offset.dx)).toBeTrue();
+      expect(Number.isFinite(offset.dy)).toBeTrue();
     });
   });
 });

@@ -16,8 +16,8 @@
     class="section-boundary"
     x="0"
     y="0"
-    [attr.width]="section().width"
-    [attr.height]="section().height"
+    [attr.width]="effectiveWidth()"
+    [attr.height]="effectiveHeight()"
     rx="8"
     ry="8"
   />
@@ -25,16 +25,21 @@
   <!-- Section Name Badge / Title -->
   <svg:text
     class="section-title"
-    [attr.x]="section().width / 2"
-    y="18"
+    [attr.x]="effectiveWidth() / 2"
+    y="14"
     text-anchor="middle"
     dominant-baseline="middle"
   >
     {{ section().name }}
   </svg:text>
 
-  <!-- Seats Layer (Rendered in section-local coordinates) -->
-  <svg:g class="seats-layer" role="group" aria-label="Seats">
+  <!-- Seats Layer (Rendered in section-local coordinates, visually centered below the title) -->
+  <svg:g
+    class="seats-layer"
+    role="group"
+    aria-label="Seats"
+    [attr.transform]="'translate(' + contentOffset().dx + ' ' + contentOffset().dy + ')'"
+  >
     @for (
       seat of section().seats;
       track seat.seatId ?? $index + '-' + seat.rowLabel + '-' + seat.seatNumber
@@ -46,23 +51,30 @@
         [class.non-interactive]="!isSeatInteractive(seat)"
         [class.tool-toggle]="editable() && toolMode() === 'toggle'"
         [class.tool-paint]="editable() && toolMode() === 'paint'"
+        [class.customer-seat]="!!customerState(seat)"
+        [class.seat-dimmed]="!!customerState(seat)?.dimmed"
+        [class.seat-conflicted]="!!customerState(seat)?.conflicted"
         [attr.transform]="'translate(' + seat.positionX + ' ' + seat.positionY + ')'"
         [style.--seat-color]="getSeatColor(seat)"
         (pointerdown)="onSeatPointerDown($event, seat)"
         (click)="onSeatClick($event, seat)"
         (dblclick)="onSeatDblClick($event, seat)"
         (keydown)="onSeatKeyDown($event, seat)"
-        [attr.tabindex]="isSeatInteractive(seat) ? 0 : -1"
+        [attr.tabindex]="seatTabIndex(seat)"
         [attr.role]="isSeatInteractive(seat) ? 'button' : null"
         [attr.aria-disabled]="!isSeatInteractive(seat) ? true : null"
-        [attr.aria-label]="
-          'Row ' +
-          seat.rowLabel +
-          ', Seat ' +
-          seat.seatNumber +
-          (seat.isActive ? '' : ' (inactive)')
-        "
+        [attr.aria-label]="seatAriaLabel(seat)"
+        [attr.data-seat-id]="seat.seatId"
+        [attr.data-status]="customerState(seat)?.status"
       >
+        <!-- Native tooltip for customer presentation (category, price, status) -->
+        @if (customerState(seat)?.tooltip) {
+          <svg:title>{{ customerState(seat)?.tooltip }}</svg:title>
+        }
+        <!-- Enlarged transparent hit area: 44-unit effective touch target -->
+        @if (customerState(seat)) {
+          <svg:circle class="seat-hit-area" cx="0" cy="0" r="22" />
+        }
         <!-- Selection Ring Overlay -->
         @if (isSeatSelected(seat)) {
           <svg:circle class="seat-selection-ring" cx="0" cy="0" r="17" />
@@ -151,14 +163,14 @@
       <!-- Rotation Stem Line & Rotation Handle -->
       <svg:line
         class="rotation-stem"
-        [attr.x1]="section().width / 2"
+        [attr.x1]="effectiveWidth() / 2"
         y1="0"
-        [attr.x2]="section().width / 2"
+        [attr.x2]="effectiveWidth() / 2"
         y2="-24"
       />
       <svg:circle
         class="transform-handle rotation-handle"
-        [attr.cx]="section().width / 2"
+        [attr.cx]="effectiveWidth() / 2"
         cy="-24"
         r="7"
         role="button"
@@ -183,7 +195,7 @@
       <!-- Corner Handle: NE -->
       <svg:rect
         class="transform-handle corner-handle ne"
-        [attr.x]="section().width - halfHandle"
+        [attr.x]="effectiveWidth() - halfHandle"
         [attr.y]="-halfHandle"
         [attr.width]="handleSize"
         [attr.height]="handleSize"
@@ -196,8 +208,8 @@
       <!-- Corner Handle: SE -->
       <svg:rect
         class="transform-handle corner-handle se"
-        [attr.x]="section().width - halfHandle"
-        [attr.y]="section().height - halfHandle"
+        [attr.x]="effectiveWidth() - halfHandle"
+        [attr.y]="effectiveHeight() - halfHandle"
         [attr.width]="handleSize"
         [attr.height]="handleSize"
         role="button"
@@ -210,7 +222,7 @@
       <svg:rect
         class="transform-handle corner-handle sw"
         [attr.x]="-halfHandle"
-        [attr.y]="section().height - halfHandle"
+        [attr.y]="effectiveHeight() - halfHandle"
         [attr.width]="handleSize"
         [attr.height]="handleSize"
         role="button"
