@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { pendingChangesGuard } from './core/guards/pending-changes.guard';
 import { staffGuard } from './core/guards/staff.guard';
 
 export const routes: Routes = [
@@ -143,6 +144,7 @@ export const routes: Routes = [
   {
     path: 'admin/venues/:id/designer',
     canActivate: [adminGuard],
+    canDeactivate: [pendingChangesGuard],
     loadComponent: () =>
       import('./features/admin/venues/venue-grid-designer/venue-grid-designer.component').then(
         (m) => m.VenueGridDesignerComponent,
