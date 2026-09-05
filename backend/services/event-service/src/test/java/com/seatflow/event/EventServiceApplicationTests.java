@@ -56,6 +56,6 @@ class EventServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY version ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2");
+                .containsExactly("1", "2", "3");
     }
 }
