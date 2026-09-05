@@ -29,6 +29,7 @@ public interface EventMapper {
     @Mapping(target = "pricingTiers", ignore = true)
     Event toEntity(CreateEventRequest request);
 
+    @Mapping(target = "sessions", ignore = true)
     EventDetailResponse toDetailResponse(Event event);
 
     @Mapping(target = "id", source = "event.id")

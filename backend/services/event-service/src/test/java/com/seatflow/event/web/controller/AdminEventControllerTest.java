@@ -60,7 +60,7 @@ class AdminEventControllerTest {
 
     private static EventDetailResponse sampleDetail(UUID id) {
         return new EventDetailResponse(id, UUID.randomUUID(), "Hamlet", "desc", EventCategory.OTHER, null,
-                Instant.now(), EventStatus.DRAFT, List.of(), Instant.now(), Instant.now());
+                Instant.now(), EventStatus.DRAFT, List.of(), List.of(), Instant.now(), Instant.now());
     }
 
     @Test

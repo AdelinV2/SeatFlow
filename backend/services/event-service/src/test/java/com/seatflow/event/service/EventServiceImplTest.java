@@ -11,13 +11,17 @@ import com.seatflow.event.client.SeatMapVenueSection;
 import com.seatflow.event.client.SeatMapVenueSeat;
 import com.seatflow.event.mapper.EventMapper;
 import com.seatflow.event.mapper.EventPricingTierMapper;
+import com.seatflow.event.mapper.EventSessionMapper;
 import com.seatflow.event.model.entity.Event;
 import com.seatflow.event.model.entity.EventPricingTier;
+import com.seatflow.event.model.entity.EventSession;
 import com.seatflow.event.model.entity.OutboxEvent;
 import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventSessionStatus;
 import com.seatflow.event.model.enums.EventStatus;
 import com.seatflow.event.repository.EventPricingTierRepository;
 import com.seatflow.event.repository.EventRepository;
+import com.seatflow.event.repository.EventSessionRepository;
 import com.seatflow.event.repository.OutboxEventRepository;
 import com.seatflow.event.repository.projection.EventPriceRangeSummaryProjection;
 import com.seatflow.event.service.impl.EventServiceImpl;
@@ -72,6 +76,10 @@ class EventServiceImplTest {
     @Mock
     private EventPricingTierRepository pricingTierRepository;
     @Mock
+    private EventSessionRepository eventSessionRepository;
+    @Mock
+    private EventSessionMapper eventSessionMapper;
+    @Mock
     private EventMapper eventMapper;
     @Mock
     private EventPricingTierMapper tierMapper;
@@ -102,7 +110,7 @@ class EventServiceImplTest {
 
     private EventDetailResponse dummyDetail() {
         return new EventDetailResponse(EVENT_ID, VENUE_ID, "Hamlet", "desc", EventCategory.OTHER,
-                null, Instant.now(), EventStatus.DRAFT, List.of(), Instant.now(), Instant.now());
+                null, Instant.now(), EventStatus.DRAFT, List.of(), List.of(), Instant.now(), Instant.now());
     }
 
     @Test
@@ -143,6 +151,8 @@ class EventServiceImplTest {
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
         when(seatMapClient.venueExists(VENUE_ID)).thenReturn(true);
         when(pricingTierRepository.existsByEvent_Id(EVENT_ID)).thenReturn(true);
+        when(eventSessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class))).thenReturn(true);
         when(eventRepository.save(any(Event.class))).thenReturn(draft);
         when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
 
@@ -152,6 +162,22 @@ class EventServiceImplTest {
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxEventRepository).save(captor.capture());
         assertThat(captor.getValue().getEventType()).isEqualTo("EVENT_PUBLISHED");
+    }
+
+    @Test
+    void updateEvent_publishWithoutFutureSession_rejects() {
+        Event draft = buildEvent(EventStatus.DRAFT);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
+        when(seatMapClient.venueExists(VENUE_ID)).thenReturn(true);
+        when(pricingTierRepository.existsByEvent_Id(EVENT_ID)).thenReturn(true);
+        when(eventSessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class))).thenReturn(false);
+
+        assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
+                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED)))
+                .isInstanceOf(ValidationException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
+        verify(outboxEventRepository, never()).save(any());
     }
 
     @Test
@@ -304,8 +330,11 @@ class EventServiceImplTest {
     void completeExpiredEvents_transitionsToCompletedAndPublishes() {
         Event expired = buildEvent(EventStatus.PUBLISHED);
         expired.setEventDate(Instant.now().minusSeconds(3600));
-        when(eventRepository.findPublishedExpiredForUpdate(any(Instant.class), any(Pageable.class)))
+        when(eventRepository.findPublishedCompletableForUpdate(any(Instant.class), any(Pageable.class)))
                 .thenReturn(List.of(expired));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtLessThanEqual(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of());
 
         int completed = eventService.completeExpiredEvents(Instant.now(), 50);
 
@@ -315,6 +344,45 @@ class EventServiceImplTest {
         verify(outboxEventRepository).save(captor.capture());
         assertThat(captor.getValue().getEventType()).isEqualTo("EVENT_COMPLETED");
         assertThat(captor.getValue().getAggregateId()).isEqualTo(EVENT_ID);
+    }
+
+    @Test
+    void completeExpiredEvents_marksEndedScheduledSessionsCompleted() {
+        Event expired = buildEvent(EventStatus.PUBLISHED);
+        expired.setEventDate(Instant.now().minusSeconds(7200));
+        EventSession ended = EventSession.builder()
+                .id(UUID.randomUUID())
+                .event(expired)
+                .startsAt(Instant.now().minusSeconds(7200))
+                .endsAt(Instant.now().minusSeconds(3600))
+                .status(EventSessionStatus.SCHEDULED)
+                .legacyBackfill(true)
+                .build();
+        when(eventRepository.findPublishedCompletableForUpdate(any(Instant.class), any(Pageable.class)))
+                .thenReturn(List.of(expired));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtLessThanEqual(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(ended));
+
+        int completed = eventService.completeExpiredEvents(Instant.now(), 50);
+
+        assertThat(completed).isEqualTo(1);
+        assertThat(ended.getStatus()).isEqualTo(EventSessionStatus.COMPLETED);
+        assertThat(expired.getStatus()).isEqualTo(EventStatus.COMPLETED);
+        verify(outboxEventRepository).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void completeExpiredEvents_skipsEventWhileLaterSessionRemains() {
+        when(eventRepository.findPublishedCompletableForUpdate(any(Instant.class), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        int completed = eventService.completeExpiredEvents(Instant.now(), 50);
+
+        assertThat(completed).isZero();
+        verify(outboxEventRepository, never()).save(any());
+        verify(eventSessionRepository, never()).findByEvent_IdAndStatusAndEndsAtLessThanEqual(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class));
     }
 
     @Test

@@ -196,8 +196,7 @@ class EventSessionRepositoryTest {
     }
 
     @Test
-    void shouldFindSessionOnlyForMatchingEventPair() {
-        Event eventA = savedEvent(EventStatus.PUBLISHED, FUTURE);
+    void shouldFindSessionOnlyForMatchingEventPair() {        Event eventA = savedEvent(EventStatus.PUBLISHED, FUTURE);
         Event eventB = savedEvent(EventStatus.PUBLISHED, FAR_FUTURE);
         EventSession session = sessionRepository.saveAndFlush(
                 baseSession(eventA, FUTURE, FUTURE.plusSeconds(7200)).build());
@@ -311,5 +310,73 @@ class EventSessionRepositoryTest {
                         + " VALUES (?, ?, ?, 'SCHEDULED', TRUE)",
                 UUID.randomUUID(), Timestamp.from(FUTURE), Timestamp.from(FUTURE.plusSeconds(7200))))
                 .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void shouldDetectFutureValidSessionForPublishPrecondition() {
+        Event withFuture = savedEvent(EventStatus.DRAFT, FUTURE);
+        Event pastOnly = savedEvent(EventStatus.DRAFT, PAST);
+        sessionRepository.saveAndFlush(baseSession(withFuture, FUTURE, FUTURE.plusSeconds(7200)).build());
+        sessionRepository.saveAndFlush(baseSession(pastOnly, PAST, PAST.plusSeconds(7200)).build());
+
+        assertThat(sessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                withFuture.getId(), EventSessionStatus.SCHEDULED, Instant.parse("2026-01-01T00:00:00Z"))).isTrue();
+        assertThat(sessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                pastOnly.getId(), EventSessionStatus.SCHEDULED, Instant.parse("2026-01-01T00:00:00Z"))).isFalse();
+        assertThat(sessionRepository.existsByEvent_IdAndStatusAndStartsAtAfter(
+                withFuture.getId(), EventSessionStatus.CANCELLED, Instant.parse("2026-01-01T00:00:00Z"))).isFalse();
+    }
+
+    @Test
+    void shouldListCustomerVisibleSessionsExcludingPastAndCancelled() {
+        Event event = savedEvent(EventStatus.PUBLISHED, FUTURE);
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        EventSession future = sessionRepository.saveAndFlush(
+                baseSession(event, FUTURE, FUTURE.plusSeconds(7200)).build());
+        sessionRepository.saveAndFlush(
+                baseSession(event, PAST, PAST.plusSeconds(7200)).build());
+        EventSession cancelledFuture = sessionRepository.saveAndFlush(
+                baseSession(event, FUTURE.plusSeconds(86400), FUTURE.plusSeconds(86400 + 7200))
+                        .status(EventSessionStatus.CANCELLED).build());
+
+        List<EventSession> visible = sessionRepository
+                .findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        event.getId(), EventSessionStatus.SCHEDULED, now);
+
+        assertThat(visible).extracting(EventSession::getId).containsExactly(future.getId());
+        assertThat(visible).extracting(EventSession::getId).doesNotContain(cancelledFuture.getId());
+    }
+
+    @Test
+    void shouldFindSessionsBlockingCompletion() {
+        Event event = savedEvent(EventStatus.PUBLISHED, FUTURE);
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        EventSession blocking = sessionRepository.saveAndFlush(
+                baseSession(event, FUTURE, FUTURE.plusSeconds(7200)).build());
+        sessionRepository.saveAndFlush(
+                baseSession(event, PAST, PAST.plusSeconds(7200)).build());
+        sessionRepository.saveAndFlush(
+                baseSession(event, FUTURE.plusSeconds(86400), FUTURE.plusSeconds(86400 + 7200))
+                        .status(EventSessionStatus.CANCELLED).build());
+
+        List<EventSession> blockers = sessionRepository.findByEvent_IdAndStatusNotAndEndsAtAfter(
+                event.getId(), EventSessionStatus.CANCELLED, now);
+
+        assertThat(blockers).extracting(EventSession::getId).containsExactly(blocking.getId());
+    }
+
+    @Test
+    void shouldFindEndedScheduledSessionsForCompletionMarking() {
+        Event event = savedEvent(EventStatus.PUBLISHED, FUTURE);
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        EventSession ended = sessionRepository.saveAndFlush(
+                baseSession(event, PAST, PAST.plusSeconds(7200)).build());
+        sessionRepository.saveAndFlush(
+                baseSession(event, FUTURE, FUTURE.plusSeconds(7200)).build());
+
+        List<EventSession> endedSessions = sessionRepository.findByEvent_IdAndStatusAndEndsAtLessThanEqual(
+                event.getId(), EventSessionStatus.SCHEDULED, now);
+
+        assertThat(endedSessions).extracting(EventSession::getId).containsExactly(ended.getId());
     }
 }

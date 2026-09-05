@@ -20,6 +20,8 @@ public record EventDetailResponse(
     @Schema(description = "UTC start time of the event") Instant eventDate,
     @Schema(description = "Lifecycle status") EventStatus status,
     @Schema(description = "Configured pricing tiers") List<PricingTierResponse> pricingTiers,
+    @Schema(description = "Session summary: all sessions for administration, booking-visible sessions for customers")
+    List<EventSessionResponse> sessions,
     @Schema(description = "Creation timestamp") Instant createdAt,
     @Schema(description = "Last update timestamp") Instant updatedAt
 

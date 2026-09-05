@@ -253,6 +253,16 @@ class EventServiceIntegrationTest {
                 new PricingTierItemRequest(SECTION_ID, "VIP", new BigDecimal("129.90"), "USD")));
         eventPricingService.configurePricing(eventId, pricingReq);
 
+        Event event = eventRepository.findById(eventId).orElseThrow();
+        Instant sessionStart = Instant.now().plusSeconds(86400);
+        eventSessionRepository.saveAndFlush(EventSession.builder()
+                .event(event)
+                .startsAt(sessionStart)
+                .endsAt(sessionStart.plusSeconds(7200))
+                .status(EventSessionStatus.SCHEDULED)
+                .legacyBackfill(false)
+                .build());
+
         eventService.updateEvent(eventId, new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
 
         List<OutboxEvent> before = outboxRepository.findAll();
