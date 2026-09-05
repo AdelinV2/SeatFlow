@@ -255,15 +255,37 @@ public class EventServiceImpl implements EventService {
                     .filter(t -> t.sectionId().equals(vs.sectionId())).toList();
             List<SeatMapSeatResponse> seats = vs.seats() == null ? List.of()
                     : vs.seats().stream().map(this::toSeatMapSeat).toList();
-            return new SeatMapSectionResponse(vs.sectionId(), vs.name(), vs.rowCount(), vs.colCount(), seats, sectionTiers);
+            return new SeatMapSectionResponse(vs.sectionId(), vs.name(), vs.rowCount(), vs.colCount(),
+                    vs.isActive(), vs.positionX(), vs.positionY(), vs.width(), vs.height(),
+                    vs.rotationDeg(), vs.zIndex(), vs.shapeMetadata(), seats, sectionTiers);
         }).toList();
         long totalConfiguredSeats = venue.totalConfiguredSeats() != null ? venue.totalConfiguredSeats() : 0L;
+        long layoutVersion = venue.layoutVersion() != null ? venue.layoutVersion() : 0L;
+        List<EventSeatMapResponse.LayoutElement> layoutElements = venue.elements() == null ? List.of()
+                : venue.elements().stream().map(this::toLayoutElement).toList();
+        log.info("Composed event seat map. eventId={}, venueId={}, layoutVersion={}, sections={}, elements={}, totalConfiguredSeats={}",
+                event.getId(), event.getVenueId(), layoutVersion, mapped.size(), layoutElements.size(),
+                totalConfiguredSeats);
         return new EventSeatMapResponse(event.getId(), event.getVenueId(), event.getTitle(), event.getStatus().name(),
-                event.getEventDate(), venue.name(), venue.capacity(), totalConfiguredSeats, mapped);
+                event.getEventDate(), venue.name(), venue.capacity(), totalConfiguredSeats, mapped,
+                layoutVersion, layoutElements);
     }
 
     private SeatMapSeatResponse toSeatMapSeat(SeatMapVenueSeat vs) {
-        return new SeatMapSeatResponse(vs.seatId(), vs.rowLabel(), vs.seatNumber(), vs.gridX(), vs.gridY(), vs.isActive());
+        return new SeatMapSeatResponse(vs.seatId(), vs.rowLabel(), vs.seatNumber(), vs.gridX(), vs.gridY(),
+                vs.isActive(), vs.positionX(), vs.positionY());
+    }
+
+    private EventSeatMapResponse.LayoutElement toLayoutElement(SeatMapVenueLayout.LayoutElement element) {
+        EventSeatMapResponse.Geometry geometry = element.geometry() == null ? null
+                : new EventSeatMapResponse.Geometry(
+                        element.geometry().x(),
+                        element.geometry().y(),
+                        element.geometry().width(),
+                        element.geometry().height(),
+                        element.geometry().rotationDeg());
+        return new EventSeatMapResponse.LayoutElement(
+                element.elementId(), element.type(), element.label(), geometry, element.zIndex());
     }
 
     @Override

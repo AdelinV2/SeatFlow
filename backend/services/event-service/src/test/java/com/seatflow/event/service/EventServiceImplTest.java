@@ -291,6 +291,16 @@ class EventServiceImplTest {
     }
 
     @Test
+    void getEventSeatMap_hidesUnpublishedEventsWithoutCallingSeatMap() {
+        Event draft = buildEvent(EventStatus.DRAFT);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> eventService.getEventSeatMap(EVENT_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(seatMapClient, never()).getVenueLayout(any());
+    }
+
+    @Test
     void completeExpiredEvents_transitionsToCompletedAndPublishes() {
         Event expired = buildEvent(EventStatus.PUBLISHED);
         expired.setEventDate(Instant.now().minusSeconds(3600));
@@ -309,6 +319,8 @@ class EventServiceImplTest {
 
     @Test
     void getEventSeatMap_composesSectionsWithOverlaidPrices() {
+        UUID seatId = UUID.randomUUID();
+        UUID elementId = UUID.randomUUID();
         Event event = buildEvent(EventStatus.PUBLISHED);
         event.setPricingTiers(List.of(EventPricingTier.builder()
                 .id(UUID.randomUUID()).sectionId(SECTION_ID).categoryName("VIP")
@@ -318,17 +330,127 @@ class EventServiceImplTest {
                 .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_ID, "VIP", new BigDecimal("50"), "USD"));
         when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
                 VENUE_ID, "Grand Hall", 500, 10L,
-                List.of(new SeatMapVenueSection(SECTION_ID, "A", 5, 10,
-                        List.of(new SeatMapVenueSeat(UUID.randomUUID(), "R1", 1, 1, 1, true))))));
+                List.of(new SeatMapVenueSection(SECTION_ID, "A", 5, 10, true,
+                        new BigDecimal("10.5"), new BigDecimal("20.25"),
+                        new BigDecimal("440"), new BigDecimal("220"), new BigDecimal("15.5"), 3,
+                        Map.of("kind", "rect"),
+                        List.of(new SeatMapVenueSeat(seatId, "R1", 7, 1, 2, true,
+                                new BigDecimal("44.5"), new BigDecimal("88.25"))))),
+                7L,
+                List.of(new SeatMapVenueLayout.LayoutElement(elementId, "STAGE", "Main stage",
+                        new SeatMapVenueLayout.Geometry(new BigDecimal("1.5"), new BigDecimal("2.5"),
+                                new BigDecimal("100"), new BigDecimal("50"), new BigDecimal("90")), 1))));
 
         EventSeatMapResponse result = eventService.getEventSeatMap(EVENT_ID);
 
+        assertThat(result.eventId()).isEqualTo(EVENT_ID);
+        assertThat(result.venueId()).isEqualTo(VENUE_ID);
+        assertThat(result.eventTitle()).isEqualTo("Hamlet");
+        assertThat(result.status()).isEqualTo(EventStatus.PUBLISHED.name());
+        assertThat(result.eventDate()).isEqualTo(event.getEventDate());
+        assertThat(result.venueName()).isEqualTo("Grand Hall");
+        assertThat(result.venueCapacity()).isEqualTo(500);
         assertThat(result.sections()).hasSize(1);
         SeatMapSectionResponse section = result.sections().get(0);
+        assertThat(section.sectionId()).isEqualTo(SECTION_ID);
+        assertThat(section.name()).isEqualTo("A");
+        assertThat(section.rowCount()).isEqualTo(5);
+        assertThat(section.colCount()).isEqualTo(10);
+        assertThat(section.isActive()).isTrue();
+        assertThat(section.positionX()).isEqualByComparingTo("10.5");
+        assertThat(section.positionY()).isEqualByComparingTo("20.25");
+        assertThat(section.width()).isEqualByComparingTo("440");
+        assertThat(section.height()).isEqualByComparingTo("220");
+        assertThat(section.rotationDeg()).isEqualByComparingTo("15.5");
+        assertThat(section.zIndex()).isEqualTo(3);
+        assertThat(section.shapeMetadata()).isEqualTo(Map.of("kind", "rect"));
         assertThat(section.pricingTiers()).hasSize(1);
         assertThat(section.pricingTiers().get(0).sectionId()).isEqualTo(SECTION_ID);
+        assertThat(section.seats()).hasSize(1);
+        assertThat(section.seats().get(0).seatId()).isEqualTo(seatId);
+        assertThat(section.seats().get(0).rowLabel()).isEqualTo("R1");
+        assertThat(section.seats().get(0).seatNumber()).isEqualTo(7);
+        assertThat(section.seats().get(0).gridX()).isEqualTo(1);
+        assertThat(section.seats().get(0).gridY()).isEqualTo(2);
+        assertThat(section.seats().get(0).isActive()).isTrue();
+        assertThat(section.seats().get(0).positionX()).isEqualByComparingTo("44.5");
+        assertThat(section.seats().get(0).positionY()).isEqualByComparingTo("88.25");
         assertThat(result.totalConfiguredSeats()).isEqualTo(10L);
-        assertThat(result.venueName()).isEqualTo("Grand Hall");
+        assertThat(result.layoutVersion()).isEqualTo(7L);
+        assertThat(result.layoutElements()).hasSize(1);
+        assertThat(result.layoutElements().get(0).elementId()).isEqualTo(elementId);
+        assertThat(result.layoutElements().get(0).type()).isEqualTo("STAGE");
+        assertThat(result.layoutElements().get(0).label()).isEqualTo("Main stage");
+        assertThat(result.layoutElements().get(0).zIndex()).isEqualTo(1);
+        assertThat(result.layoutElements().get(0).geometry().x()).isEqualByComparingTo("1.5");
+        assertThat(result.layoutElements().get(0).geometry().y()).isEqualByComparingTo("2.5");
+        assertThat(result.layoutElements().get(0).geometry().width()).isEqualByComparingTo("100");
+        assertThat(result.layoutElements().get(0).geometry().height()).isEqualByComparingTo("50");
+        assertThat(result.layoutElements().get(0).geometry().rotationDeg()).isEqualByComparingTo("90");
+    }
+
+    @Test
+    void getEventSeatMap_preservesConfiguredSeatCountFromClient() {
+        Event event = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
+                VENUE_ID, "Grand Hall", 500, 42L,
+                List.of(new SeatMapVenueSection(SECTION_ID, "A", 5, 10,
+                        List.of(new SeatMapVenueSeat(UUID.randomUUID(), "R1", 1, 1, 1, true)))),
+                7L, List.of()));
+
+        EventSeatMapResponse result = eventService.getEventSeatMap(EVENT_ID);
+
+        assertThat(result.totalConfiguredSeats()).isEqualTo(42L);
+        assertThat(result.layoutVersion()).isEqualTo(7L);
+        assertThat(result.layoutElements()).isEmpty();
+    }
+
+    @Test
+    void getEventSeatMap_nullElements_mapsToEmptyList() {
+        Event event = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
+                VENUE_ID, "Grand Hall", 500, 3L, List.of(), 2L, null));
+
+        EventSeatMapResponse result = eventService.getEventSeatMap(EVENT_ID);
+
+        assertThat(result.layoutElements()).isEmpty();
+        assertThat(result.layoutVersion()).isEqualTo(2L);
+        assertThat(result.sections()).isEmpty();
+    }
+
+    @Test
+    void getEventSeatMap_keepsInactiveSectionInactiveAndUnpricedSectionWithoutTiers() {
+        UUID otherSectionId = UUID.randomUUID();
+        Event event = buildEvent(EventStatus.PUBLISHED);
+        event.setPricingTiers(List.of(EventPricingTier.builder()
+                .id(UUID.randomUUID()).sectionId(SECTION_ID).categoryName("VIP")
+                .price(new BigDecimal("50")).currency("USD").build()));
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(tierMapper.toResponse(any(EventPricingTier.class)))
+                .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_ID, "VIP", new BigDecimal("50"), "USD"));
+        when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
+                VENUE_ID, "Grand Hall", 500, 2L,
+                List.of(
+                        new SeatMapVenueSection(SECTION_ID, "A", 5, 10, true,
+                                BigDecimal.ZERO, BigDecimal.ZERO,
+                                new BigDecimal("440"), new BigDecimal("220"),
+                                BigDecimal.ZERO, 0, null, List.of()),
+                        new SeatMapVenueSection(otherSectionId, "B", 2, 4, false,
+                                BigDecimal.ZERO, BigDecimal.ZERO,
+                                new BigDecimal("176"), new BigDecimal("88"),
+                                BigDecimal.ZERO, 0, null, List.of())),
+                1L, List.of()));
+
+        EventSeatMapResponse result = eventService.getEventSeatMap(EVENT_ID);
+
+        assertThat(result.sections()).hasSize(2);
+        assertThat(result.sections().get(0).pricingTiers()).hasSize(1);
+        SeatMapSectionResponse inactive = result.sections().get(1);
+        assertThat(inactive.sectionId()).isEqualTo(otherSectionId);
+        assertThat(inactive.isActive()).isFalse();
+        assertThat(inactive.pricingTiers()).isEmpty();
     }
 
     private static class RangeProj implements EventPriceRangeSummaryProjection {
