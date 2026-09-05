@@ -1,0 +1,397 @@
+<div class="admin-session-manager max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+  <!-- Header / Breadcrumb -->
+  <div class="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-[var(--color-border)]">
+    <div class="flex items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)]">
+      <a routerLink="/admin/events" class="hover:text-[var(--color-text-primary)] transition-colors">
+        Events
+      </a>
+      <span>/</span>
+      <span class="text-[var(--color-text-primary)]">
+        {{ event()?.title || 'Event' }}
+      </span>
+      <span>/</span>
+      <span class="text-indigo-600 dark:text-indigo-400 font-bold">Showtime Sessions</span>
+    </div>
+
+    <div class="flex items-center gap-2">
+      @if (eventId()) {
+        <a
+          [routerLink]="['/admin/events', eventId()!, 'pricing']"
+          class="btn-spring inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--color-border)] hover:bg-indigo-500/10 hover:text-indigo-600 text-[var(--color-text-secondary)] transition-colors"
+        >
+          <span>Pricing Matrix</span>
+        </a>
+      }
+      <a
+        routerLink="/admin/events"
+        class="btn-spring inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--color-border)] hover:bg-[var(--color-canvas)] text-[var(--color-text-secondary)] transition-colors"
+      >
+        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+        <span>Back to Events</span>
+      </a>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="space-y-4 p-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <app-skeleton-loader height="28px" width="40%"/>
+      <app-skeleton-loader height="100px" width="100%"/>
+      <app-skeleton-loader height="240px" width="100%"/>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="p-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-center">
+      <p class="font-bold">{{ errorMessage() }}</p>
+      <button
+        type="button"
+        (click)="eventId() && loadData(eventId()!)"
+        class="mt-4 px-4 py-2 bg-rose-600 text-white font-bold text-xs rounded-xl hover:bg-rose-500 transition-colors"
+      >
+        Try Again
+      </button>
+    </div>
+  } @else {
+    <!-- Event Banner Summary Card -->
+    @if (event(); as ev) {
+      <div class="mb-8 p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+        <div class="flex items-center gap-4 min-w-0">
+          <div class="relative w-16 aspect-video rounded-lg overflow-hidden border border-[var(--color-border)] bg-slate-900 shrink-0">
+            @if (ev.bannerUrl) {
+              <img [src]="ev.bannerUrl" [alt]="ev.title" class="w-full h-full object-cover" />
+            } @else {
+              <div class="w-full h-full flex items-center justify-center text-xs opacity-50">🎭</div>
+            }
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-lg font-black text-[var(--color-text-primary)] truncate">{{ ev.title }}</h1>
+            <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-[var(--color-text-secondary)]">
+              <span class="font-semibold">{{ ev.venueName || 'Venue' }}</span>
+              <span>·</span>
+              <span>{{ ev.eventDate | sfDate }}</span>
+              <span>·</span>
+              <span
+                class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border"
+                [ngClass]="{
+                  'bg-amber-500/10 text-amber-600 border-amber-500/20': ev.status === 'DRAFT',
+                  'bg-emerald-500/10 text-emerald-600 border-emerald-500/20': ev.status === 'PUBLISHED',
+                  'bg-rose-500/10 text-rose-600 border-rose-500/20': ev.status === 'CANCELLED'
+                }"
+              >
+                {{ ev.status }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          (click)="openCreateModal()"
+          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 cursor-pointer shrink-0"
+        >
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>Add Showtime Session</span>
+        </button>
+      </div>
+    }
+
+    <!-- Sessions List Table / Empty State -->
+    @if (sortedSessions().length === 0) {
+      <div class="text-center py-16 border border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)]">
+        <div class="size-16 rounded-2xl bg-indigo-500/10 text-indigo-500 mx-auto flex items-center justify-center text-3xl mb-4">
+          ⏱
+        </div>
+        <h3 class="text-base font-bold text-[var(--color-text-primary)]">No showtime sessions configured</h3>
+        <p class="text-xs text-[var(--color-text-muted)] mt-1 mb-6 max-w-sm mx-auto">
+          Add at least one scheduled session to allow customers to select seats and book tickets.
+        </p>
+        <button
+          type="button"
+          (click)="openCreateModal()"
+          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20"
+        >
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span>Create First Session</span>
+        </button>
+      </div>
+    } @else {
+      <div class="border border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)] shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[900px] text-left border-collapse">
+            <thead>
+              <tr class="border-b border-[var(--color-border)] bg-[var(--color-canvas)]/50 text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                <th class="py-3.5 px-4">Starts At</th>
+                <th class="py-3.5 px-4">Ends At</th>
+                <th class="py-3.5 px-4">Ticket Sales Window</th>
+                <th class="py-3.5 px-4">Timezone</th>
+                <th class="py-3.5 px-4">Status</th>
+                <th class="py-3.5 px-4">Lock Status</th>
+                <th class="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--color-border)] text-xs">
+              @for (sess of sortedSessions(); track sess.id) {
+                @let lock = isSessionLocked(sess);
+                <tr class="hover:bg-[var(--color-canvas)]/30 transition-colors">
+                  <!-- Starts At -->
+                  <td class="py-3.5 px-4 font-bold text-[var(--color-text-primary)] whitespace-nowrap">
+                    <div>{{ sess.startsAt | sfDate:'short' }}</div>
+                    <div class="text-[11px] font-normal text-indigo-600 dark:text-indigo-400 mt-0.5">
+                      {{ sess.startsAt | sfDate:'time' }}
+                    </div>
+                  </td>
+
+                  <!-- Ends At -->
+                  <td class="py-3.5 px-4 text-[var(--color-text-secondary)] whitespace-nowrap">
+                    <div>{{ sess.endsAt | sfDate:'short' }}</div>
+                    <div class="text-[11px] font-normal text-[var(--color-text-muted)] mt-0.5">
+                      {{ sess.endsAt | sfDate:'time' }}
+                    </div>
+                  </td>
+
+                  <!-- Ticket Sales Window -->
+                  <td class="py-3.5 px-4 text-[var(--color-text-secondary)] whitespace-nowrap">
+                    @if (sess.saleStartsAt) {
+                      <div>From: {{ sess.saleStartsAt | sfDate:'short' }} {{ sess.saleStartsAt | sfDate:'time' }}</div>
+                      @if (sess.saleEndsAt) {
+                        <div class="text-[11px] text-[var(--color-text-muted)]">
+                          To: {{ sess.saleEndsAt | sfDate:'short' }} {{ sess.saleEndsAt | sfDate:'time' }}
+                        </div>
+                      }
+                    } @else {
+                      <span class="text-[11px] text-[var(--color-text-muted)] italic">Immediate on publish</span>
+                    }
+                  </td>
+
+                  <!-- Timezone -->
+                  <td class="py-3.5 px-4 font-mono text-[11px] text-[var(--color-text-secondary)]">
+                    {{ sess.timezone || 'UTC' }}
+                  </td>
+
+                  <!-- Status -->
+                  <td class="py-3.5 px-4 whitespace-nowrap">
+                    <span
+                      class="px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase"
+                      [ngClass]="{
+                        'bg-emerald-500/10 text-emerald-600 border-emerald-500/20': sess.status === 'SCHEDULED',
+                        'bg-rose-500/10 text-rose-600 border-rose-500/20': sess.status === 'CANCELLED',
+                        'bg-slate-500/10 text-slate-500 border-slate-500/20': sess.status === 'COMPLETED'
+                      }"
+                    >
+                      {{ sess.status }}
+                    </span>
+                  </td>
+
+                  <!-- Lock Status -->
+                  <td class="py-3.5 px-4 whitespace-nowrap">
+                    @if (lock.locked) {
+                      <span
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                        [title]="lock.reason || 'Locked'"
+                      >
+                        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        <span>Locked</span>
+                      </span>
+                    } @else {
+                      <span class="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                        </svg>
+                        <span>Editable</span>
+                      </span>
+                    }
+                  </td>
+
+                  <!-- Actions -->
+                  <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                    <div class="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        (click)="openEditModal(sess)"
+                        [disabled]="lock.locked"
+                        [title]="lock.locked ? ('Locked: ' + lock.reason) : 'Edit Showtime Session'"
+                        class="inline-flex size-8 items-center justify-center rounded-lg border border-[var(--color-border)] hover:bg-indigo-500/10 hover:text-indigo-600 text-[var(--color-text-secondary)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        (click)="openDeleteModal(sess)"
+                        [disabled]="lock.locked"
+                        [title]="lock.locked ? ('Locked: ' + lock.reason) : 'Delete Showtime Session'"
+                        class="inline-flex size-8 items-center justify-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Create / Edit Session Modal -->
+  @if (showEditModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div class="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl space-y-5 animate-scale-up">
+        <div class="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+          <h2 class="text-base font-bold text-[var(--color-text-primary)]">
+            {{ editingSession() ? 'Edit Showtime Session' : 'Add Showtime Session' }}
+          </h2>
+          <button
+            type="button"
+            (click)="closeEditModal()"
+            class="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        @if (formErrors().length > 0) {
+          <div class="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs space-y-1">
+            @for (err of formErrors(); track err) {
+              <div>• {{ err }}</div>
+            }
+          </div>
+        }
+
+        <div class="space-y-4 text-xs">
+          <!-- Starts At -->
+          <div>
+            <label class="block font-bold text-[var(--color-text-primary)] mb-1">
+              Start Date & Time <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              [ngModel]="formStartsAt()"
+              (ngModelChange)="formStartsAt.set($event)"
+              class="w-full px-3 py-2 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <!-- Ends At -->
+          <div>
+            <label class="block font-bold text-[var(--color-text-primary)] mb-1">
+              End Date & Time <span class="text-rose-500">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              [ngModel]="formEndsAt()"
+              (ngModelChange)="formEndsAt.set($event)"
+              class="w-full px-3 py-2 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <!-- Sale Starts At -->
+          <div>
+            <label class="block font-semibold text-[var(--color-text-secondary)] mb-1">
+              Ticket Sales Start (Optional - defaults to immediate on publish)
+            </label>
+            <input
+              type="datetime-local"
+              [ngModel]="formSaleStartsAt()"
+              (ngModelChange)="formSaleStartsAt.set($event)"
+              class="w-full px-3 py-2 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <!-- Sale Ends At -->
+          <div>
+            <label class="block font-semibold text-[var(--color-text-secondary)] mb-1">
+              Ticket Sales End (Optional - must be before or at session end)
+            </label>
+            <input
+              type="datetime-local"
+              [ngModel]="formSaleEndsAt()"
+              (ngModelChange)="formSaleEndsAt.set($event)"
+              class="w-full px-3 py-2 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <!-- Timezone -->
+          <div>
+            <label class="block font-bold text-[var(--color-text-primary)] mb-1">
+              Timezone
+            </label>
+            <input
+              type="text"
+              [ngModel]="formTimezone()"
+              (ngModelChange)="formTimezone.set($event)"
+              placeholder="e.g. Europe/Bucharest or UTC"
+              class="w-full px-3 py-2 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 font-mono"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
+          <button
+            type="button"
+            (click)="closeEditModal()"
+            class="px-4 py-2 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            (click)="saveSession()"
+            [disabled]="isSaving()"
+            class="btn-spring px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 cursor-pointer disabled:opacity-50"
+          >
+            {{ isSaving() ? 'Saving...' : (editingSession() ? 'Update Showtime' : 'Create Showtime') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Delete Confirmation Modal -->
+  @if (sessionToDelete(); as toDelete) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div class="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl space-y-4 animate-scale-up">
+        <h2 class="text-base font-bold text-[var(--color-text-primary)]">Delete Showtime Session?</h2>
+        <p class="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+          Are you sure you want to delete the showtime on
+          <strong class="text-[var(--color-text-primary)]">{{ toDelete.startsAt | sfDate:'short' }} at {{ toDelete.startsAt | sfDate:'time' }}</strong>?
+          This action cannot be undone.
+        </p>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
+          <button
+            type="button"
+            (click)="closeDeleteModal()"
+            class="px-4 py-2 text-xs font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            (click)="confirmDelete()"
+            [disabled]="isDeleting()"
+            class="btn-spring px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50"
+          >
+            {{ isDeleting() ? 'Deleting...' : 'Delete Showtime' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

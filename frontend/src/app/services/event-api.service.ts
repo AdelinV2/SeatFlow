@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   EventCategory,
   EventDetail,
+  EventSession,
   EventSummary,
   PagedResult,
   VenueDetail,
@@ -46,6 +47,10 @@ export class EventApiService {
 
   getEventById(id: string): Observable<EventDetail> {
     return this.http.get<EventDetail>(`${this.baseUrl}/${id}`);
+  }
+
+  getEventSessions(eventId: string): Observable<EventSession[]> {
+    return this.http.get<EventSession[]>(`${this.baseUrl}/${eventId}/sessions`);
   }
 
   getVenueById(venueId: string): Observable<VenueDetail> {

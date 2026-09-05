@@ -9,6 +9,21 @@ export type EventCategory =
 
 export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'COMPLETED';
 
+export type EventSessionStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED';
+
+export interface EventSession {
+  id: string;
+  eventId: string;
+  startsAt: string;
+  endsAt: string;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  status: EventSessionStatus;
+  timezone?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface EventPricingTier {
   id?: string;
   sectionId: string;
@@ -42,6 +57,7 @@ export interface EventDetail {
   eventDate: string;
   status: EventStatus;
   pricingTiers: EventPricingTier[];
+  sessions?: EventSession[];
   createdAt: string;
   updatedAt?: string;
   // Enriched venue fields (fetched via VenueApiService.getVenueById(venueId))

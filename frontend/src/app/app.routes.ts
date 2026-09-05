@@ -192,6 +192,14 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'admin/events/:id/sessions',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin/events/admin-session-manager/admin-session-manager.component').then(
+        (m) => m.AdminSessionManagerComponent,
+      ),
+  },
+  {
     path: '**',
     redirectTo: '',
   },

@@ -2,8 +2,8 @@
   <div class="page-content">
     <a class="back-link" [routerLink]="['/events', seatMap()?.eventId ?? id()]">← Event details</a>
 
-    @if (isLoading()) {
-      <section class="loading-panel" aria-busy="true" aria-label="Loading seat map">
+    @if (isLoadingEvent()) {
+      <section class="loading-panel" aria-busy="true" aria-label="Loading event">
         <div class="skeleton-shimmer heading-skeleton"></div>
         <div class="skeleton-shimmer map-skeleton"></div>
       </section>
@@ -14,64 +14,158 @@
         <p>{{ loadError() }}</p>
         <button type="button" (click)="retryLoad()">Try again</button>
       </section>
-    } @else if (seatMap(); as map) {
-      <header class="event-heading animate-fade-in-up">
-        <div>
-          <p class="eyebrow">{{ map.venueName }}</p>
-          <h1>{{ map.eventTitle }}</h1>
-          <p>{{ map.eventDate | sfDate: 'full' }} · {{ map.totalConfiguredSeats }} seats</p>
+    } @else {
+      <!-- Warning alert if invalid session deep-linked -->
+      @if (sessionWarning()) {
+        <div class="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-3">
+          <svg class="size-4.5 shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span>{{ sessionWarning() }}</span>
         </div>
-        <span class="live-status" [class.connected]="connectionStatus() === 'CONNECTED'">
-          <i></i>
-          {{ connectionStatus() === 'CONNECTED' ? 'Live availability' : 'Connecting live updates' }}
-        </span>
-      </header>
-
-      @if (!isAuthenticated()) {
-        <section class="guest-email-card" aria-labelledby="guest-email-heading">
-          <div>
-            <h2 id="guest-email-heading">Where should we send your hold?</h2>
-            <p>Your email is required to secure seats as a guest.</p>
-          </div>
-          <label>
-            <span>Email address</span>
-            <input
-              type="email"
-              autocomplete="email"
-              placeholder="you@example.com"
-              [value]="guestEmail()"
-              [attr.aria-invalid]="guestEmailTouched() && !guestEmailIsValid()"
-              [attr.aria-describedby]="
-                guestEmailTouched() && !guestEmailIsValid() ? 'guest-email-error' : null
-              "
-              (input)="updateGuestEmail($event)"
-              (blur)="guestEmailTouched.set(true)"
-              (keydown.enter)="createHold()"
-            />
-            @if (guestEmailTouched() && !guestEmailIsValid()) {
-              <small id="guest-email-error">Enter a valid email address.</small>
-            }
-          </label>
-        </section>
       }
 
-      <app-seat-map
-        [seats]="seats()"
-        [sectionsData]="map.sections ?? []"
-        [layoutElements]="map.layoutElements ?? map.elements ?? []"
-        [maxSeats]="maxSeats"
-        [selectedSeatIds]="selectedSeatIds()"
-        [conflictingSeatIds]="conflictingSeatIds()"
-        (seatToggled)="toggleSeat($event)"
-      />
+      <!-- No session selected: prompt user to choose showtime first -->
+      @if (!selectedSession()) {
+        <section class="session-required-panel rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 sm:p-8 shadow-sm space-y-6">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Step 1</span>
+            <h1 class="text-2xl font-black text-[var(--color-text-primary)] mt-1">Select a Showtime</h1>
+            <p class="text-sm text-[var(--color-text-secondary)] mt-1">
+              Please choose which date and time you would like to attend before selecting seats.
+            </p>
+          </div>
+
+          <app-session-selector
+            [sessions]="sessions()"
+            [selectedSessionId]="null"
+            (sessionSelected)="onSelectSession($event)"
+          />
+        </section>
+      } @else {
+        <!-- Session is selected -->
+        <header class="event-heading animate-fade-in-up">
+          <div>
+            <p class="eyebrow">{{ seatMap()?.venueName || event()?.venueName }}</p>
+            <h1>{{ seatMap()?.eventTitle || event()?.title }}</h1>
+
+            <!-- Active Showtime Pill & Switcher Button -->
+            @if (selectedSession(); as sess) {
+              <div class="flex flex-wrap items-center gap-3 mt-2">
+                <div class="inline-flex items-center gap-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                  <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  <span>{{ sess.startsAt | sfDate:'short' }} · {{ sess.startsAt | sfDate:'time' }} - {{ sess.endsAt | sfDate:'time' }}</span>
+                  @if (sess.timezone) {
+                    <span class="opacity-75 font-mono">({{ sess.timezone }})</span>
+                  }
+                </div>
+
+                @if (sessions().length > 1) {
+                  <button
+                    type="button"
+                    (click)="toggleSessionPicker()"
+                    [disabled]="isCreatingHold()"
+                    [title]="isCreatingHold() ? 'Please wait until your hold request completes' : 'Change showtime'"
+                    class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                  >
+                    {{ showSessionPicker() ? '✕ Close showtimes' : '⇄ Change showtime' }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+
+          <span class="live-status" [class.connected]="connectionStatus() === 'CONNECTED'">
+            <i></i>
+            {{ connectionStatus() === 'CONNECTED' ? 'Live availability' : 'Connecting live updates' }}
+          </span>
+        </header>
+
+        <!-- Collapsible showtime selector when changing session -->
+        @if (showSessionPicker()) {
+          <div class="showtime-switcher-card mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-[var(--color-text-primary)]">Switch to another showtime</h3>
+              <p class="text-xs text-[var(--color-text-muted)]">Switching showtimes will release any currently selected seats.</p>
+            </div>
+            <app-session-selector
+              [sessions]="sessions()"
+              [selectedSessionId]="selectedSession()?.id ?? null"
+              (sessionSelected)="onSelectSession($event)"
+            />
+          </div>
+        }
+
+        <!-- Availability-error state (REV-002 FIX-2): the authoritative baseline
+             failed, so seats are non-authoritative. Hide the map, keep
+             selection/hold disabled, and offer a retry until it succeeds. -->
+        @if (seatAvailabilityError()) {
+          <section class="error-panel" role="alert" aria-label="Seat availability unavailable">
+            <span aria-hidden="true">⌁</span>
+            <h1>Live seat availability is unavailable</h1>
+            <p>We could not confirm the latest seat status for this showtime. Seats stay unbookable until availability loads successfully.</p>
+            <button type="button" (click)="retryAvailability()">Retry availability</button>
+          </section>
+        } @else if (isLoadingSeatMap() || isTransitioningSession() || seatAvailabilityLoading()) {
+          <section class="loading-panel" aria-busy="true" aria-label="Loading seat map">
+            <div class="skeleton-shimmer heading-skeleton"></div>
+            <div class="skeleton-shimmer map-skeleton"></div>
+          </section>
+        } @else if (seatMap(); as map) {
+          @if (!isAuthenticated()) {
+            <section class="guest-email-card" aria-labelledby="guest-email-heading">
+              <div>
+                <h2 id="guest-email-heading">Where should we send your hold?</h2>
+                <p>Your email is required to secure seats as a guest.</p>
+              </div>
+              <label>
+                <span>Email address</span>
+                <input
+                  type="email"
+                  autocomplete="email"
+                  placeholder="you@example.com"
+                  [value]="guestEmail()"
+                  [attr.aria-invalid]="guestEmailTouched() && !guestEmailIsValid()"
+                  [attr.aria-describedby]="
+                    guestEmailTouched() && !guestEmailIsValid() ? 'guest-email-error' : null
+                  "
+                  (input)="updateGuestEmail($event)"
+                  (blur)="guestEmailTouched.set(true)"
+                  (keydown.enter)="createHold()"
+                />
+                @if (guestEmailTouched() && !guestEmailIsValid()) {
+                  <small id="guest-email-error">Enter a valid email address.</small>
+                }
+              </label>
+            </section>
+          }
+
+          <app-seat-map
+            [seats]="seats()"
+            [sectionsData]="map.sections ?? []"
+            [layoutElements]="map.layoutElements ?? map.elements ?? []"
+            [maxSeats]="maxSeats"
+            [selectedSeatIds]="selectedSeatIds()"
+            [conflictingSeatIds]="conflictingSeatIds()"
+            (seatToggled)="toggleSeat($event)"
+          />
+
+          <app-selection-dock
+            [selectedSeats]="selectedSeats()"
+            [maxSeats]="maxSeats"
+            [isCreatingHold]="isCreatingHold() || isTransitioningSession() || seatAvailabilityLoading()"
+            (seatRemoved)="removeSeat($event)"
+            (checkoutTriggered)="createHold()"
+          />
+        }
+      }
     }
   </div>
-
-  <app-selection-dock
-    [selectedSeats]="selectedSeats()"
-    [maxSeats]="maxSeats"
-    [isCreatingHold]="isCreatingHold()"
-    (seatRemoved)="removeSeat($event)"
-    (checkoutTriggered)="createHold()"
-  />
 </main>

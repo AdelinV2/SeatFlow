@@ -55,7 +55,8 @@ export interface SeatStatusUpdateMessage {
 }
 
 export interface SeatAvailabilityResponse {
-  eventId: string;
+  eventSessionId?: string;
+  eventId?: string;
   seatStatuses?: {
     seatId: string;
     status: SeatStatus;

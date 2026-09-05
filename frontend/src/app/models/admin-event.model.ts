@@ -18,6 +18,22 @@ export interface UpdateEventRequest {
   status?: EventStatus;
 }
 
+export interface CreateEventSessionRequest {
+  startsAt: string;
+  endsAt: string;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  timezone?: string | null;
+}
+
+export interface UpdateEventSessionRequest {
+  startsAt: string;
+  endsAt: string;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  timezone?: string | null;
+}
+
 export interface PricingTierConfig {
   sectionId: string;
   categoryName: string;

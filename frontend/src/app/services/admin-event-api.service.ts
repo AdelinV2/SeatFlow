@@ -1,11 +1,13 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { EventDetail, EventPricingTier, PagedResult } from '../models/event.model';
+import { EventDetail, EventPricingTier, EventSession, PagedResult } from '../models/event.model';
 import {
   ConfigurePricingRequest,
   CreateEventRequest,
+  CreateEventSessionRequest,
   UpdateEventRequest,
+  UpdateEventSessionRequest,
 } from '../models/admin-event.model';
 
 @Injectable({ providedIn: 'root' })
@@ -50,5 +52,28 @@ export class AdminEventApiService {
 
   configurePricing(eventId: string, req: ConfigurePricingRequest): Observable<EventPricingTier[]> {
     return this.http.post<EventPricingTier[]>(`${this.baseUrl}/${eventId}/pricing`, req);
+  }
+
+  getEventSessions(eventId: string): Observable<EventSession[]> {
+    return this.http.get<EventSession[]>(`${this.baseUrl}/${eventId}/sessions`);
+  }
+
+  createEventSession(
+    eventId: string,
+    req: CreateEventSessionRequest,
+  ): Observable<EventSession> {
+    return this.http.post<EventSession>(`${this.baseUrl}/${eventId}/sessions`, req);
+  }
+
+  updateEventSession(
+    eventId: string,
+    sessionId: string,
+    req: UpdateEventSessionRequest,
+  ): Observable<EventSession> {
+    return this.http.put<EventSession>(`${this.baseUrl}/${eventId}/sessions/${sessionId}`, req);
+  }
+
+  deleteEventSession(eventId: string, sessionId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${eventId}/sessions/${sessionId}`);
   }
 }
