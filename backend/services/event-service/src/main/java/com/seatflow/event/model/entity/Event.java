@@ -21,8 +21,7 @@ import java.util.UUID;
 @Table(
     name = "events",
     indexes = {
-        @Index(name = "idx_events_status_date", columnList = "status, event_date"),
-        @Index(name = "idx_events_category_date", columnList = "category, event_date"),
+        @Index(name = "idx_events_status_created", columnList = "status, created_at"),
         @Index(name = "idx_events_venue_id", columnList = "venue_id"),
         @Index(name = "idx_events_created_at", columnList = "created_at DESC")
     }
@@ -61,9 +60,11 @@ public class Event {
     @Column(name = "banner_url", length = 1000)
     private String bannerUrl;
 
-    @Column(name = "event_date", nullable = false)
-    @ToString.Include
-    private Instant eventDate;
+    // P12-007: event-level schedule ownership removed (ADR-011). The concrete
+    // showing schedule lives exclusively on EventSession (startsAt/endsAt).
+    // Event retains catalog identity only: venue/pricing/category/status.
+    // Search/display derive the next visible session via event_sessions join;
+    // that derived instant is metadata, never a booking key.
 
     @Column(nullable = false, length = 30)
     @Enumerated(EnumType.STRING)

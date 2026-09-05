@@ -62,7 +62,6 @@ class EventSessionServiceImplTest {
                 .title("Hamlet")
                 .description("A play")
                 .category(EventCategory.THEATRE)
-                .eventDate(Instant.now().plusSeconds(86400 * 30))
                 .status(status)
                 .build();
     }

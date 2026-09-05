@@ -68,7 +68,6 @@ describe('CheckoutComponent', () => {
         eventId: reservation.eventId,
         venueId: 'venue-1',
         eventTitle: 'Concert',
-        eventDate: '2099-08-30T20:00:00Z',
         venueName: 'Arena',
         venueCapacity: 2,
         totalConfiguredSeats: 2,

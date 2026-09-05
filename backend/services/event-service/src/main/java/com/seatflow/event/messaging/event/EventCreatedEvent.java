@@ -13,6 +13,6 @@ public record EventCreatedEvent(
         @Schema(description = "Owning venue UUID") UUID venueId,
         @Schema(description = "Event title") String title,
         @Schema(description = "Catalog category") EventCategory category,
-        @Schema(description = "UTC start time") Instant eventDate,
+        // P12-007: legacy eventDate removed. Showing schedule lives on EventSession.
         @Schema(description = "Occurrence timestamp") Instant occurredAt
 ) implements DomainEvent {}

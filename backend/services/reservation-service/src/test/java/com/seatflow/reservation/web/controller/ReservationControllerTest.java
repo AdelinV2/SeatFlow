@@ -60,17 +60,17 @@ class ReservationControllerTest {
                 List.of(), Instant.now());
     }
 
-    private String validBody(UUID sessionId, UUID eventId, UUID seatId, String idempotencyKey) {
+    private String validBody(UUID sessionId, UUID seatId, String idempotencyKey) {
+        // P12-007: session is the sole booking key; no eventId field exists.
         return """
                 {
                   "eventSessionId": "%s",
-                  "eventId": "%s",
                   "customerEmail": "guest@example.com",
                   "seatIds": ["%s"],
                   "seatPrices": ["50.00"],
                   "idempotencyKey": "%s"
                 }
-                """.formatted(sessionId, eventId, seatId, idempotencyKey);
+                """.formatted(sessionId, seatId, idempotencyKey);
     }
 
     @Test
@@ -83,7 +83,7 @@ class ReservationControllerTest {
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(sessionId, eventId, seatId, "idem-1")))
+                        .content(validBody(sessionId, seatId, "idem-1")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(reservationId.toString()));
     }
@@ -99,10 +99,32 @@ class ReservationControllerTest {
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(sessionId, eventId, seatId, "idem-2"))
+                        .content(validBody(sessionId, seatId, "idem-2"))
                         .with(jwt().jwt(j -> j.subject(userId.toString()))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(reservationId.toString()));
+    }
+
+    @Test
+    void createReservation_withLegacyEventId_returns400() throws Exception {
+        // P12-007: legacy eventId booking key is rejected, never silently ignored.
+        UUID sessionId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        String body = """
+                {
+                  "eventSessionId": "%s",
+                  "eventId": "%s",
+                  "customerEmail": "guest@example.com",
+                  "seatIds": ["%s"],
+                  "seatPrices": ["50.00"],
+                  "idempotencyKey": "idem-legacy"
+                }
+                """.formatted(sessionId, UUID.randomUUID(), seatId);
+
+        mockMvc.perform(post("/api/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -128,17 +150,15 @@ class ReservationControllerTest {
     @Test
     void createReservation_withoutGuestEmail_returns400() throws Exception {
         UUID sessionId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         String body = """
                  {
                    "eventSessionId": "%s",
-                   "eventId": "%s",
                    "seatIds": ["%s"],
                    "seatPrices": ["50.00"],
                    "idempotencyKey": "idem-3"
                  }
-                 """.formatted(sessionId, eventId, seatId);
+                 """.formatted(sessionId, seatId);
 
         when(reservationService.createReservation(any(), any()))
                 .thenThrow(new com.seatflow.common.domain.exception.ValidationException(
@@ -178,14 +198,13 @@ class ReservationControllerTest {
     @Test
     void createReservation_whenConflict_returns409() throws Exception {
         UUID sessionId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         when(reservationService.createReservation(any(), any()))
                 .thenThrow(new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED));
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(sessionId, eventId, seatId, "idem-5")))
+                        .content(validBody(sessionId, seatId, "idem-5")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value(ErrorCode.SEAT_ALREADY_RESERVED.getCode()));
     }

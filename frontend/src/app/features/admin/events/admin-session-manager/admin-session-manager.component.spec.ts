@@ -40,7 +40,6 @@ describe('AdminSessionManagerComponent', () => {
     description: 'Annual Festival',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/fest.jpg',
-    eventDate: '2028-10-10T18:00:00Z',
     status: 'DRAFT',
     pricingTiers: [],
     sessions: mockSessions,

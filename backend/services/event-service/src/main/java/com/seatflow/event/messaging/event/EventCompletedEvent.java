@@ -11,6 +11,6 @@ public record EventCompletedEvent(
     @Schema(description = "Event unique identifier") UUID eventId,
     @Schema(description = "Associated venue identifier") UUID venueId,
     @Schema(description = "Event title") String title,
-    @Schema(description = "Scheduled start time") Instant eventDate,
+    // P12-007: legacy eventDate removed. Showing schedule lives on EventSession.
     @Schema(description = "Completion timestamp") Instant occurredAt
 ) implements DomainEvent {}

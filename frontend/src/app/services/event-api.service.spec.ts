@@ -36,7 +36,7 @@ describe('EventApiService', () => {
           title: 'Concert A',
           category: 'CONCERT',
           bannerUrl: 'https://example.com/banner.jpg',
-          eventDate: '2026-09-15T19:00:00Z',
+          nextSessionStartsAt: '2026-09-15T19:00:00Z',
           minPrice: 50,
           maxPrice: 150,
           currency: 'USD',
@@ -63,7 +63,7 @@ describe('EventApiService', () => {
 
   it('should pass category, search, and sort parameters to GET /api/events', () => {
     service
-      .getEvents({ category: 'CONCERT', search: 'Rock', sort: 'eventDate,asc', page: 1, size: 10 })
+      .getEvents({ category: 'CONCERT', search: 'Rock', sort: 'nextSessionStartsAt,asc', page: 1, size: 10 })
       .subscribe();
 
     const req = httpMock.expectOne(
@@ -71,7 +71,7 @@ describe('EventApiService', () => {
         r.url === '/api/events' &&
         r.params.get('category') === 'CONCERT' &&
         r.params.get('search') === 'Rock' &&
-        r.params.get('sort') === 'eventDate,asc' &&
+        r.params.get('sort') === 'nextSessionStartsAt,asc' &&
         r.params.get('page') === '1' &&
         r.params.get('size') === '10',
     );
@@ -87,7 +87,6 @@ describe('EventApiService', () => {
       description: 'Classic Shakespeare production',
       category: 'THEATRE',
       bannerUrl: 'https://example.com/hamlet.jpg',
-      eventDate: '2026-10-01T20:00:00Z',
       status: 'PUBLISHED',
       pricingTiers: [
         {
@@ -143,3 +142,4 @@ describe('EventApiService', () => {
     req.flush({ eventId: 'ev-123', sections: [] });
   });
 });
+

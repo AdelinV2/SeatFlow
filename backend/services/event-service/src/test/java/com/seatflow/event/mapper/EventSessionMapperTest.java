@@ -27,7 +27,6 @@ class EventSessionMapperTest {
                 .title("Hamlet")
                 .description("A play")
                 .category(EventCategory.THEATRE)
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .build();
     }

@@ -2,13 +2,11 @@ package com.seatflow.event.web.dto.request;
 
 import com.seatflow.event.model.enums.EventCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @Schema(description = "Request body for creating a new catalog event")
@@ -34,11 +32,11 @@ public record CreateEventRequest(
     @Schema(description = "Public banner image URL", example = "https://cdn.example.com/hamlet.png")
     @Size(max = 1000, message = "Banner URL must not exceed 1000 characters")
     @Pattern(regexp = "^https?://.+$", message = "bannerUrl must be an HTTP(S) URL")
-    String bannerUrl,
+    String bannerUrl
 
-    @Schema(description = "UTC start time of the event", example = "2027-05-01T19:30:00Z", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotNull(message = "Event date is required")
-    @Future(message = "Event date must be in the future")
-    Instant eventDate
+    // P12-007: legacy eventDate schedule field removed (ADR-011). Showing
+    // schedule is created exclusively via POST /api/admin/events/{id}/sessions.
+    // Unknown JSON properties (including legacy eventDate/startsAt) are rejected
+    // with 400 via FAIL_ON_UNKNOWN_PROPERTIES, never silently ignored.
 
 ) {}

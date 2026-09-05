@@ -68,7 +68,8 @@
             <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-[var(--color-text-secondary)]">
               <span class="font-semibold">{{ ev.venueName || 'Venue' }}</span>
               <span>·</span>
-              <span>{{ ev.eventDate | sfDate }}</span>
+              <!-- P12-007: schedule lives on sessions; header shows session count. -->
+              <span>{{ sessions().length }} {{ sessions().length === 1 ? 'session' : 'sessions' }}</span>
               <span>·</span>
               <span
                 class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border"

@@ -25,7 +25,6 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -158,17 +157,21 @@ public class EventClientImpl implements EventClient {
     }
 
     private EventPricingDetails mapToPricingDetails(UUID eventId,
-                                                    EventSeatMapClientResponse response,
-                                                    Set<UUID> requestedSeatIds) {
+                                                     EventSeatMapClientResponse response,
+                                                     Set<UUID> requestedSeatIds) {
         if (!PUBLISHED_STATUS.equalsIgnoreCase(response.status())) {
             throw new ValidationException("Event is not published and cannot be reserved", ErrorCode.INVALID_REQUEST);
         }
 
-        Instant eventDate = response.eventDate();
-        if (eventDate == null || eventDate.isBefore(Instant.now().plus(Duration.ofMinutes(15)))) {
-            throw new ValidationException("Event is in the past or too close to start time", ErrorCode.INVALID_REQUEST);
-        }
-
+        // P12-007 (REV-001): no temporal gate on the seat-map payload. The
+        // wire response carries venue layout + pricing only (no event-level
+        // instant exists to check), and the removed 15-minute event-level
+        // buffer is intentionally NOT re-implemented here: session
+        // bookability — session status, sale windows, startsAt/endsAt — is
+        // enforced from the trusted SessionBookingContextDto in
+        // ReservationServiceImpl.validateBookingContext, with saleEndsAt as
+        // the operator-controlled cutoff. Gating pricing on a client-visible
+        // instant would reintroduce an event-level booking semantic.
         List<SeatMapSectionClientDto> sections = response.sections();
         if (sections == null || sections.isEmpty()) {
             throw new EventClientUnavailableException("Seat map unavailable for eventId=" + eventId);
@@ -215,7 +218,6 @@ public class EventClientImpl implements EventClient {
         return new EventPricingDetails(
                 eventId,
                 response.status(),
-                eventDate,
                 new ArrayList<>(requestedSeatIds),
                 seatPrices,
                 seatDetails);

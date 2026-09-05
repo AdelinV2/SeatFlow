@@ -63,13 +63,12 @@ class EventSessionRepositoryTest {
     @Autowired
     private EntityManager entityManager;
 
-    private Event savedEvent(EventStatus status, Instant eventDate) {
+    private Event savedEvent(EventStatus status, Instant ignoredLegacyDate) {
         return eventRepository.saveAndFlush(Event.builder()
                 .venueId(UUID.randomUUID())
                 .title("Session Show")
                 .description("A compelling description")
                 .category(EventCategory.CONCERT)
-                .eventDate(eventDate)
                 .status(status)
                 .build());
     }

@@ -10,6 +10,8 @@ import com.seatflow.reservation.client.exception.EventClientUnavailableException
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -63,16 +65,18 @@ class EventClientImplTest {
         eventClient = new EventClientImpl(builder, registry, serviceId);
     }
 
-    private EventSeatMapClientResponse buildSeatMapResponse(String status, Instant eventDate, UUID seatId, BigDecimal price) {
+    // P12-007: builders mirror the real server wire shape — venue layout +
+    // pricing only, with NO eventDate (removed from EventSeatMapResponse).
+    private EventSeatMapClientResponse buildSeatMapResponse(String status, UUID seatId, BigDecimal price) {
         UUID sectionId = UUID.randomUUID();
         PricingTierClientDto tier = new PricingTierClientDto(UUID.randomUUID(), sectionId, "Standard", price, "USD");
         SeatMapSeatClientDto seat = new SeatMapSeatClientDto(seatId, "A", 1, 0, 0, true);
         SeatMapSectionClientDto section = new SeatMapSectionClientDto(sectionId, "SEC-A", 1, 1, List.of(seat), List.of(tier));
         return new EventSeatMapClientResponse(
-                eventId, UUID.randomUUID(), "Concert", status, eventDate, "Grand Arena", 1000, 1L, List.of(section));
+                eventId, UUID.randomUUID(), "Concert", status, "Grand Arena", 1000, 1L, List.of(section));
     }
 
-    private EventSeatMapClientResponse buildSeatMapResponse(String status, Instant eventDate,
+    private EventSeatMapClientResponse buildSeatMapResponse(String status,
                                                              List<UUID> seatIds, BigDecimal price) {
         UUID sectionId = UUID.randomUUID();
         PricingTierClientDto tier = new PricingTierClientDto(UUID.randomUUID(), sectionId, "Standard", price, "USD");
@@ -81,7 +85,7 @@ class EventClientImplTest {
                 .toList();
         SeatMapSectionClientDto section = new SeatMapSectionClientDto(sectionId, "SEC-A", 1, seats.size(), seats, List.of(tier));
         return new EventSeatMapClientResponse(
-                eventId, UUID.randomUUID(), "Concert", status, eventDate, "Grand Arena", 1000, 1L, List.of(section));
+                eventId, UUID.randomUUID(), "Concert", status, "Grand Arena", 1000, 1L, List.of(section));
     }
 
     private void stubBody(EventSeatMapClientResponse body) {
@@ -92,7 +96,7 @@ class EventClientImplTest {
     void getEventSeatPricingReturnsAuthoritativePricesForPublishedEvent() {
         UUID seatId = UUID.randomUUID();
         BigDecimal price = new BigDecimal("50.00");
-        stubBody(buildSeatMapResponse("PUBLISHED", Instant.now().plusSeconds(3600), seatId, price));
+        stubBody(buildSeatMapResponse("PUBLISHED", seatId, price));
 
         EventPricingDetails details = eventClient.getEventSeatPricing(eventId, Set.of(seatId));
 
@@ -106,7 +110,7 @@ class EventClientImplTest {
         UUID requestedSeat = UUID.randomUUID();
         UUID unrequestedSeat = UUID.randomUUID();
         BigDecimal price = new BigDecimal("20.00");
-        stubBody(buildSeatMapResponse("PUBLISHED", Instant.now().plusSeconds(3600),
+        stubBody(buildSeatMapResponse("PUBLISHED",
                 List.of(requestedSeat, unrequestedSeat), price));
 
         EventPricingDetails details = eventClient.getEventSeatPricing(eventId, Set.of(requestedSeat));
@@ -123,19 +127,41 @@ class EventClientImplTest {
     }
 
     @Test
-    void getEventSeatPricingRejectsPastEvent() {
+    void getEventSeatPricingSucceedsOnRealWireShapeWithoutEventDate() throws Exception {
+        // P12-007 wire-contract regression (REV-001): event-service
+        // EventSeatMapResponse no longer sends eventDate. A missing JSON
+        // property deserializes to null; pricing must still succeed because
+        // bookability comes from the trusted session booking context, never
+        // from this payload.
         UUID seatId = UUID.randomUUID();
-        stubBody(buildSeatMapResponse("PUBLISHED", Instant.now().minusSeconds(60), seatId, new BigDecimal("50.00")));
+        UUID sectionId = UUID.randomUUID();
+        UUID tierId = UUID.randomUUID();
+        String json = """
+                {"eventId":"%s","venueId":"%s","eventTitle":"Concert","status":"PUBLISHED",
+                 "venueName":"Grand Arena","venueCapacity":1000,"totalConfiguredSeats":1,
+                 "sections":[{"sectionId":"%s","name":"SEC-A","rowCount":1,"colCount":1,
+                   "seats":[{"seatId":"%s","rowLabel":"A","seatNumber":1,"gridX":0,"gridY":0,"isActive":true}],
+                   "pricingTiers":[{"id":"%s","sectionId":"%s","categoryName":"Standard","price":50.00,"currency":"USD"}]}]}
+                """.formatted(eventId, UUID.randomUUID(), sectionId, seatId, tierId, sectionId);
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        stubBody(mapper.readValue(json, EventSeatMapClientResponse.class));
 
-        assertThatThrownBy(() -> eventClient.getEventSeatPricing(eventId, Set.of(seatId)))
-                .isInstanceOf(ValidationException.class)
-                .satisfies(e -> assertThat(((ValidationException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+        EventPricingDetails details = eventClient.getEventSeatPricing(eventId, Set.of(seatId));
+
+        assertThat(details.eventId()).isEqualTo(eventId);
+        assertThat(details.seatPrices()).containsKey(seatId);
+        assertThat(details.seatPrices().get(seatId)).isEqualByComparingTo(new BigDecimal("50.00"));
     }
 
+    // P12-007 (REV-001): the event-level temporal gate is removed on purpose.
+    // Past/too-close-to-start enforcement lives in
+    // ReservationServiceImpl.validateBookingContext against the trusted
+    // session booking context (session status, sale windows, startsAt); the
+    // seat-map payload carries no instant to gate on.
     @Test
     void getEventSeatPricingRejectsUnpublishedEvent() {
         UUID seatId = UUID.randomUUID();
-        stubBody(buildSeatMapResponse("DRAFT", Instant.now().plusSeconds(3600), seatId, new BigDecimal("50.00")));
+        stubBody(buildSeatMapResponse("DRAFT", seatId, new BigDecimal("50.00")));
 
         assertThatThrownBy(() -> eventClient.getEventSeatPricing(eventId, Set.of(seatId)))
                 .isInstanceOf(ValidationException.class)
@@ -146,7 +172,7 @@ class EventClientImplTest {
     void getEventSeatPricingRejectsUnknownSeat() {
         UUID requestedSeat = UUID.randomUUID();
         UUID mappedSeat = UUID.randomUUID();
-        stubBody(buildSeatMapResponse("PUBLISHED", Instant.now().plusSeconds(3600), mappedSeat, new BigDecimal("50.00")));
+        stubBody(buildSeatMapResponse("PUBLISHED", mappedSeat, new BigDecimal("50.00")));
 
         assertThatThrownBy(() -> eventClient.getEventSeatPricing(eventId, Set.of(requestedSeat)))
                 .isInstanceOf(ValidationException.class)

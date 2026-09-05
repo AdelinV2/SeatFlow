@@ -60,7 +60,6 @@ class EventPricingTierRepositoryTest {
                 .title("Priced Event")
                 .description("desc")
                 .category(EventCategory.CONCERT)
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .build());
     }

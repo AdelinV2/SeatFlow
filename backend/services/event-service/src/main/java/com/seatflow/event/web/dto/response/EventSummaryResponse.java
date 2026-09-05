@@ -14,7 +14,12 @@ public record EventSummaryResponse(
     @Schema(description = "Event title") String title,
     @Schema(description = "Catalog category") EventCategory category,
     @Schema(description = "Public banner image URL") String bannerUrl,
-    @Schema(description = "UTC start time of the event") Instant eventDate,
+    // P12-007 (ADR-011): derived display/search metadata, not a booking key.
+    // nextSessionStartsAt is the earliest future SCHEDULED session start for this
+    // event (null only when no visible session exists; published search filters
+    // such events out). Booking must always select an explicit eventSessionId.
+    @Schema(description = "Earliest future scheduled session start (display/search metadata, never a booking key)")
+    Instant nextSessionStartsAt,
     @Schema(description = "Lowest configured tier price") BigDecimal minPrice,
     @Schema(description = "Highest configured tier price") BigDecimal maxPrice,
     @Schema(description = "Currency of the price range") String currency

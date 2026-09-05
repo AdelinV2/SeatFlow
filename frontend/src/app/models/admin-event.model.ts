@@ -5,7 +5,8 @@ export interface CreateEventRequest {
   description: string;
   category: EventCategory | string;
   bannerUrl: string;
-  eventDate: string;
+  // P12-007: legacy eventDate write removed. Schedule is created exclusively
+  // via POST /api/admin/events/{id}/sessions after the catalog event exists.
   venueId: string;
 }
 
@@ -14,7 +15,7 @@ export interface UpdateEventRequest {
   description?: string;
   category?: EventCategory | string;
   bannerUrl?: string;
-  eventDate?: string;
+  // P12-007: legacy eventDate write removed; sessions own the schedule.
   status?: EventStatus;
 }
 

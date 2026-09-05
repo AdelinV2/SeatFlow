@@ -92,10 +92,13 @@ export class EventCalendarComponent {
     const isPast = startOfDate.getTime() < startOfToday.getTime();
     const isSelected = selected ? date.toDateString() === selected.toDateString() : false;
 
+    // P12-007: occurrences derive from the session-derived next showing
+    // (EventSummary.nextSessionStartsAt). Full multi-session occurrence view
+    // lives on the event detail session selector.
     const dayEvents = events.filter((e) => {
-      if (!e.eventDate) return false;
-      const eventDate = new Date(e.eventDate);
-      return !isNaN(eventDate.getTime()) && eventDate.toDateString() === date.toDateString();
+      if (!e.nextSessionStartsAt) return false;
+      const showing = new Date(e.nextSessionStartsAt);
+      return !isNaN(showing.getTime()) && showing.toDateString() === date.toDateString();
     });
 
     return {

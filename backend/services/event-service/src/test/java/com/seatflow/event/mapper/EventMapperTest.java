@@ -59,7 +59,7 @@ class EventMapperTest {
     void shouldMapCreateRequestToEntityWithDraftStatus() {
         CreateEventRequest request = new CreateEventRequest(
                 UUID.randomUUID(), "Hamlet", "A tragedy", EventCategory.THEATRE,
-                "https://cdn.example.com/hamlet.png", Instant.now().plusSeconds(86400));
+                "https://cdn.example.com/hamlet.png");
 
         Event event = eventMapper.toEntity(request);
 
@@ -68,7 +68,7 @@ class EventMapperTest {
         assertThat(event.getDescription()).isEqualTo("A tragedy");
         assertThat(event.getCategory()).isEqualTo(EventCategory.THEATRE);
         assertThat(event.getBannerUrl()).isEqualTo(request.bannerUrl());
-        assertThat(event.getEventDate()).isEqualTo(request.eventDate());
+        // P12-007: no event-level schedule remains; sessions own startsAt/endsAt.
         assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(event.getId()).isNull();
         assertThat(event.getVersion()).isNull();
@@ -91,7 +91,6 @@ class EventMapperTest {
                 .description("A tragedy")
                 .category(EventCategory.THEATRE)
                 .bannerUrl("https://cdn.example.com/hamlet.png")
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .pricingTiers(List.of(tier))
                 .build();
@@ -116,16 +115,17 @@ class EventMapperTest {
                 .title("Concert")
                 .category(EventCategory.CONCERT)
                 .bannerUrl("https://cdn.example.com/c.png")
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .build();
 
+        Instant nextSession = Instant.now().plusSeconds(86400);
         EventSummaryResponse response = eventMapper.toSummaryResponse(
-                event, new BigDecimal("29.00"), new BigDecimal("199.00"), "USD");
+                event, nextSession, new BigDecimal("29.00"), new BigDecimal("199.00"), "USD");
 
         assertThat(response.id()).isEqualTo(event.getId());
         assertThat(response.title()).isEqualTo("Concert");
         assertThat(response.category()).isEqualTo(EventCategory.CONCERT);
+        assertThat(response.nextSessionStartsAt()).isEqualTo(nextSession);
         assertThat(response.minPrice()).isEqualByComparingTo("29.00");
         assertThat(response.maxPrice()).isEqualByComparingTo("199.00");
         assertThat(response.currency()).isEqualTo("USD");
@@ -140,12 +140,11 @@ class EventMapperTest {
                 .description("Original description")
                 .category(EventCategory.CONFERENCE)
                 .bannerUrl("https://cdn.example.com/a.png")
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .build();
 
         UpdateEventRequest partial = new UpdateEventRequest(
-                "Updated Title", null, null, null, null, null);
+                "Updated Title", null, null, null, null);
 
         eventMapper.updateEntity(partial, event);
 
@@ -165,13 +164,12 @@ class EventMapperTest {
                 .description("Original description")
                 .category(EventCategory.CONFERENCE)
                 .bannerUrl("https://cdn.example.com/a.png")
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.PUBLISHED)
                 .build();
 
         UpdateEventRequest full = new UpdateEventRequest(
                 "New Title", "New description", EventCategory.SPORTS,
-                "https://cdn.example.com/b.png", Instant.now().plusSeconds(172800), EventStatus.CANCELLED);
+                "https://cdn.example.com/b.png", EventStatus.CANCELLED);
 
         eventMapper.updateEntity(full, event);
 

@@ -69,8 +69,9 @@ class ReservationMetricsTest {
         SecurityContextHolder.clearContext();
     }
 
-    private CreateReservationRequest req(UUID sessionId, UUID eventId, List<UUID> seatIds, List<BigDecimal> prices, String key) {
-        return new CreateReservationRequest(sessionId, eventId, "guest@example.com", seatIds, prices, key);
+    private CreateReservationRequest req(UUID sessionId, UUID ignoredLegacyEventId, List<UUID> seatIds, List<BigDecimal> prices, String key) {
+        // P12-007: client request carries session only; parent event derives server-side.
+        return new CreateReservationRequest(sessionId, "guest@example.com", seatIds, prices, key);
     }
 
     private void stubBookableSession(UUID sessionId, UUID eventId) {
@@ -110,7 +111,7 @@ class ReservationMetricsTest {
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-created");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
 
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
@@ -141,7 +142,7 @@ class ReservationMetricsTest {
         UUID seatId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-conflict");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-conflict")).thenReturn(Optional.empty());
@@ -174,7 +175,7 @@ class ReservationMetricsTest {
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-dur");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-dur")).thenReturn(Optional.empty());
@@ -239,7 +240,7 @@ class ReservationMetricsTest {
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-no-rollback");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-no-rollback")).thenReturn(Optional.empty());
@@ -258,3 +259,4 @@ class ReservationMetricsTest {
         assertThat(resp).isNotNull();
     }
 }
+

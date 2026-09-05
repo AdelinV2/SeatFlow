@@ -29,11 +29,9 @@ public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
 
     /** Canonical session-scoped STOMP destination. Never route on eventId. */
     private static final String SESSION_DESTINATION_TEMPLATE = "/topic/sessions/%s/seats";
-    /**
-     * Legacy event-scoped destination kept for compatibility only during the P12 migration.
-     * No new consumers may subscribe to it. Remove in P12-007.
-     */
-    private static final String LEGACY_DESTINATION_TEMPLATE = "/topic/events/%s/seats";
+    // P12-007: legacy event-scoped destination /topic/events/{id}/seats removed.
+    // Seat updates publish exclusively to the session topic. Old subscribers
+    // receive nothing (no redirect, no inference).
     private final SimpMessagingTemplate messagingTemplate;
     private final MeterRegistry meterRegistry;
 
@@ -102,15 +100,6 @@ public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
                 message.seatIds().size(), message.holdExpiresAt());
 
         messagingTemplate.convertAndSend(destination, message);
-
-        // Compatibility-only dual publish for legacy event-scoped subscribers.
-        // No new consumers may depend on this destination. Remove in P12-007.
-        if (message.eventId() != null) {
-            String legacyDestination = String.format(LEGACY_DESTINATION_TEMPLATE, message.eventId());
-            log.debug("Broadcasting compatibility seat status update: destination={}, eventSessionId={}",
-                    legacyDestination, message.eventSessionId());
-            messagingTemplate.convertAndSend(legacyDestination, message);
-        }
     }
 
     @Override

@@ -110,7 +110,7 @@
           </div>
         </div>
 
-        <!-- Venue & Date/Time -->
+        <!-- Venue -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- Venue Selector -->
           <div class="space-y-1.5">
@@ -136,22 +136,13 @@
             }
           </div>
 
-          <!-- Event Date & Time Input -->
+          <!-- P12-007: event-level schedule input removed. Showings are managed
+               exclusively via the session manager after the catalog event exists. -->
           <div class="space-y-1.5">
-            <label class="block text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-              Event Date & Time (Local) *
-            </label>
-            <input
-              type="datetime-local"
-              formControlName="eventDate"
-              class="w-full px-3.5 py-2.5 text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl text-[var(--color-text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
-              [class.border-rose-500]="eventForm.controls.eventDate.invalid && eventForm.controls.eventDate.touched"
-            />
-            @if (eventForm.controls.eventDate.invalid && eventForm.controls.eventDate.touched) {
-              <p class="text-[11px] text-rose-500">
-                Event date and time is required.
-              </p>
-            }
+            <p class="text-[11px] text-[var(--color-text-muted)]">
+              Show dates & times are managed per session. After saving this event,
+              add one or more sessions from the session manager.
+            </p>
           </div>
         </div>
 

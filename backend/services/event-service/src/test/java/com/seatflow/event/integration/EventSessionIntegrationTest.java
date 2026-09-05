@@ -115,7 +115,7 @@ class EventSessionIntegrationTest {
     private UUID createDraftEvent() {
         return eventService.createEvent(new CreateEventRequest(
                 VENUE_ID, "Session Show", "desc", EventCategory.CONCERT,
-                null, Instant.now().plusSeconds(30 * 86400))).id();
+                null)).id();
     }
 
     private void configurePricing(UUID eventId) {
@@ -148,13 +148,13 @@ class EventSessionIntegrationTest {
         configurePricing(eventId);
 
         assertThatThrownBy(() -> eventService.updateEvent(eventId,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED)))
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED)))
                 .isInstanceOf(ValidationException.class);
 
         eventSessionService.createSession(eventId, sessionRequest(Instant.now().plusSeconds(10 * 86400)));
 
         EventDetailResponse published = eventService.updateEvent(eventId,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED));
 
         assertThat(published.status()).isEqualTo(EventStatus.PUBLISHED);
         assertThat(published.sessions()).hasSize(1);
@@ -181,7 +181,7 @@ class EventSessionIntegrationTest {
                 .legacyBackfill(false)
                 .build());
         eventService.updateEvent(eventId,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED));
 
         int completed = eventService.completeExpiredEvents(Instant.now(), 50);
 
@@ -204,7 +204,7 @@ class EventSessionIntegrationTest {
                 .legacyBackfill(false)
                 .build());
         eventService.updateEvent(eventId,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED));
 
         session.setStartsAt(now.minusSeconds(7200));
         session.setEndsAt(now.minusSeconds(3600));
@@ -227,7 +227,6 @@ class EventSessionIntegrationTest {
                 .title("Legacy Gig")
                 .description("desc")
                 .category(EventCategory.CONCERT)
-                .eventDate(future)
                 .status(EventStatus.PUBLISHED)
                 .build());
         eventSessionRepository.saveAndFlush(EventSession.builder()
@@ -264,3 +263,4 @@ class EventSessionIntegrationTest {
         assertThat(context.venueId()).isEqualTo(VENUE_ID);
     }
 }
+

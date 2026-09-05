@@ -68,7 +68,6 @@ describe('MyTicketsComponent', () => {
     description: 'Electric vibes',
     category: 'FESTIVAL',
     bannerUrl: 'https://cdn.seatflow.com/festival.jpg',
-    eventDate: upcomingDate,
     status: 'PUBLISHED',
     venueName: 'Green Park Arena',
     pricingTiers: [],
@@ -186,5 +185,86 @@ describe('MyTicketsComponent', () => {
 
     expect(component.isLoading()).toBeFalse();
     expect(snackBarSpy.open).toHaveBeenCalled();
+  });
+
+  it('resolves showingDate from the ticket session, not sessions[0]', () => {
+    // P12-007/REV-005: legacy ticket without snapshot/eventDate on a
+    // multi-session event must classify by its OWN session (the later one),
+    // never by the first session in the list.
+    const earlier = new Date(Date.now() + 86400000 * 10).toISOString();
+    const later = new Date(Date.now() + 86400000 * 20).toISOString();
+    component.eventDetailsMap.set(
+      new Map([
+        [
+          'event-multi-1',
+          {
+            ...mockEventDetail,
+            id: 'event-multi-1',
+            sessions: [
+              {
+                id: 'session-early',
+                eventId: 'event-multi-1',
+                startsAt: earlier,
+                endsAt: earlier,
+                status: 'SCHEDULED',
+              },
+              {
+                id: 'session-late',
+                eventId: 'event-multi-1',
+                startsAt: later,
+                endsAt: later,
+                status: 'SCHEDULED',
+              },
+            ],
+          },
+        ],
+      ]),
+    );
+    component.reservationDetailsMap.set(new Map());
+    const ticket: TicketItem = {
+      ...mockUpcomingTicket,
+      id: 'ticket-multi-1',
+      eventId: 'event-multi-1',
+      reservationId: 'res-missing',
+      eventDate: undefined,
+      eventSessionId: 'session-late',
+    };
+
+    expect(component.showingDate(ticket)).toBe(later);
+  });
+
+  it('returns undefined when the ticket session has no matching event session', () => {
+    const earlier = new Date(Date.now() + 86400000 * 10).toISOString();
+    component.eventDetailsMap.set(
+      new Map([
+        [
+          'event-multi-1',
+          {
+            ...mockEventDetail,
+            id: 'event-multi-1',
+            sessions: [
+              {
+                id: 'session-early',
+                eventId: 'event-multi-1',
+                startsAt: earlier,
+                endsAt: earlier,
+                status: 'SCHEDULED',
+              },
+            ],
+          },
+        ],
+      ]),
+    );
+    component.reservationDetailsMap.set(new Map());
+    const ticket: TicketItem = {
+      ...mockUpcomingTicket,
+      id: 'ticket-multi-2',
+      eventId: 'event-multi-1',
+      reservationId: 'res-missing',
+      eventDate: undefined,
+      eventSessionId: 'session-unknown',
+    };
+
+    expect(component.showingDate(ticket)).toBeUndefined();
   });
 });

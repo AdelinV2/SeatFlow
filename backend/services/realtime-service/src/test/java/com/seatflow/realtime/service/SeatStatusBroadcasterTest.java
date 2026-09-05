@@ -135,6 +135,23 @@ class SeatStatusBroadcasterTest {
     }
 
     @Test
+    @DisplayName("P12-007: old event-scoped destination receives nothing even when audit eventId is present")
+    void broadcastSeatStatus_RemovedLegacyEventDestination() {
+        UUID eventSessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(eventSessionId, eventId, List.of(UUID.randomUUID()), SeatStatus.HELD,
+                Instant.now().plusSeconds(900));
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + eventSessionId + "/seats"),
+                messageCaptor.capture());
+        verify(messagingTemplate, never()).convertAndSend(eq("/topic/events/" + eventId + "/seats"),
+                messageCaptor.capture());
+        verify(messagingTemplate, never()).convertAndSend(
+                org.mockito.ArgumentMatchers.contains("/topic/events/"), messageCaptor.capture());
+    }
+
+    @Test
     @DisplayName("Broadcast payload exposes no private reservation, customer, or payment data")
     void broadcastSeatStatus_PayloadContainsNoPrivateData() {
         UUID eventSessionId = UUID.randomUUID();

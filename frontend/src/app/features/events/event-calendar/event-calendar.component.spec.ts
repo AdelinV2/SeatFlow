@@ -12,7 +12,7 @@ describe('EventCalendarComponent', () => {
       title: 'Rock Concert',
       category: 'CONCERT',
       bannerUrl: 'https://example.com/e1.jpg',
-      eventDate: new Date(2026, 8, 15, 14, 0, 0).toISOString(),
+      nextSessionStartsAt: new Date(2026, 8, 15, 14, 0, 0).toISOString(),
       minPrice: 50,
       maxPrice: 100,
       currency: 'USD',
@@ -23,7 +23,7 @@ describe('EventCalendarComponent', () => {
       title: 'Comedy Night',
       category: 'COMEDY',
       bannerUrl: 'https://example.com/e2.jpg',
-      eventDate: new Date(2026, 8, 15, 18, 0, 0).toISOString(),
+      nextSessionStartsAt: new Date(2026, 8, 15, 18, 0, 0).toISOString(),
       minPrice: 30,
       maxPrice: 60,
       currency: 'USD',
@@ -198,3 +198,4 @@ describe('EventCalendarComponent', () => {
     expect(clearBtn).toBeTruthy();
   });
 });
+

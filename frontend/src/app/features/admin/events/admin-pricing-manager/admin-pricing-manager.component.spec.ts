@@ -25,7 +25,6 @@ describe('AdminPricingManagerComponent', () => {
     description: 'Concert',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/banner.jpg',
-    eventDate: '2026-11-20T20:00:00Z',
     status: 'DRAFT',
     pricingTiers: [
       { sectionId: 'sec-1', categoryName: 'Standard', price: 20.0, currency: 'USD' },

@@ -38,7 +38,9 @@ import java.util.UUID;
 @Tag(name = "Events (Public)", description = "Public published event catalog and priced seat maps")
 public class EventController {
 
-    private static final Set<String> ALLOWED_SORTS = Set.of("eventDate", "title", "createdAt");
+    // P12-007: eventDate removed. Public catalog orders by derived
+    // nextSessionStartsAt (display/search metadata, never a booking key).
+    private static final Set<String> ALLOWED_SORTS = Set.of("nextSessionStartsAt", "title", "createdAt");
 
     private final EventService eventService;
 
@@ -56,7 +58,7 @@ public class EventController {
     public ResponseEntity<PagedResult<EventSummaryResponse>> listEvents(
             @RequestParam(required = false) EventCategory category,
             @RequestParam(required = false) @Size(max = 100) String search,
-            @PageableDefault(size = 20, sort = "eventDate", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "nextSessionStartsAt", direction = Sort.Direction.ASC) Pageable pageable) {
         validatePageable(pageable);
         PagedResult<EventSummaryResponse> result = eventService.findPublishedEvents(category, search, pageable);
         return ResponseEntity.ok(result);
@@ -113,7 +115,7 @@ public class EventController {
         for (Sort.Order order : pageable.getSort()) {
             if (!ALLOWED_SORTS.contains(order.getProperty())) {
                 throw new ValidationException(
-                        "Sorting is only allowed on eventDate, title, or createdAt", ErrorCode.INVALID_REQUEST);
+                        "Sorting is only allowed on nextSessionStartsAt, title, or createdAt", ErrorCode.INVALID_REQUEST);
             }
         }
     }

@@ -76,14 +76,14 @@ describe('WebSocketService', () => {
     expect(service.connectionStatus()).toBe('DISCONNECTED');
     expect(service.isConnected()).toBeFalse();
 
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     expect(service.connectionStatus()).toBe('CONNECTING');
     expect(clients[0].activate).toHaveBeenCalledTimes(1);
   });
 
   it('should configure SockJS, heartbeats, and capped exponential reconnection', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     expect(configs[0].webSocketFactory).toEqual(jasmine.any(Function));
     configs[0].webSocketFactory?.();
@@ -97,7 +97,7 @@ describe('WebSocketService', () => {
 
   it('should inject the current JWT before every connection attempt', async () => {
     authService.getToken.and.returnValues('first-token', 'refreshed-token');
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     await configs[0].beforeConnect?.(clients[0] as unknown as Client);
     expect(clients[0].connectHeaders).toEqual({ Authorization: 'Bearer first-token' });
@@ -108,7 +108,7 @@ describe('WebSocketService', () => {
 
   it('should omit the authorization header for an unauthenticated connection', async () => {
     authService.getToken.and.returnValue(null);
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     await configs[0].beforeConnect?.(clients[0] as unknown as Client);
 
@@ -120,7 +120,7 @@ describe('WebSocketService', () => {
     const selectedSeats = new Set(['seat-1']);
     const selectedSeatsRef = jasmine.createSpy('selectedSeatsRef').and.returnValue(selectedSeats);
     const onConflict = jasmine.createSpy('onConflict');
-    service.connectForEvent('event-1', onConflict, selectedSeatsRef);
+    service.connectForSession('event-1', onConflict, selectedSeatsRef);
     clients[0].subscribe.and.callFake(
       (_destination: string, callback: (message: IMessage) => void) => {
         lifecycleCalls.push('subscribe');
@@ -150,7 +150,7 @@ describe('WebSocketService', () => {
 
   it('should propagate incoming seat updates and report selected-seat conflicts', () => {
     const onConflict = jasmine.createSpy('onConflict');
-    service.connectForEvent('event-1', onConflict, () => new Set(['seat-1']));
+    service.connectForSession('event-1', onConflict, () => new Set(['seat-1']));
     configs[0].onConnect?.({} as never);
 
     clients[0].messageCallback?.({
@@ -175,7 +175,7 @@ describe('WebSocketService', () => {
   });
 
   it('should propagate every seat in a backend batched status update', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     clients[0].messageCallback?.({
@@ -204,7 +204,7 @@ describe('WebSocketService', () => {
   });
 
   it('should ignore messages with an empty body', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     clients[0].messageCallback?.({ body: '' } as IMessage);
@@ -215,7 +215,7 @@ describe('WebSocketService', () => {
 
   it('should isolate malformed messages without changing seat state', () => {
     const consoleError = spyOn(console, 'error');
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     clients[0].messageCallback?.({ body: '{invalid-json' } as IMessage);
@@ -226,7 +226,7 @@ describe('WebSocketService', () => {
   });
 
   it('should expose reconnecting state after an unexpected WebSocket close', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     configs[0].onWebSocketClose?.({} as CloseEvent);
@@ -236,7 +236,7 @@ describe('WebSocketService', () => {
   });
 
   it('should not unsubscribe a stale topic after the socket has already closed', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
     configs[0].onWebSocketClose?.({} as CloseEvent);
 
@@ -248,7 +248,7 @@ describe('WebSocketService', () => {
 
   it('should expose reconnecting state after a STOMP protocol error', () => {
     const consoleError = spyOn(console, 'error');
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     configs[0].onStompError?.({ headers: { message: 'Broker error' }, body: 'Failure' } as never);
 
@@ -258,16 +258,16 @@ describe('WebSocketService', () => {
   });
 
   it('should not create a duplicate active connection for the same event', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
 
     expect(clients.length).toBe(1);
     expect(clients[0].activate).toHaveBeenCalledTimes(1);
   });
 
   it('should unsubscribe, deactivate, and reset state on disconnect', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     service.disconnect();
@@ -279,10 +279,10 @@ describe('WebSocketService', () => {
   });
 
   it('should tear down the prior event before connecting to another event', async () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
-    service.connectForEvent('event-2');
+    service.connectForSession('event-2');
     await Promise.resolve();
     await Promise.resolve();
 
@@ -339,11 +339,11 @@ describe('WebSocketService', () => {
     const initialSeats = () => new Set(['seat-1']);
     const updatedSeats = () => new Set(['seat-2']);
 
-    service.connectForEvent('event-1', initialConflict, initialSeats);
+    service.connectForSession('event-1', initialConflict, initialSeats);
     configs[0].onConnect?.({} as never);
 
     // Call again with updated callbacks
-    service.connectForEvent('event-1', updatedConflict, updatedSeats);
+    service.connectForSession('event-1', updatedConflict, updatedSeats);
 
     // Should not re-activate or duplicate client
     expect(clients.length).toBe(1);
@@ -447,8 +447,8 @@ describe('WebSocketService', () => {
     expect(seatStateService.updateSeatStatus).toHaveBeenCalledOnceWith('seat-9', 'HELD');
   });
 
-  it('should keep the compatibility connectForEvent alias on the session topic', () => {
-    service.connectForEvent('session-A');
+  it('should subscribe on the canonical session topic', () => {
+    service.connectForSession('session-A');
     configs[0].onConnect?.({} as never);
 
     expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe(
@@ -457,7 +457,7 @@ describe('WebSocketService', () => {
   });
 
   it('should ignore messages with missing or non-string seat identifiers', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     clients[0].messageCallback?.({
@@ -472,7 +472,7 @@ describe('WebSocketService', () => {
   });
 
   it('should disconnect and cleanup when ngOnDestroy is called', () => {
-    service.connectForEvent('event-1');
+    service.connectForSession('event-1');
     configs[0].onConnect?.({} as never);
 
     service.ngOnDestroy();
@@ -483,3 +483,4 @@ describe('WebSocketService', () => {
     expect(service.isConnected()).toBeFalse();
   });
 });
+

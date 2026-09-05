@@ -103,20 +103,31 @@ class EventServiceImplTest {
                 .title("Hamlet")
                 .description("A play")
                 .category(EventCategory.OTHER)
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(status)
                 .build();
     }
 
     private EventDetailResponse dummyDetail() {
+        // P12-007: EventDetailResponse carries no event-level instant.
         return new EventDetailResponse(EVENT_ID, VENUE_ID, "Hamlet", "desc", EventCategory.OTHER,
-                null, Instant.now(), EventStatus.DRAFT, List.of(), List.of(), Instant.now(), Instant.now());
+                null, EventStatus.DRAFT, List.of(), List.of(), Instant.now(), Instant.now());
+    }
+
+    private EventSession visibleFutureSession(Event event) {
+        return EventSession.builder()
+                .id(UUID.randomUUID())
+                .event(event)
+                .startsAt(Instant.now().plusSeconds(86400))
+                .endsAt(Instant.now().plusSeconds(86400 + 7200))
+                .status(EventSessionStatus.SCHEDULED)
+                .legacyBackfill(false)
+                .build();
     }
 
     @Test
     void createEvent_persistsDraftAndPublishesCreatedEvent() {
         CreateEventRequest request = new CreateEventRequest(VENUE_ID, "Hamlet", "desc",
-                EventCategory.CONCERT, "https://cdn.example.com/h.png", Instant.now().plusSeconds(86400));
+                EventCategory.CONCERT, "https://cdn.example.com/h.png");
         Event draft = buildEvent(EventStatus.DRAFT);
         when(eventMapper.toEntity(request)).thenReturn(draft);
         when(eventRepository.save(any(Event.class))).thenReturn(draft);
@@ -136,7 +147,7 @@ class EventServiceImplTest {
     @Test
     void createEvent_missingVenue_rejects() {
         CreateEventRequest request = new CreateEventRequest(VENUE_ID, "Hamlet", "desc",
-                EventCategory.CONCERT, null, Instant.now().plusSeconds(86400));
+                EventCategory.CONCERT, null);
         when(seatMapClient.venueExists(VENUE_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> eventService.createEvent(request))
@@ -156,7 +167,7 @@ class EventServiceImplTest {
         when(eventRepository.save(any(Event.class))).thenReturn(draft);
         when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
 
-        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
+        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED));
 
         assertThat(draft.getStatus()).isEqualTo(EventStatus.PUBLISHED);
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
@@ -174,7 +185,7 @@ class EventServiceImplTest {
                 any(UUID.class), any(EventSessionStatus.class), any(Instant.class))).thenReturn(false);
 
         assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED)))
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED)))
                 .isInstanceOf(ValidationException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
         verify(outboxEventRepository, never()).save(any());
@@ -188,7 +199,7 @@ class EventServiceImplTest {
         when(pricingTierRepository.existsByEvent_Id(EVENT_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED)))
+                new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED)))
                 .isInstanceOf(ValidationException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
         verify(outboxEventRepository, never()).save(any());
@@ -201,7 +212,7 @@ class EventServiceImplTest {
         when(eventRepository.save(any(Event.class))).thenReturn(draft);
         when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
 
-        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, null, EventStatus.CANCELLED));
+        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, EventStatus.CANCELLED));
 
         assertThat(draft.getStatus()).isEqualTo(EventStatus.CANCELLED);
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
@@ -216,7 +227,7 @@ class EventServiceImplTest {
         when(eventRepository.save(any(Event.class))).thenReturn(published);
         when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
 
-        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, null, EventStatus.COMPLETED));
+        eventService.updateEvent(EVENT_ID, new UpdateEventRequest(null, null, null, null, EventStatus.COMPLETED));
 
         assertThat(published.getStatus()).isEqualTo(EventStatus.COMPLETED);
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
@@ -230,7 +241,7 @@ class EventServiceImplTest {
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
-                new UpdateEventRequest(null, null, null, null, null, EventStatus.COMPLETED)))
+                new UpdateEventRequest(null, null, null, null, EventStatus.COMPLETED)))
                 .isInstanceOf(ValidationException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
         verify(outboxEventRepository, never()).save(any());
@@ -242,7 +253,7 @@ class EventServiceImplTest {
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(cancelled));
 
         assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
-                new UpdateEventRequest("New title", null, null, null, null, null)))
+                new UpdateEventRequest("New title", null, null, null, null)))
                 .isInstanceOf(ValidationException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
     }
@@ -253,7 +264,7 @@ class EventServiceImplTest {
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(draft));
 
         assertThatThrownBy(() -> eventService.updateEvent(EVENT_ID,
-                new UpdateEventRequest(null, null, null, null, null, null)))
+                new UpdateEventRequest(null, null, null, null, null)))
                 .isInstanceOf(ValidationException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
     }
@@ -261,19 +272,121 @@ class EventServiceImplTest {
     @Test
     void findPublishedEvents_mapsPageWithBatchPriceLookup() {
         Event event = buildEvent(EventStatus.PUBLISHED);
-        Page<Event> page = new PageImpl<>(List.of(event), PageRequest.of(0, 10), 1);
+        Page<Event> page = new PageImpl<>(List.of(event), Pageable.unpaged(), 1);
         when(eventRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        EventSession future = visibleFutureSession(event);
+        when(eventSessionRepository
+                .findByEvent_IdInAndStatusAndStartsAtAfterAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        anyList(), any(EventSessionStatus.class), any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of(future));
         when(pricingTierRepository.findPriceRangesByEventIds(anyList()))
                 .thenReturn(List.of(new RangeProj(EVENT_ID, new BigDecimal("29.00"), new BigDecimal("199.00"), "USD")));
-        when(eventMapper.toSummaryResponse(any(Event.class), any(), any(), anyString()))
+        Instant nextStart = future.getStartsAt();
+        when(eventMapper.toSummaryResponse(any(Event.class), any(Instant.class), any(), any(), anyString()))
                 .thenReturn(new EventSummaryResponse(EVENT_ID, "Hamlet", EventCategory.OTHER, null,
-                        Instant.now(), new BigDecimal("29.00"), new BigDecimal("199.00"), "USD"));
+                        nextStart, new BigDecimal("29.00"), new BigDecimal("199.00"), "USD"));
 
         PagedResult<EventSummaryResponse> result = eventService.findPublishedEvents(null, null, PageRequest.of(0, 10));
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.content().getFirst().nextSessionStartsAt()).isEqualTo(nextStart);
         verify(pricingTierRepository).findPriceRangesByEventIds(List.of(EVENT_ID));
+    }
+
+    @Test
+    void findPublishedEvents_excludesEventsWithoutVisibleFutureSession() {
+        Event event = buildEvent(EventStatus.PUBLISHED);
+        Page<Event> page = new PageImpl<>(List.of(event), Pageable.unpaged(), 1);
+        when(eventRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        when(eventSessionRepository
+                .findByEvent_IdInAndStatusAndStartsAtAfterAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        anyList(), any(EventSessionStatus.class), any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of());
+
+        PagedResult<EventSummaryResponse> result = eventService.findPublishedEvents(null, null, PageRequest.of(0, 10));
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isZero();
+    }
+
+    @Test
+    void findPublishedEvents_returnsOneRowPerEventOrderedByNextSession() {
+        Event first = buildEvent(EventStatus.PUBLISHED);
+        Event second = Event.builder().id(UUID.randomUUID()).venueId(VENUE_ID).title("Macbeth")
+                .description("A play").category(EventCategory.OTHER).status(EventStatus.PUBLISHED).build();
+        Page<Event> page = new PageImpl<>(List.of(second, first), Pageable.unpaged(), 2);
+        when(eventRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        Instant now = Instant.now();
+        EventSession later = EventSession.builder().id(UUID.randomUUID()).event(first)
+                .startsAt(now.plusSeconds(172800)).endsAt(now.plusSeconds(172800 + 7200))
+                .status(EventSessionStatus.SCHEDULED).legacyBackfill(false).build();
+        EventSession sooner = EventSession.builder().id(UUID.randomUUID()).event(second)
+                .startsAt(now.plusSeconds(86400)).endsAt(now.plusSeconds(86400 + 7200))
+                .status(EventSessionStatus.SCHEDULED).legacyBackfill(false).build();
+        when(eventSessionRepository
+                .findByEvent_IdInAndStatusAndStartsAtAfterAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        anyList(), any(EventSessionStatus.class), any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of(sooner, later));
+        when(pricingTierRepository.findPriceRangesByEventIds(anyList())).thenReturn(List.of());
+        when(eventMapper.toSummaryResponse(any(Event.class), any(Instant.class), any(), any(), any()))
+                .thenAnswer(inv -> new EventSummaryResponse(((Event) inv.getArgument(0)).getId(), "t",
+                        EventCategory.OTHER, null, inv.getArgument(1), null, null, null));
+
+        PagedResult<EventSummaryResponse> result = eventService.findPublishedEvents(null, null, PageRequest.of(0, 10));
+
+        assertThat(result.content()).hasSize(2);
+        assertThat(result.content().get(0).id()).isEqualTo(second.getId());
+        assertThat(result.content().get(1).id()).isEqualTo(EVENT_ID);
+    }
+
+    @Test
+    void findPublishedEvents_ordersTiedNextSessionStartsByEventIdAcrossPages() {
+        // P12-007/REV-003: events sharing one nextSessionStartsAt (same-venue
+        // evenings, backfilled batches) must paginate with an exact stable
+        // order: (nextSessionStartsAt, event id). Candidates and sessions are
+        // deliberately supplied in non-sorted order.
+        UUID idA = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID idB = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID idC = UUID.fromString("00000000-0000-0000-0000-000000000003");
+        Event eventA = Event.builder().id(idA).venueId(VENUE_ID).title("Alpha")
+                .description("A play").category(EventCategory.OTHER).status(EventStatus.PUBLISHED).build();
+        Event eventB = Event.builder().id(idB).venueId(VENUE_ID).title("Beta")
+                .description("A play").category(EventCategory.OTHER).status(EventStatus.PUBLISHED).build();
+        Event eventC = Event.builder().id(idC).venueId(VENUE_ID).title("Gamma")
+                .description("A play").category(EventCategory.OTHER).status(EventStatus.PUBLISHED).build();
+        Page<Event> page = new PageImpl<>(List.of(eventC, eventA, eventB), Pageable.unpaged(), 3);
+        when(eventRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
+        Instant shared = Instant.now().plusSeconds(86400);
+        EventSession sessionA = EventSession.builder().id(UUID.randomUUID()).event(eventA)
+                .startsAt(shared).endsAt(shared.plusSeconds(7200))
+                .status(EventSessionStatus.SCHEDULED).legacyBackfill(false).build();
+        EventSession sessionB = EventSession.builder().id(UUID.randomUUID()).event(eventB)
+                .startsAt(shared).endsAt(shared.plusSeconds(7200))
+                .status(EventSessionStatus.SCHEDULED).legacyBackfill(false).build();
+        EventSession sessionC = EventSession.builder().id(UUID.randomUUID()).event(eventC)
+                .startsAt(shared).endsAt(shared.plusSeconds(7200))
+                .status(EventSessionStatus.SCHEDULED).legacyBackfill(false).build();
+        when(eventSessionRepository
+                .findByEvent_IdInAndStatusAndStartsAtAfterAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                        anyList(), any(EventSessionStatus.class), any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of(sessionC, sessionA, sessionB));
+        when(pricingTierRepository.findPriceRangesByEventIds(anyList())).thenReturn(List.of());
+        when(eventMapper.toSummaryResponse(any(Event.class), any(Instant.class), any(), any(), any()))
+                .thenAnswer(inv -> new EventSummaryResponse(((Event) inv.getArgument(0)).getId(), "t",
+                        EventCategory.OTHER, null, inv.getArgument(1), null, null, null));
+
+        PagedResult<EventSummaryResponse> first =
+                eventService.findPublishedEvents(null, null, PageRequest.of(0, 2));
+        PagedResult<EventSummaryResponse> second =
+                eventService.findPublishedEvents(null, null, PageRequest.of(1, 2));
+        PagedResult<EventSummaryResponse> repeat =
+                eventService.findPublishedEvents(null, null, PageRequest.of(0, 2));
+
+        assertThat(first.totalElements()).isEqualTo(3);
+        assertThat(first.content()).extracting(EventSummaryResponse::id).containsExactly(idA, idB);
+        assertThat(second.content()).extracting(EventSummaryResponse::id).containsExactly(idC);
+        assertThat(repeat.content()).extracting(EventSummaryResponse::id).containsExactly(idA, idB);
     }
 
     @Test
@@ -286,19 +399,25 @@ class EventServiceImplTest {
     }
 
     @Test
-    void getPublishedEvent_hidesPastEvents() {
-        Event past = buildEvent(EventStatus.PUBLISHED);
-        past.setEventDate(Instant.now().minusSeconds(3600));
-        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(past));
+    void getPublishedEvent_hidesEventWithoutVisibleFutureSession() {
+        // P12-007: visibility derives from sessions only; no event-level date remains.
+        Event published = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(published));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> eventService.getPublishedEvent(EVENT_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
-    void getPublishedEvent_returnsFuturePublishedEvent() {
+    void getPublishedEvent_returnsPublishedEventWithVisibleSession() {
         Event future = buildEvent(EventStatus.PUBLISHED);
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(future));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(visibleFutureSession(future)));
         when(eventMapper.toDetailResponse(any(Event.class))).thenReturn(dummyDetail());
 
         EventDetailResponse result = eventService.getPublishedEvent(EVENT_ID);
@@ -307,10 +426,12 @@ class EventServiceImplTest {
     }
 
     @Test
-    void getEventSeatMap_hidesPastEvents() {
-        Event past = buildEvent(EventStatus.PUBLISHED);
-        past.setEventDate(Instant.now().minusSeconds(3600));
-        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(past));
+    void getEventSeatMap_hidesEventWithoutVisibleFutureSession() {
+        Event published = buildEvent(EventStatus.PUBLISHED);
+        when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(published));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> eventService.getEventSeatMap(EVENT_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -329,7 +450,6 @@ class EventServiceImplTest {
     @Test
     void completeExpiredEvents_transitionsToCompletedAndPublishes() {
         Event expired = buildEvent(EventStatus.PUBLISHED);
-        expired.setEventDate(Instant.now().minusSeconds(3600));
         when(eventRepository.findPublishedCompletableForUpdate(any(Instant.class), any(Pageable.class)))
                 .thenReturn(List.of(expired));
         when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtLessThanEqual(
@@ -349,7 +469,6 @@ class EventServiceImplTest {
     @Test
     void completeExpiredEvents_marksEndedScheduledSessionsCompleted() {
         Event expired = buildEvent(EventStatus.PUBLISHED);
-        expired.setEventDate(Instant.now().minusSeconds(7200));
         EventSession ended = EventSession.builder()
                 .id(UUID.randomUUID())
                 .event(expired)
@@ -394,6 +513,9 @@ class EventServiceImplTest {
                 .id(UUID.randomUUID()).sectionId(SECTION_ID).categoryName("VIP")
                 .price(new BigDecimal("50")).currency("USD").build()));
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(visibleFutureSession(event)));
         when(tierMapper.toResponse(any(EventPricingTier.class)))
                 .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_ID, "VIP", new BigDecimal("50"), "USD"));
         when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
@@ -415,7 +537,6 @@ class EventServiceImplTest {
         assertThat(result.venueId()).isEqualTo(VENUE_ID);
         assertThat(result.eventTitle()).isEqualTo("Hamlet");
         assertThat(result.status()).isEqualTo(EventStatus.PUBLISHED.name());
-        assertThat(result.eventDate()).isEqualTo(event.getEventDate());
         assertThat(result.venueName()).isEqualTo("Grand Hall");
         assertThat(result.venueCapacity()).isEqualTo(500);
         assertThat(result.sections()).hasSize(1);
@@ -461,6 +582,9 @@ class EventServiceImplTest {
     void getEventSeatMap_preservesConfiguredSeatCountFromClient() {
         Event event = buildEvent(EventStatus.PUBLISHED);
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(visibleFutureSession(event)));
         when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
                 VENUE_ID, "Grand Hall", 500, 42L,
                 List.of(new SeatMapVenueSection(SECTION_ID, "A", 5, 10,
@@ -478,6 +602,9 @@ class EventServiceImplTest {
     void getEventSeatMap_nullElements_mapsToEmptyList() {
         Event event = buildEvent(EventStatus.PUBLISHED);
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(visibleFutureSession(event)));
         when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
                 VENUE_ID, "Grand Hall", 500, 3L, List.of(), 2L, null));
 
@@ -496,6 +623,9 @@ class EventServiceImplTest {
                 .id(UUID.randomUUID()).sectionId(SECTION_ID).categoryName("VIP")
                 .price(new BigDecimal("50")).currency("USD").build()));
         when(eventRepository.findWithPricingTiersById(EVENT_ID)).thenReturn(Optional.of(event));
+        when(eventSessionRepository.findByEvent_IdAndStatusAndEndsAtAfterOrderByStartsAtAscIdAsc(
+                any(UUID.class), any(EventSessionStatus.class), any(Instant.class)))
+                .thenReturn(List.of(visibleFutureSession(event)));
         when(tierMapper.toResponse(any(EventPricingTier.class)))
                 .thenReturn(new PricingTierResponse(UUID.randomUUID(), SECTION_ID, "VIP", new BigDecimal("50"), "USD"));
         when(seatMapClient.getVenueLayout(VENUE_ID)).thenReturn(new SeatMapVenueLayout(
@@ -555,3 +685,4 @@ class EventServiceImplTest {
         }
     }
 }
+

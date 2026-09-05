@@ -17,7 +17,7 @@ describe('EventListComponent', () => {
       description: 'An epic rock concert',
       category: 'CONCERT',
       bannerUrl: 'https://example.com/e1.jpg',
-      eventDate: new Date(2026, 8, 15, 14, 0, 0).toISOString(),
+      nextSessionStartsAt: new Date(2026, 8, 15, 14, 0, 0).toISOString(),
       venueName: 'Arena Hall',
       minPrice: 60,
       maxPrice: 180,
@@ -30,7 +30,7 @@ describe('EventListComponent', () => {
       description: 'Shakespeare classic drama',
       category: 'THEATRE',
       bannerUrl: 'https://example.com/e2.jpg',
-      eventDate: new Date(2026, 8, 20, 19, 0, 0).toISOString(),
+      nextSessionStartsAt: new Date(2026, 8, 20, 19, 0, 0).toISOString(),
       venueName: 'City Theatre',
       minPrice: 40,
       maxPrice: 90,
@@ -43,7 +43,7 @@ describe('EventListComponent', () => {
       description: 'Laughter all night long',
       category: 'COMEDY',
       bannerUrl: 'https://example.com/e3.jpg',
-      eventDate: new Date(2026, 8, 15, 18, 0, 0).toISOString(),
+      nextSessionStartsAt: new Date(2026, 8, 15, 18, 0, 0).toISOString(),
       venueName: 'Comedy Club',
       minPrice: 25,
       maxPrice: 50,
@@ -160,3 +160,4 @@ describe('EventListComponent', () => {
     expect(component.isLoading()).toBeFalse();
   });
 });
+

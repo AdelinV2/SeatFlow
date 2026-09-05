@@ -114,11 +114,11 @@ public class ReservationServiceImpl implements ReservationService {
             }
             // Resolve the session through event-service BEFORE any inventory mutation.
             // The parent event, hall/pricing scope, and bookability come from this
-            // trusted response only; a client-supplied eventId is never authoritative.
+            // trusted response only. P12-007: no client-supplied eventId exists;
+            // the session is the sole booking key and is never inferred.
             SessionBookingContextDto bookingContext =
                     eventClient.getSessionBookingContext(request.eventSessionId());
             validateBookingContext(bookingContext, Instant.now());
-            rejectCompatEventMismatch(request, bookingContext);
             EventPricingDetails eventPricing = eventClient.getEventSeatPricing(
                     bookingContext.eventId(), new HashSet<>(request.seatIds()));
             assertPricingBelongsToSession(eventPricing, bookingContext);
@@ -655,15 +655,6 @@ public class ReservationServiceImpl implements ReservationService {
         }
         if (context.endsAt() != null && !context.endsAt().isAfter(now)) {
             throw new ValidationException("Event session has already ended", ErrorCode.INVALID_REQUEST);
-        }
-    }
-
-    private void rejectCompatEventMismatch(CreateReservationRequest request, SessionBookingContextDto context) {
-        if (request.eventId() != null && !request.eventId().equals(context.eventId())) {
-            log.warn("Rejected reservation with spoofed event/session relation. requestedEventId={}, sessionEventId={}, eventSessionId={}",
-                    request.eventId(), context.eventId(), context.eventSessionId());
-            throw new ValidationException(
-                    "eventId does not match the parent event of eventSessionId", ErrorCode.INVALID_REQUEST);
         }
     }
 
