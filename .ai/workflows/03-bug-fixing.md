@@ -100,8 +100,8 @@ Operational intent:
 
 - **clear/localized/reproducible fix** -> Muse route first (`Free -> Go`) with effort proportional to scope;
 - **tool/browser-heavy frontend bug** -> Gemini High is often the best route;
-- **difficult/ambiguous backend root cause** -> Terra High, Fast OFF;
-- **critical concurrency/payment/security/data-integrity bug** -> Sol High critical reasoning/review path, Fast OFF.
+- **difficult/ambiguous backend root cause** -> Terra high, Fast OFF;
+- **critical concurrency/payment/security/data-integrity bug** -> Sol high critical reasoning/review path, Fast OFF.
 
 ### Quality failure is not availability failure
 
@@ -111,7 +111,7 @@ If Muse Free produces a buggy fix, do **not** switch to Muse Go merely because t
 
 After one meaningful repair attempt fails and the root cause remains unclear, escalate **diagnosis**, not blindly implementation:
 
-`Muse/Gemini repair failed -> Terra High root-cause analysis -> targeted repair`
+`Muse/Gemini repair failed -> Terra high root-cause analysis -> targeted repair`
 
 Use stronger Sol escalation only when the risk is critical or Terra leaves severe unresolved ambiguity.
 

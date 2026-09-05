@@ -139,9 +139,9 @@ This policy is specifically intended to eliminate the manual `continue` step fro
 | Routine planning / repo analysis | Antigravity | Gemini 3.8 Flash High for substantive work |
 | Backend/general implementation | OpenCode | Resolve Muse Free -> Muse Go Contributor before other alternatives |
 | Frontend/visual/browser implementation | Antigravity | Gemini 3.8 Flash High by default |
-| Independent substantive review | Codex | GPT-5.6 Terra High, standard speed |
-| Small bounded review | Codex | GPT-5.6 Terra Medium, standard speed |
-| Critical correctness review | Codex | GPT-5.6 Sol High, standard speed |
+| Independent substantive review | Codex | GPT-5.6 Terra high, standard speed |
+| Small bounded review | Codex | GPT-5.6 Terra medium, standard speed |
+| Critical correctness review | Codex | GPT-5.6 Sol high, standard speed |
 | Clear review-finding fixes | OpenCode | Muse route first |
 | Final QA | Antigravity or Codex | Resolve according to risk and implementer independence |
 
@@ -226,12 +226,12 @@ If sensitive context is required, route to an allowed privacy-compatible alterna
 
 **Codex Fast mode is disabled by default for every SeatFlow delegation.**
 
-For Codex stage threads specify:
+For Codex stage threads specify (effort is case-sensitive lowercase — `High` fails, use `high`):
 
 ```text
 Provider: Codex
 Model: <Luna | Terra | Sol according to MODEL_ROUTER>
-Reasoning effort: <Low | Medium | High | xHigh as selected>
+Reasoning effort: <low | medium | high | xhigh as selected>
 Fast mode: OFF
 Speed: standard
 ```
@@ -239,7 +239,8 @@ Speed: standard
 Rules:
 
 1. Never enable Fast automatically.
-2. Never use a `Fast`/accelerated variant merely to reduce latency.
+2. Never pass a capitalized Codex effort (`High`, `Medium`, `Low`, `xHigh`, `Max`). Always use lowercase (`high`, `medium`, `low`, `xhigh`, `max`); subagent/model selection is case-sensitive.
+3. Never use a `Fast`/accelerated variant merely to reduce latency.
 3. Fast may be enabled only when the user explicitly requests it for that run/stage.
 4. If the selected Poracode thread route cannot guarantee `Fast = OFF`, do not silently consume accelerated quota; use an allowed standard-speed route or report the limitation.
 5. Record `FAST MODE: OFF` in the stage handoff when Codex is used.
@@ -285,7 +286,7 @@ OpenCode / Muse supervisor
   -> optional planning worker thread
   -> create OpenCode / Muse implementation thread
   -> wait + read result
-  -> create Codex / Terra High / Fast OFF review thread
+  -> create Codex / Terra high / Fast OFF review thread
   -> wait + read result
   -> if findings: create/reuse Muse fix thread
   -> create independent re-review thread when required
@@ -297,11 +298,11 @@ For a critical task:
 
 ```text
 supervisor
-  -> create Codex / Sol High / Fast OFF risk-analysis thread
+  -> create Codex / Sol high / Fast OFF risk-analysis thread
   -> deterministic task/plan
   -> create implementation thread on selected route
   -> exhaustive verification
-  -> create independent Codex / Sol High / Fast OFF final-review thread
+  -> create independent Codex / Sol high / Fast OFF final-review thread
   -> repair/re-review as required
   -> final QA
 ```

@@ -167,7 +167,7 @@ The supervisor must:
 3. pass the original task, architecture/ADR context, complete diff, changed tests, verification results, and known risks;
 4. ensure the implementation agent does not self-approve.
 
-For ordinary Muse implementation, the default substantive reviewer route is Codex/Terra High with Fast OFF; critical domains follow the Sol risk override. The exact selection still comes from `.ai/MODEL_ROUTER.md`.
+For ordinary Muse implementation, the default substantive reviewer route is Codex/Terra high with Fast OFF; critical domains follow the Sol risk override. The exact selection still comes from `.ai/MODEL_ROUTER.md`.
 
 ### Manual fallback
 

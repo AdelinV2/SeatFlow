@@ -243,7 +243,7 @@ It is selected because SeatFlow needs a stable independent senior-engineer layer
 
 is operationally stronger than using the same model for both generation and approval because it separates execution from judgment and reduces correlated mistakes.
 
-For small/mechanical reviews, Terra Medium is enough. Terra High is the normal substantive review route.
+For small/mechanical reviews, Terra medium is enough. Terra high is the normal substantive review route.
 
 ---
 
@@ -261,16 +261,16 @@ Sol is reserved for places where a plausible error can survive ordinary tests an
 Preferred critical pipeline:
 
 ```text
-Sol High risk analysis
+Sol high risk analysis
 -> explicit deterministic task/spec
 -> Muse xHigh implementation (Free -> Go)
 -> exhaustive deterministic tests
--> Sol High independent final review
+-> Sol high independent final review
 ```
 
 This spends premium quota where it changes expected escaped-defect risk instead of using Sol as a bulk code writer.
 
-Sol xHigh is for unresolved severe ambiguity. Sol Max is exceptional.
+Sol xhigh is for unresolved severe ambiguity. Sol max is exceptional.
 
 ---
 
@@ -283,11 +283,11 @@ Luna is useful for:
 - tiny deterministic fixes;
 - quick bounded checks.
 
-For substantive review, Terra Medium/High is a better allocation of Codex quota than trying to compensate with Luna High.
+For substantive review, Terra medium/high is a better allocation of Codex quota than trying to compensate with Luna high.
 
 Most importantly for Poracode:
 
-**Luna High Fast is not a default SeatFlow route.**
+**Luna high fast is not a default SeatFlow route.**
 
 Fast mode is explicitly disabled by repository policy unless the user asks for it.
 
@@ -329,11 +329,11 @@ Poracode therefore fits SeatFlow as an execution/orchestration harness, while `.
 
 ### Routine backend
 
-`Gemini High plan when needed -> Muse xHigh Free -> Muse xHigh Go fallback -> tests -> Terra High review -> Muse fixes -> Gemini High QA`
+`Gemini High plan when needed -> Muse xHigh Free -> Muse xHigh Go fallback -> tests -> Terra high review -> Muse fixes -> Gemini High QA`
 
 ### Frontend
 
-`Gemini High implementation -> browser/tests -> Terra High review when state/contracts are substantive -> Gemini High QA`
+`Gemini High implementation -> browser/tests -> Terra high review when state/contracts are substantive -> Gemini High QA`
 
 ### Clear bug
 
@@ -341,11 +341,11 @@ Poracode therefore fits SeatFlow as an execution/orchestration harness, while `.
 
 ### Hard backend bug
 
-`Terra High diagnosis -> Muse xHigh repair -> Terra review`
+`Terra high diagnosis -> Muse xHigh repair -> Terra review`
 
 ### Critical reservation/payment/security
 
-`Sol High risk analysis -> Muse xHigh implementation -> exhaustive tests -> Sol High final review`
+`Sol high risk analysis -> Muse xHigh implementation -> exhaustive tests -> Sol high final review`
 
 ### Standard speed policy
 
