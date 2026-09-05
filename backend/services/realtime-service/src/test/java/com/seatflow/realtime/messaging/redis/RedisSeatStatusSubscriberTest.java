@@ -26,7 +26,7 @@ class RedisSeatStatusSubscriberTest {
         RedisSeatStatusSubscriber subscriber = new RedisSeatStatusSubscriber(
                 objectMapper, broadcaster, new SimpleMeterRegistry());
         SeatStatusUpdateMessage payload = SeatStatusUpdateMessage.of(
-                UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.HELD, Instant.now().plusSeconds(900));
+                UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.HELD, Instant.now().plusSeconds(900));
         RedisSeatStatusEnvelope envelope = new RedisSeatStatusEnvelope(
                 "event-envelope-1", UUID.randomUUID(), "instance-a", Instant.now(), payload);
         byte[] body = objectMapper.writeValueAsBytes(envelope);
@@ -54,7 +54,7 @@ class RedisSeatStatusSubscriberTest {
         RedisSeatStatusSubscriber subscriber = new RedisSeatStatusSubscriber(
                 objectMapper, broadcaster, new SimpleMeterRegistry());
         SeatStatusUpdateMessage payload = SeatStatusUpdateMessage.of(
-                UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.SOLD, null);
+                UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.SOLD, null);
         RedisSeatStatusEnvelope first = new RedisSeatStatusEnvelope(
                 "source-event-1", UUID.randomUUID(), "instance-a", Instant.now(), payload);
         RedisSeatStatusEnvelope replay = new RedisSeatStatusEnvelope(
@@ -73,11 +73,28 @@ class RedisSeatStatusSubscriberTest {
         RedisSeatStatusSubscriber subscriber = new RedisSeatStatusSubscriber(
                 objectMapper, broadcaster, new SimpleMeterRegistry());
         SeatStatusUpdateMessage payload = SeatStatusUpdateMessage.of(
-                UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.HELD, Instant.now());
+                UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.HELD, Instant.now());
         RedisSeatStatusEnvelope invalid = new RedisSeatStatusEnvelope(
                 " ", UUID.randomUUID(), "instance-a", Instant.now(), payload);
 
         subscriber.onMessage(new DefaultMessage("channel".getBytes(), objectMapper.writeValueAsBytes(invalid)), null);
+
+        org.mockito.Mockito.verifyNoInteractions(broadcaster);
+    }
+
+    @Test
+    void discardsLegacyEventOnlyPayloadWithoutBroadcasting() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        SeatStatusBroadcaster broadcaster = mock(SeatStatusBroadcaster.class);
+        RedisSeatStatusSubscriber subscriber = new RedisSeatStatusSubscriber(
+                objectMapper, broadcaster, new SimpleMeterRegistry());
+        SeatStatusUpdateMessage legacyPayload = new SeatStatusUpdateMessage(
+                null, UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.HELD, Instant.now(),
+                Instant.now().plusSeconds(900));
+        RedisSeatStatusEnvelope legacy = new RedisSeatStatusEnvelope(
+                "legacy-source-1", UUID.randomUUID(), "instance-a", Instant.now(), legacyPayload);
+
+        subscriber.onMessage(new DefaultMessage("channel".getBytes(), objectMapper.writeValueAsBytes(legacy)), null);
 
         org.mockito.Mockito.verifyNoInteractions(broadcaster);
     }

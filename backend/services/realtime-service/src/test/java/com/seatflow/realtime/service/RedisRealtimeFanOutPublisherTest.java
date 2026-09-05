@@ -36,7 +36,7 @@ class RedisRealtimeFanOutPublisherTest {
                 "instance-a",
                 new SimpleMeterRegistry());
         SeatStatusUpdateMessage payload = SeatStatusUpdateMessage.of(
-                UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.SOLD, null);
+                UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), SeatStatus.SOLD, null);
         ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
 
         publisher.publish("event-envelope-1", payload);

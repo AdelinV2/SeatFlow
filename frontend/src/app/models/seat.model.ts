@@ -33,7 +33,10 @@ export interface Seat {
 }
 
 export interface SeatStatusUpdate {
-  eventId: string;
+  /** Routing key: the subscribed event session. */
+  eventSessionId: string;
+  /** Catalog event ID retained for audit compatibility only; never used for routing. */
+  eventId?: string;
   seatId: string;
   status: SeatStatus;
   expiresAt?: string;
@@ -41,7 +44,10 @@ export interface SeatStatusUpdate {
 }
 
 export interface SeatStatusUpdateMessage {
-  eventId: string;
+  /** Routing key: the subscribed event session. */
+  eventSessionId: string;
+  /** Catalog event ID retained for audit compatibility only; never used for routing. */
+  eventId?: string;
   seatIds: string[];
   status: SeatStatus;
   holdExpiresAt?: string;

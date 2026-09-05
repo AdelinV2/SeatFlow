@@ -243,7 +243,7 @@ class StompAuthChannelInterceptorTest {
     void preSend_SubscribeFrame_PassesThrough() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setLeaveMutable(true);
-        accessor.setDestination("/topic/events/event-123/seats");
+        accessor.setDestination("/topic/sessions/session-123/seats");
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
         Message<?> result = interceptor.preSend(message, messageChannel);

@@ -8,9 +8,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-@Schema(description = "STOMP broadcast payload for seat status updates on an event")
+@Schema(description = "STOMP broadcast payload for seat status updates on an event session")
 public record SeatStatusUpdateMessage(
-        @Schema(description = "Event ID", example = "223e4567-e89b-12d3-a456-426614174000")
+        @Schema(description = "Event session ID — the routing key for /topic/sessions/{eventSessionId}/seats",
+                example = "323e4567-e89b-12d3-a456-426614174000")
+        UUID eventSessionId,
+
+        @Schema(description = "Catalog event ID retained for audit compatibility only; never used as a routing key",
+                example = "223e4567-e89b-12d3-a456-426614174000", nullable = true)
         UUID eventId,
 
         @Schema(description = "List of affected seat IDs")
@@ -26,12 +31,14 @@ public record SeatStatusUpdateMessage(
         Instant holdExpiresAt
 ) {
     public static SeatStatusUpdateMessage of(
+            UUID eventSessionId,
             UUID eventId,
             List<UUID> seatIds,
             SeatStatus status,
             Instant holdExpiresAt
     ) {
         return new SeatStatusUpdateMessage(
+                eventSessionId,
                 eventId,
                 seatIds != null ? seatIds.stream().filter(Objects::nonNull).toList() : List.of(),
                 status,
@@ -41,11 +48,13 @@ public record SeatStatusUpdateMessage(
     }
 
     public static SeatStatusUpdateMessage of(
+            UUID eventSessionId,
             UUID eventId,
             UUID seatId,
             SeatStatus status
     ) {
         return new SeatStatusUpdateMessage(
+                eventSessionId,
                 eventId,
                 seatId != null ? List.of(seatId) : List.of(),
                 status,
