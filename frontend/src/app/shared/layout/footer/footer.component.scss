@@ -17,14 +17,14 @@ a:hover {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 999px;
-  background: var(--color-accent-emerald);
+  background-color: currentColor;
 }
 
 .status-indicator::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: inherit;
+  background-color: inherit;
   content: '';
   animation: status-pulse 1.8s ease-out infinite;
 }

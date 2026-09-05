@@ -1,8 +1,10 @@
 # ADR-010: Normalized Advanced Seat Layout with Visual Geometry Extensions
 
 - **Date:** 2026-09-02
-- **Status:** `PROPOSED`
+- **Status:** `ACCEPTED`
 - **Driven by:** Phase 11 — Advanced Venue & Seat Map Designer
+- **Affected tasks:** `TASK-P11-001` through `TASK-P11-012`
+- **Related architecture:** `.ai/architecture/03-database-models.md` §2.2; `.ai/architecture/06-api-contracts.md` §4.3; `.ai/architecture/07-frontend-specification.md` §8; `.ai/architecture/09-post-mvp-evolution.md` §3
 
 ## 1. Context
 
@@ -44,3 +46,13 @@ Trade-offs:
 ## 5. Implementation Notes
 
 Use optimistic layout versioning and reject stale admin saves with `409 Conflict`. Do not implement CAD/3D/free-form SVG editing in Phase 11.
+
+The Phase 11 contract is fixed as follows:
+
+- Sections use venue-canvas coordinates and seats use coordinates local to their section, all with `NUMERIC(12,3)` values. Positions and dimensions are bounded to `0..100000`; rotation is bounded to `-180..180` degrees and z-index to `-1000..1000`.
+- `venues.layout_version` is a separate non-negative `BIGINT` concurrency token. An editor save locks the venue row, compares the expected version, and atomically persists the complete layout snapshot. A stale version returns the existing stable `SF_409_CONFLICT` error; there is no force-save or automatic overwrite path.
+- Existing `grid_x/grid_y` columns and seat UUIDs are retained. The compatibility backfill sets `position_x = grid_x * 44` and `position_y = grid_y * 44`; legacy sections are placed deterministically by `(name, id)` with an 80-unit vertical gap. Existing reservation, ticket, and payment references remain valid.
+- Existing sections and seats omitted from a full editor snapshot are soft-deactivated with `is_active = false`; persisted inventory rows are never hard-deleted when referenced. Non-bookable layout elements are rectangular typed primitives (`STAGE`, `AISLE`, `LABEL`, `BARRIER`, `DECORATION`) with JSONB limited to visual geometry/metadata.
+- Event-service and customer-renderer contracts remain additive and continue to identify inventory by stable seat and section UUIDs. Bézier curves, CAD/3D geometry, and free-form SVG path storage are explicitly out of scope.
+- Customer-facing seat selection presentation is governed by `ADR-015` (Unified Hall Seat Map and Color-Coded Pricing Tiers), eliminating section tabs in favor of a unified hall canvas with a top pricing tier legend.
+

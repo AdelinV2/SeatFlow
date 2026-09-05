@@ -1,7 +1,7 @@
 # ADR-011: Event Sessions as the Bookable Inventory Boundary
 
 - **Date:** 2026-09-02
-- **Status:** `PROPOSED`
+- **Status:** `ACCEPTED`
 - **Driven by:** Phase 12 — Multiple Event Sessions / Showings
 
 ## 1. Context

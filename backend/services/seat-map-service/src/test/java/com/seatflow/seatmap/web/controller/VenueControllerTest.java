@@ -72,7 +72,7 @@ class VenueControllerTest {
     @Test
     void shouldGetVenueLayoutWithoutAuthentication() throws Exception {
         UUID venueId = UUID.randomUUID();
-        VenueSeatMapLayoutResponse response = new VenueSeatMapLayoutResponse(venueId, "Theatre", 500, 0L, List.of());
+        VenueSeatMapLayoutResponse response = new VenueSeatMapLayoutResponse(venueId, "Theatre", 500, 0L, List.of(), 0L, List.of());
 
         when(seatMapLayoutService.getVenueLayout(venueId)).thenReturn(response);
 

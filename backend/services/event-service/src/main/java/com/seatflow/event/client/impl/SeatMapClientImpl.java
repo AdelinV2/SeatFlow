@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +32,7 @@ public class SeatMapClientImpl implements SeatMapClient {
     private static final String CIRCUIT_BREAKER_NAME = "seatMapClient";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(2);
+    private static final long GRID_UNIT = 44L;
 
     private final RestClient.Builder loadBalancedBuilder;
     private final CircuitBreaker circuitBreaker;
@@ -122,10 +124,14 @@ public class SeatMapClientImpl implements SeatMapClient {
             }
             List<SeatMapVenueSection> sections = layout.sections() == null ? List.of()
                     : layout.sections().stream().map(this::toSection).toList();
-            long total = sections.stream()
-                    .mapToLong(s -> s.seats() == null ? 0 : s.seats().size())
-                    .sum();
-            return new SeatMapVenueLayout(layout.venueId(), layout.name(), layout.capacity(), total, sections);
+            List<SeatMapVenueLayout.LayoutElement> elements = layout.elements() == null ? List.of()
+                    : layout.elements().stream().map(this::toElement).toList();
+            long total = layout.totalConfiguredSeats() != null ? layout.totalConfiguredSeats() : 0L;
+            long version = layout.layoutVersion() != null ? layout.layoutVersion() : 0L;
+            log.info("Fetched venue layout. venueId={}, layoutVersion={}, sections={}, elements={}, totalConfiguredSeats={}",
+                    venueId, version, sections.size(), elements.size(), total);
+            return new SeatMapVenueLayout(layout.venueId(), layout.name(), layout.capacity(), total, sections,
+                    version, elements);
         } catch (ResourceNotFoundException e) {
             throw e;
         } catch (HttpStatusCodeException e) {
@@ -142,20 +148,62 @@ public class SeatMapClientImpl implements SeatMapClient {
     private SeatMapVenueSection toSection(VenueSection section) {
         List<SeatMapVenueSeat> seats = section.seats() == null ? List.of()
                 : section.seats().stream().map(this::toSeat).toList();
-        return new SeatMapVenueSection(section.sectionId(), section.name(), section.rowCount(),
-                section.colCount(), seats);
+        return new SeatMapVenueSection(
+                section.sectionId(),
+                section.name(),
+                section.rowCount(),
+                section.colCount(),
+                section.isActive() != null ? section.isActive() : Boolean.TRUE,
+                section.positionX() != null ? section.positionX() : BigDecimal.ZERO,
+                section.positionY() != null ? section.positionY() : BigDecimal.ZERO,
+                section.width() != null ? section.width() : gridExtent(section.colCount()),
+                section.height() != null ? section.height() : gridExtent(section.rowCount()),
+                section.rotationDeg() != null ? section.rotationDeg() : BigDecimal.ZERO,
+                section.zIndex() != null ? section.zIndex() : 0,
+                section.shapeMetadata(),
+                seats);
     }
 
     private SeatMapVenueSeat toSeat(VenueSeat seat) {
-        return new SeatMapVenueSeat(seat.seatId(), seat.rowLabel(), seat.seatNumber(),
-                seat.gridX(), seat.gridY(), seat.isActive());
+        return new SeatMapVenueSeat(
+                seat.seatId(),
+                seat.rowLabel(),
+                seat.seatNumber(),
+                seat.gridX(),
+                seat.gridY(),
+                seat.isActive(),
+                seat.positionX() != null ? seat.positionX() : gridToPosition(seat.gridX()),
+                seat.positionY() != null ? seat.positionY() : gridToPosition(seat.gridY()));
+    }
+
+    private SeatMapVenueLayout.LayoutElement toElement(VenueElement element) {
+        SeatMapVenueLayout.Geometry geometry = element.geometry() == null ? null
+                : new SeatMapVenueLayout.Geometry(
+                        element.geometry().x(),
+                        element.geometry().y(),
+                        element.geometry().width(),
+                        element.geometry().height(),
+                        element.geometry().rotationDeg());
+        return new SeatMapVenueLayout.LayoutElement(
+                element.elementId(), element.type(), element.label(), geometry, element.zIndex());
+    }
+
+    private static BigDecimal gridToPosition(Integer grid) {
+        return grid == null ? BigDecimal.ZERO : BigDecimal.valueOf(grid * GRID_UNIT);
+    }
+
+    private static BigDecimal gridExtent(Integer cells) {
+        return cells == null ? BigDecimal.ZERO : BigDecimal.valueOf(cells * GRID_UNIT);
     }
 
     private record VenueLayout(
             UUID venueId,
             String name,
             Integer capacity,
-            List<VenueSection> sections
+            Long totalConfiguredSeats,
+            List<VenueSection> sections,
+            Long layoutVersion,
+            List<VenueElement> elements
     ) {
     }
 
@@ -164,6 +212,14 @@ public class SeatMapClientImpl implements SeatMapClient {
             String name,
             Integer rowCount,
             Integer colCount,
+            Boolean isActive,
+            BigDecimal positionX,
+            BigDecimal positionY,
+            BigDecimal width,
+            BigDecimal height,
+            BigDecimal rotationDeg,
+            Integer zIndex,
+            Object shapeMetadata,
             List<VenueSeat> seats
     ) {
     }
@@ -174,7 +230,27 @@ public class SeatMapClientImpl implements SeatMapClient {
             Integer seatNumber,
             Integer gridX,
             Integer gridY,
-            Boolean isActive
+            Boolean isActive,
+            BigDecimal positionX,
+            BigDecimal positionY
+    ) {
+    }
+
+    private record VenueElement(
+            UUID elementId,
+            String type,
+            String label,
+            VenueGeometry geometry,
+            Integer zIndex
+    ) {
+    }
+
+    private record VenueGeometry(
+            BigDecimal x,
+            BigDecimal y,
+            BigDecimal width,
+            BigDecimal height,
+            BigDecimal rotationDeg
     ) {
     }
 }

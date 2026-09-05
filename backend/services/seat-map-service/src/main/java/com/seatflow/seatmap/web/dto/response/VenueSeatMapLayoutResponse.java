@@ -10,6 +10,8 @@ public record VenueSeatMapLayoutResponse(
     @Schema(description = "Venue name") String name,
     @Schema(description = "Total maximum capacity") Integer capacity,
     @Schema(description = "Total active seats configured in this layout") Long totalConfiguredSeats,
-    @Schema(description = "Sections with seat grids") List<SectionLayoutResponse> sections
+    @Schema(description = "Sections with seat grids") List<SectionLayoutResponse> sections,
+    @Schema(description = "Current layout version") Long layoutVersion,
+    @Schema(description = "Non-bookable visual layout elements") List<LayoutElementResponse> elements
 ) {}
 

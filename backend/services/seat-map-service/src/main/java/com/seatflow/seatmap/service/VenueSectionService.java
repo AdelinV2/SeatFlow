@@ -26,7 +26,17 @@ public interface VenueSectionService {
 
     /**
      * Delete a section and all its associated seats from a venue.
+     * Legacy alias for {@link #deactivateSection(UUID, UUID)}: rows are soft-deactivated
+     * ({@code is_active = false}) and never hard-deleted, and the venue layout version
+     * is incremented. Kept for backward compatibility with existing callers.
      * Throws ResourceNotFoundException if venue or section does not exist.
      */
     void deleteSection(UUID venueId, UUID sectionId);
+
+    /**
+     * Soft-deactivate a section and all its seats, then advance the venue layout version.
+     * Uses the venue pessimistic-write lock so concurrent editor saves observe the bump.
+     * Throws ResourceNotFoundException if venue or section does not exist.
+     */
+    void deactivateSection(UUID venueId, UUID sectionId);
 }

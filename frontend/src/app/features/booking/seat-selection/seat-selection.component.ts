@@ -31,6 +31,8 @@ import {
 } from '../../../services/reservation-api.service';
 import { SeatStateService } from '../../../services/seat-state.service';
 import { WebSocketService } from '../../../services/websocket.service';
+import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { resolveSectionColor } from '../../../shared/utils/layout-geometry';
 import { SeatMapComponent } from '../seat-map/seat-map.component';
 import { SelectionDockComponent } from '../selection-dock/selection-dock.component';
 
@@ -43,7 +45,7 @@ interface SeatMapLoadResult {
 @Component({
   selector: 'app-seat-selection',
   standalone: true,
-  imports: [CommonModule, RouterLink, SeatMapComponent, SelectionDockComponent],
+  imports: [CommonModule, RouterLink, DateFormatPipe, SeatMapComponent, SelectionDockComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './seat-selection.component.html',
   styleUrl: './seat-selection.component.scss',
@@ -257,24 +259,62 @@ export class SeatSelectionComponent implements OnInit {
   }
 
   private flattenSeats(response: EventSeatMapResponse): Seat[] {
-    return (response.sections ?? []).flatMap((section) => {
-      const tier = section.pricingTiers?.[0];
-      const price = Number(tier?.price ?? 0);
-      const hasValidPrice = Number.isFinite(price) && price > 0;
-      return (section.seats ?? []).map((seat) => ({
-        id: seat.seatId,
-        sectionId: section.sectionId,
-        sectionName: section.name,
-        rowLabel: seat.rowLabel,
-        seatNumber: seat.seatNumber,
-        gridX: seat.gridX,
-        gridY: seat.gridY,
-        price: hasValidPrice ? price : 0,
-        currency: tier?.currency ?? 'USD',
-        status: seat.isActive && hasValidPrice ? ('AVAILABLE' as const) : ('DISABLED' as const),
-        isActive: seat.isActive && hasValidPrice,
-      }));
-    });
+    return (response.sections ?? [])
+      .filter((section) => section.isActive !== false)
+      .flatMap((section, sectionIdx) => {
+        const tiers = section.pricingTiers ?? [];
+        const defaultTier =
+          tiers.find((t) => t.categoryName?.toLowerCase() === 'standard') ??
+          tiers.find((t) => Number(t.price) > 0) ??
+          tiers[0];
+        const price = Number(defaultTier?.price ?? 0);
+        const hasValidPrice = Number.isFinite(price) && price > 0;
+        const secPosX = section.positionX ?? 0;
+        const secPosY = section.positionY ?? 0;
+        const secWidth = section.width ?? (section.colCount != null ? section.colCount * 44 : 0);
+        const secHeight = section.height ?? (section.rowCount != null ? section.rowCount * 44 : 0);
+        const secRot = section.rotationDeg ?? 0;
+        const secZ = section.zIndex ?? 0;
+
+        const secMeta = (section.shapeMetadata as Record<string, unknown>) ?? null;
+        const secColor = resolveSectionColor(section, sectionIdx);
+
+        return (section.seats ?? []).map((seat) => {
+          const posX = seat.positionX ?? (seat.gridX != null ? seat.gridX * 44 : 0);
+          const posY = seat.positionY ?? (seat.gridY != null ? seat.gridY * 44 : 0);
+          return {
+            id: seat.seatId,
+            sectionId: section.sectionId,
+            sectionName: section.name,
+            rowLabel: seat.rowLabel,
+            seatNumber: seat.seatNumber,
+            gridX: seat.gridX,
+            gridY: seat.gridY,
+            price: hasValidPrice ? price : 0,
+            currency: defaultTier?.currency ?? 'USD',
+            status: seat.isActive && hasValidPrice ? ('AVAILABLE' as const) : ('DISABLED' as const),
+            isActive: Boolean(seat.isActive && hasValidPrice),
+            positionX: posX,
+            positionY: posY,
+            sectionPositionX: secPosX,
+            sectionPositionY: secPosY,
+            sectionWidth: secWidth,
+            sectionHeight: secHeight,
+            sectionRotationDeg: secRot,
+            sectionZIndex: secZ,
+            sectionColor: secColor,
+            sectionShapeMetadata: secMeta,
+            categoryName: defaultTier?.categoryName || 'Standard',
+            pricingTierId: defaultTier?.id,
+            pricingTiers: tiers.map((t) => ({
+              id: t.id,
+              categoryName: t.categoryName,
+              price: Number(t.price ?? 0),
+              currency: t.currency ?? 'USD',
+            })),
+          };
+        });
+      });
   }
 
   readonly conflictingSeatIds = signal<Set<string>>(new Set());

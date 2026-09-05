@@ -6,6 +6,7 @@ import com.seatflow.seatmap.model.entity.Seat;
 import com.seatflow.seatmap.model.entity.Venue;
 import com.seatflow.seatmap.model.entity.VenueSection;
 import com.seatflow.seatmap.repository.SeatRepository;
+import com.seatflow.seatmap.repository.VenueLayoutElementRepository;
 import com.seatflow.seatmap.repository.VenueRepository;
 import com.seatflow.seatmap.repository.VenueSectionRepository;
 import com.seatflow.seatmap.service.impl.SeatMapLayoutServiceImpl;
@@ -43,6 +44,9 @@ class SeatMapLayoutServiceImplTest {
     private SeatRepository seatRepository;
 
     @Mock
+    private VenueLayoutElementRepository elementRepository;
+
+    @Mock
     private SeatMapper seatMapper;
 
     @Test
@@ -60,12 +64,15 @@ class SeatMapLayoutServiceImplTest {
                 .rowLabel("A").seatNumber(2).gridX(1).gridY(0).isActive(false).createdAt(Instant.now()).build();
 
         when(venueRepository.findById(venueId)).thenReturn(Optional.of(venue));
-        when(sectionRepository.findByVenueIdOrderByNameAsc(venueId)).thenReturn(List.of(section));
+        when(sectionRepository.findByVenueIdAndIsActiveTrueOrderByZIndexAscNameAsc(venueId)).thenReturn(List.of(section));
         when(seatRepository.findBySectionIdOrderByGridYAscGridXAsc(sectionId)).thenReturn(List.of(seat1, seat2));
+        when(elementRepository.findByVenueIdOrderByZIndexAscIdAsc(venueId)).thenReturn(List.of());
         when(seatMapper.toResponse(seat1)).thenReturn(
-                new SeatResponse(seat1.getId(), "A", 1, 0, 0, true));
+                new SeatResponse(seat1.getId(), "A", 1, 0, 0, true,
+                        new java.math.BigDecimal("0.000"), new java.math.BigDecimal("0.000")));
         when(seatMapper.toResponse(seat2)).thenReturn(
-                new SeatResponse(seat2.getId(), "A", 2, 1, 0, false));
+                new SeatResponse(seat2.getId(), "A", 2, 1, 0, false,
+                        new java.math.BigDecimal("44.000"), new java.math.BigDecimal("0.000")));
 
         // When
         VenueSeatMapLayoutResponse result = layoutService.getVenueLayout(venueId);

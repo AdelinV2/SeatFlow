@@ -2,7 +2,7 @@
 
 **Status:** `PLANNED`  
 **Architecture:** `.ai/architecture/09-post-mvp-evolution.md`  
-**Related ADR:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`  
+**Related ADRs:** `.ai/decisions/ADR-010-advanced-seat-layout-model.md`, `.ai/decisions/ADR-015-unified-seat-map-and-tier-color-rendering.md`  
 **Estimated effort:** ~16–20 focused implementation hours  
 
 ---
@@ -59,7 +59,8 @@ Create/refactor editor primitives around one shared geometry model:
 - keyboard delete/escape and accessible alternatives to pointer-only actions;
 - dirty-state route guard;
 - save conflict UI;
-- preview mode using customer seat-rendering components or the same geometry primitives.
+- preview mode using customer seat-rendering components or the same geometry primitives;
+- customer seat map (`SeatMapComponent`) refactored to render the entire venue layout simultaneously on a single unified 2D canvas (stage, orchestra, loges, balconies), replacing section tabs with a top pricing category legend bar (color-coded tiers Categoria A, B, C... as per ADR-015).
 
 Responsive admin use should remain possible, but the full designer may explicitly recommend desktop/tablet landscape for complex editing.
 
@@ -69,6 +70,7 @@ Responsive admin use should remain possible, but the full designer may explicitl
 - Event/Reservation/Ticket services do not need seat ID changes.
 - Existing event pricing references to section IDs remain valid.
 - Customer selection must not know whether a layout originated from the legacy grid generator or advanced editor.
+- Customer booking displays the unified venue map with immediate direct seat selection across all sections without requiring section isolation or tab switches.
 
 ## 6. Suggested Atomic Tasks
 

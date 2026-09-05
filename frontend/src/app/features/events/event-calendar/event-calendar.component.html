@@ -1,28 +1,59 @@
-<div class="calendar-container rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm md:p-6">
+<div class="calendar-container rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm md:p-6 transition-all duration-200">
   <!-- Month Header Controls -->
-  <div class="mb-5 flex items-center justify-between">
-    <div class="flex items-center gap-2">
+  <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <!-- Left: Month Navigation Controls -->
+    <div class="flex items-center gap-2 sm:gap-2.5">
+      <div class="inline-flex items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)]/90 p-1 shadow-xs backdrop-blur-md">
+        <!-- Previous Month Button -->
+        <button
+          type="button"
+          (click)="prevMonth()"
+          class="btn-spring flex size-8.5 sm:size-9 items-center justify-center rounded-xl border border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-xs active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer transition-all"
+          aria-label="Previous month"
+          title="Previous month"
+        >
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <!-- Fixed-Width Month Title: Eliminates layout jitter across varying month name lengths -->
+        <h3 class="w-44 sm:w-52 text-center text-sm sm:text-base font-extrabold tracking-tight text-[var(--color-text-primary)] select-none tabular-nums truncate px-1">
+          {{ formattedMonthHeader() }}
+        </h3>
+
+        <!-- Next Month Button -->
+        <button
+          type="button"
+          (click)="nextMonth()"
+          class="btn-spring flex size-8.5 sm:size-9 items-center justify-center rounded-xl border border-transparent text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-indigo-600 dark:hover:text-indigo-400 hover:shadow-xs active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer transition-all"
+          aria-label="Next month"
+          title="Next month"
+        >
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Quick "Today" Jump Button -->
       <button
         type="button"
-        (click)="prevMonth()"
-        class="btn-spring flex size-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] text-[var(--color-text-secondary)] hover:text-[var(--color-primary-hover)] cursor-pointer"
-        aria-label="Previous month"
+        (click)="goToToday()"
+        [disabled]="isCurrentMonthToday()"
+        [ngClass]="isCurrentMonthToday()
+          ? 'opacity-35 cursor-default border-transparent bg-transparent'
+          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-indigo-400/50 hover:bg-[var(--color-surface-elevated)] hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-95 cursor-pointer shadow-xs'"
+        class="btn-spring inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold text-[var(--color-text-secondary)] transition-all"
+        aria-label="Jump to current month"
+        title="Jump to current month"
       >
-        ‹
-      </button>
-      <h3 class="text-base font-bold capitalize text-[var(--color-text-primary)] md:text-lg">
-        {{ formattedMonthHeader() }}
-      </h3>
-      <button
-        type="button"
-        (click)="nextMonth()"
-        class="btn-spring flex size-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] text-[var(--color-text-secondary)] hover:text-[var(--color-primary-hover)] cursor-pointer"
-        aria-label="Next month"
-      >
-        ›
+        <span class="size-2 rounded-full bg-indigo-500 ring-2 ring-indigo-400/30"></span>
+        <span>Today</span>
       </button>
     </div>
 
+    <!-- Right: Legend & Active Date Filter Chip -->
     <div class="flex items-center gap-3">
       <!-- Calendar Legend -->
       <div class="hidden sm:flex items-center gap-3 text-[11px] text-[var(--color-text-muted)] font-medium">
@@ -31,135 +62,197 @@
           <span>Today</span>
         </span>
         <span class="flex items-center gap-1.5">
-          <span class="size-2 rounded-full bg-slate-500/40"></span>
+          <span class="size-2 rounded-full bg-indigo-500"></span>
+          <span>Has Events</span>
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="size-2 rounded-full bg-slate-400/50"></span>
           <span>Past</span>
         </span>
       </div>
 
-      @if (selectedDate()) {
-        <button
-          type="button"
-          (click)="clearSelection()"
-          class="text-xs font-semibold text-indigo-500 hover:text-indigo-400 hover:underline cursor-pointer"
-        >
-          Clear Date Filter
-        </button>
+      <!-- Active Selection Filter Chip -->
+      @if (selectedDate(); as sel) {
+        <div class="inline-flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 py-1 pl-3 pr-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-300 animate-fade-in shadow-xs">
+          <span class="flex items-center gap-1.5">
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>Filtered: {{ sel | sfDate: 'short' }}</span>
+          </span>
+          <button
+            type="button"
+            (click)="clearSelection()"
+            class="flex size-5 items-center justify-center rounded-lg hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 active:scale-90 transition-all cursor-pointer"
+            aria-label="Clear date filter"
+            title="Clear date filter"
+          >
+            <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       }
     </div>
   </div>
 
   <!-- Weekday Columns Header -->
-  <div class="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-    @for (label of weekDayLabels; track label) {
-      <div class="py-1">{{ label }}</div>
+  <div class="mb-2.5 grid grid-cols-7 gap-1.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-[var(--color-text-muted)] lg:gap-2">
+    @for (label of weekDayLabels; track label; let idx = $index) {
+      <div
+        class="py-1.5 rounded-lg select-none"
+        [ngClass]="idx >= 5 ? 'text-indigo-500/80 dark:text-indigo-400/80' : ''"
+      >
+        {{ label }}
+      </div>
     }
   </div>
 
   <!-- Desktop Full Grid View (>= 768px) -->
-  <div class="hidden grid-cols-7 gap-1.5 md:grid" role="grid" aria-label="Event calendar desktop grid">
+  <div class="hidden grid-cols-7 gap-1.5 md:grid lg:gap-2" role="grid" aria-label="Event calendar desktop grid">
     @for (day of calendarDays(); track day.date.toISOString()) {
       <button
         type="button"
         (click)="selectDay(day)"
-        class="flex min-h-[96px] flex-col justify-between rounded-xl border p-2 text-left transition-all duration-200 cursor-pointer select-none"
+        class="group relative flex min-h-[105px] flex-col justify-between rounded-2xl border p-2.5 text-left transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         [ngClass]="[
           !day.isCurrentMonth
-            ? 'border-transparent bg-transparent opacity-20 pointer-events-none'
-            : day.isToday
-              ? 'border-indigo-500/70 bg-indigo-500/10 ring-1 ring-indigo-500/40 shadow-sm'
-              : day.isPast
-                ? 'border-[var(--color-border-subtle)] bg-[var(--color-canvas)]/50 opacity-45 hover:opacity-85 hover:border-slate-500/40'
-                : 'border-[var(--color-border)] bg-[var(--color-canvas)] hover:border-indigo-400/50 hover:bg-[var(--color-surface-elevated)]',
-          day.isSelected
-            ? '!border-indigo-500 !bg-indigo-500/20 ring-2 ring-indigo-500 shadow-md'
-            : ''
+            ? 'border-dashed border-[var(--color-border-subtle)] bg-[var(--color-canvas)]/30 opacity-40 hover:opacity-80 hover:border-[var(--color-border)]'
+            : day.isSelected
+              ? '!border-indigo-500 !bg-indigo-500/[0.12] dark:!bg-indigo-500/[0.2] ring-2 ring-indigo-500 shadow-md shadow-indigo-500/10'
+              : day.isToday
+                ? 'border-indigo-500/70 bg-indigo-500/5 ring-1 ring-indigo-500/40 shadow-xs hover:border-indigo-500 hover:bg-indigo-500/10'
+                : day.isPast
+                  ? 'border-[var(--color-border-subtle)] bg-[var(--color-canvas)]/50 opacity-60 hover:opacity-90 hover:border-slate-400/40 hover:bg-[var(--color-surface)]'
+                  : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-indigo-400/60 hover:bg-[var(--color-surface-elevated)] hover:shadow-md hover:-translate-y-0.5'
         ]"
         [attr.aria-label]="day.dayNumber + (day.isToday ? ', Today' : '') + (day.events.length ? ', ' + day.events.length + ' events' : '')"
         [attr.aria-selected]="day.isSelected"
       >
-        <!-- Day Number & Today Badge Row -->
+        <!-- Day Number & Status Badge Row -->
         <div class="flex items-center justify-between w-full">
           @if (day.isToday) {
-            <span class="inline-flex size-6 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-xs font-black text-white shadow-md shadow-indigo-600/40 ring-2 ring-indigo-400/50">
+            <span class="inline-flex size-6.5 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-violet-600 text-xs font-black text-white shadow-md shadow-indigo-600/40 ring-2 ring-indigo-400/50">
               {{ day.dayNumber }}
             </span>
-            <span class="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+            <span class="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
               Today
             </span>
           } @else {
             <span
-              class="text-xs"
+              class="text-xs transition-colors"
               [ngClass]="[
-                day.isPast ? 'text-[var(--color-text-muted)] font-normal' : 'text-[var(--color-text-primary)] font-bold'
+                !day.isCurrentMonth
+                  ? 'text-[var(--color-text-muted)] font-normal'
+                  : day.isSelected
+                    ? 'text-indigo-600 dark:text-indigo-300 font-extrabold'
+                    : day.isPast
+                      ? 'text-[var(--color-text-muted)] font-normal'
+                      : 'text-[var(--color-text-primary)] font-bold group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
               ]"
             >
               {{ day.dayNumber }}
             </span>
-            @if (day.isPast && day.isCurrentMonth) {
-              <span class="text-[9px] text-[var(--color-text-muted)] opacity-60">Past</span>
+
+            @if (day.events.length > 0) {
+              <span
+                class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold"
+                [ngClass]="[
+                  day.isSelected
+                    ? 'bg-indigo-600 text-white'
+                    : day.isPast
+                      ? 'bg-slate-500/15 text-[var(--color-text-muted)]'
+                      : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'
+                ]"
+              >
+                <span class="size-1 rounded-full" [ngClass]="day.isSelected ? 'bg-white' : 'bg-indigo-500'"></span>
+                <span>{{ day.events.length }}</span>
+              </span>
+            } @else if (day.isPast && day.isCurrentMonth) {
+              <span class="text-[9px] text-[var(--color-text-muted)] opacity-50">Past</span>
             }
           }
         </div>
 
         <!-- Event Chips -->
-        <div class="w-full space-y-1 overflow-hidden mt-1">
+        <div class="w-full space-y-1.5 overflow-hidden mt-1.5">
           @for (event of day.events.slice(0, 2); track event.id) {
             <div
-              class="truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold transition-opacity"
+              class="truncate rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all flex items-center gap-1.5"
               [ngClass]="[
-                day.isPast
-                  ? 'border-slate-500/20 bg-slate-500/10 text-[var(--color-text-muted)] opacity-75'
-                  : 'border-indigo-500/30 bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                day.isSelected
+                  ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-900 dark:text-indigo-100'
+                  : day.isPast
+                    ? 'border-slate-500/20 bg-slate-500/10 text-[var(--color-text-muted)] opacity-75'
+                    : 'border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20'
               ]"
               [title]="event.title"
             >
-              {{ event.title }}
+              <span class="size-1.5 rounded-full shrink-0" [ngClass]="getCategoryDotColor(event.category)"></span>
+              <span class="truncate">{{ event.title }}</span>
             </div>
           }
           @if (day.events.length > 2) {
-            <span class="block text-[9px] font-bold text-[var(--color-text-muted)]">
+            <div
+              class="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-elevated)]/60 px-1.5 py-0.5 text-center text-[9px] font-bold text-[var(--color-text-muted)] transition-colors group-hover:text-[var(--color-text-primary)]"
+            >
               +{{ day.events.length - 2 }} more
-            </span>
+            </div>
           }
         </div>
       </button>
     }
   </div>
 
-  <!-- Mobile Dot Matrix View (< 768px) -->
-  <div class="grid grid-cols-7 gap-1 text-center md:hidden" role="grid" aria-label="Event calendar mobile grid">
+  <!-- Mobile Grid View (< 768px) -->
+  <div class="grid grid-cols-7 gap-1.5 text-center md:hidden" role="grid" aria-label="Event calendar mobile grid">
     @for (day of calendarDays(); track day.date.toISOString()) {
       <button
         type="button"
         (click)="selectDay(day)"
-        class="flex flex-col items-center justify-center rounded-xl py-2 transition-all duration-200 cursor-pointer"
+        class="group relative flex min-h-[52px] flex-col items-center justify-center rounded-xl p-1 transition-all duration-150 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         [ngClass]="[
-          !day.isCurrentMonth ? 'opacity-20 pointer-events-none' : '',
-          day.isSelected
-            ? 'bg-indigo-600 text-white shadow-md'
-            : day.isPast && !day.isToday
-              ? 'opacity-40 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-elevated)]'
-              : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-elevated)]'
+          !day.isCurrentMonth
+            ? 'opacity-25 hover:opacity-60'
+            : day.isSelected
+              ? 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30'
+              : day.isToday
+                ? 'border border-indigo-500/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-extrabold'
+                : day.isPast
+                  ? 'opacity-40 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-elevated)]'
+                  : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-elevated)]'
         ]"
         [attr.aria-label]="day.dayNumber + (day.isToday ? ', Today' : '') + (day.events.length ? ', ' + day.events.length + ' events' : '')"
         [attr.aria-selected]="day.isSelected"
       >
-        @if (day.isToday && !day.isSelected) {
-          <span class="flex size-7 items-center justify-center rounded-full bg-indigo-600 font-black text-xs text-white shadow-md shadow-indigo-600/40 ring-2 ring-indigo-400/50">
-            {{ day.dayNumber }}
-          </span>
-        } @else {
-          <span class="text-xs font-semibold">{{ day.dayNumber }}</span>
-        }
+        <span class="text-xs" [ngClass]="day.isSelected || day.isToday ? 'font-black' : 'font-semibold'">
+          {{ day.dayNumber }}
+        </span>
 
-        @if (day.events.length > 0) {
-          <span
-            class="mt-1 size-1.5 rounded-full"
-            [ngClass]="day.isSelected ? 'bg-white' : day.isPast ? 'bg-slate-400' : 'bg-indigo-500 animate-pulse'"
-          ></span>
-        } @else {
-          <span class="mt-1 size-1.5"></span>
-        }
+        <!-- Event indicators -->
+        <div class="mt-1 flex items-center justify-center gap-0.5 h-1.5">
+          @if (day.events.length > 0) {
+            @if (day.events.length === 1) {
+              <span
+                class="size-1.5 rounded-full"
+                [ngClass]="day.isSelected ? 'bg-white' : day.isPast ? 'bg-slate-400' : 'bg-indigo-500'"
+              ></span>
+            } @else {
+              <span
+                class="size-1 rounded-full"
+                [ngClass]="day.isSelected ? 'bg-white' : 'bg-indigo-500'"
+              ></span>
+              <span
+                class="size-1 rounded-full"
+                [ngClass]="day.isSelected ? 'bg-white/80' : 'bg-violet-500'"
+              ></span>
+            }
+          }
+        </div>
       </button>
     }
   </div>

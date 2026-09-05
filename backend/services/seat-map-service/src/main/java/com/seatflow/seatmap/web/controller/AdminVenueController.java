@@ -1,14 +1,17 @@
 package com.seatflow.seatmap.web.controller;
 
 import com.seatflow.common.domain.dto.ApiErrorResponse;
+import com.seatflow.seatmap.service.VenueLayoutService;
 import com.seatflow.seatmap.service.VenueSectionService;
 import com.seatflow.seatmap.service.VenueService;
 import com.seatflow.seatmap.web.dto.request.CreateVenueRequest;
 import com.seatflow.seatmap.web.dto.request.CreateVenueSectionRequest;
+import com.seatflow.seatmap.web.dto.request.SaveVenueLayoutRequest;
 import com.seatflow.seatmap.web.dto.request.UpdateSeatStatusRequest;
 import com.seatflow.seatmap.web.dto.request.UpdateVenueRequest;
 import com.seatflow.seatmap.web.dto.response.SeatResponse;
 import com.seatflow.seatmap.web.dto.response.VenueResponse;
+import com.seatflow.seatmap.web.dto.response.VenueSeatMapLayoutResponse;
 import com.seatflow.seatmap.web.dto.response.VenueSectionResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,8 +36,10 @@ public class AdminVenueController {
 
     private final VenueService venueService;
     private final VenueSectionService sectionService;
+    private final VenueLayoutService layoutService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Create a new venue",
         description = "Creates a new venue. Rejects duplicate (name, city) combinations."
@@ -55,6 +60,7 @@ public class AdminVenueController {
     }
 
     @PutMapping("/{venueId}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Update an existing venue",
         description = "Updates venue details. Only non-null fields in the request body are applied."
@@ -77,6 +83,7 @@ public class AdminVenueController {
     }
 
     @PostMapping("/{venueId}/sections")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Create a venue section with auto-generated seat grid",
         description = "Creates a new section in the specified venue and automatically generates a rowCount × colCount seat grid. Row labels use alphabetic progression (A, B, C, ..., Z, AA, AB, ...)."
@@ -101,6 +108,7 @@ public class AdminVenueController {
     }
 
     @PatchMapping("/{venueId}/sections/{sectionId}/seats/{seatId}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
         summary = "Toggle seat active/inactive status",
         description = "Activates or deactivates a specific seat within a venue section. Deactivated seats are not bookable."
@@ -125,11 +133,12 @@ public class AdminVenueController {
     }
 
     @DeleteMapping("/{venueId}/sections/{sectionId}")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
-        summary = "Delete a venue section",
-        description = "Deletes a section and all its associated seats from the venue."
+        summary = "Deactivate a venue section",
+        description = "Soft-deactivates a section and all its seats (sets is_active=false) and increments layout_version. Rows are never hard-deleted."
     )
-    @ApiResponse(responseCode = "204", description = "Section deleted successfully")
+    @ApiResponse(responseCode = "204", description = "Section deactivated successfully")
     @ApiResponse(responseCode = "404", description = "Venue or section not found",
         content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "Authentication required",
@@ -141,5 +150,72 @@ public class AdminVenueController {
             @PathVariable UUID sectionId) {
         sectionService.deleteSection(venueId, sectionId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{venueId}/layout")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Get complete editable venue layout",
+        description = "Returns the complete editor layout including inactive sections/seats and all layout elements."
+    )
+    @ApiResponse(responseCode = "200", description = "Editable layout retrieved successfully",
+        content = @Content(schema = @Schema(implementation = VenueSeatMapLayoutResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Venue not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Admin role required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<VenueSeatMapLayoutResponse> getEditableLayout(
+            @PathVariable UUID venueId) {
+        VenueSeatMapLayoutResponse response = layoutService.getEditableLayout(venueId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{venueId}/layout/validation")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Validate a venue layout snapshot without persisting",
+        description = "Runs structural validation on the submitted snapshot. Returns 204 when valid; no write occurs."
+    )
+    @ApiResponse(responseCode = "204", description = "Layout snapshot is valid")
+    @ApiResponse(responseCode = "400", description = "Validation error",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Venue not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Admin role required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<Void> validateLayout(
+            @PathVariable UUID venueId,
+            @Valid @RequestBody SaveVenueLayoutRequest request) {
+        layoutService.validateLayout(venueId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{venueId}/layout")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+        summary = "Atomically save a complete venue layout snapshot",
+        description = "Persists sections, seats and elements in one transaction guarded by layoutVersion. Stale versions return 409 SF_409_CONFLICT."
+    )
+    @ApiResponse(responseCode = "200", description = "Layout saved successfully",
+        content = @Content(schema = @Schema(implementation = VenueSeatMapLayoutResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Validation error",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Venue not found",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "409", description = "Stale layout version",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Admin role required",
+        content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    public ResponseEntity<VenueSeatMapLayoutResponse> saveLayout(
+            @PathVariable UUID venueId,
+            @Valid @RequestBody SaveVenueLayoutRequest request) {
+        VenueSeatMapLayoutResponse response = layoutService.saveLayout(venueId, request);
+        return ResponseEntity.ok(response);
     }
 }

@@ -141,4 +141,60 @@ describe('EventCalendarComponent', () => {
     component.clearSelection();
     expect(emittedDate).toBeNull();
   });
+
+  it('should navigate to today when goToToday is called', () => {
+    // Navigate away first
+    component.currentMonth.set(new Date(2025, 0, 1));
+    expect(component.isCurrentMonthToday()).toBeFalse();
+
+    component.goToToday();
+    const today = new Date();
+    expect(component.currentMonth().getFullYear()).toBe(today.getFullYear());
+    expect(component.currentMonth().getMonth()).toBe(today.getMonth());
+    expect(component.isCurrentMonthToday()).toBeTrue();
+  });
+
+  it('should switch month when selecting a non-current month padding day', () => {
+    component.currentMonth.set(new Date(2026, 8, 1)); // September 2026
+    const days = component.calendarDays();
+    const paddingDay = days.find((d) => !d.isCurrentMonth);
+    expect(paddingDay).toBeDefined();
+
+    component.selectDay(paddingDay!);
+    expect(component.currentMonth().getMonth()).toBe(paddingDay!.date.getMonth());
+  });
+
+  it('should return correct category dot colors', () => {
+    expect(component.getCategoryDotColor('CONCERT')).toBe('bg-purple-500');
+    expect(component.getCategoryDotColor('THEATRE')).toBe('bg-amber-500');
+    expect(component.getCategoryDotColor('SPORTS')).toBe('bg-emerald-500');
+    expect(component.getCategoryDotColor('FESTIVAL')).toBe('bg-pink-500');
+    expect(component.getCategoryDotColor('COMEDY')).toBe('bg-sky-500');
+    expect(component.getCategoryDotColor('SYMPHONY')).toBe('bg-rose-500');
+    expect(component.getCategoryDotColor('OTHER')).toBe('bg-indigo-500');
+    expect(component.getCategoryDotColor(undefined)).toBe('bg-indigo-500');
+  });
+
+  it('should render stable fixed-width month header and SVG navigation buttons', () => {
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    const monthHeader = element.querySelector('h3');
+    expect(monthHeader?.classList.contains('w-44')).toBeTrue();
+    expect(monthHeader?.classList.contains('text-center')).toBeTrue();
+
+    const prevBtn = element.querySelector('button[aria-label="Previous month"]');
+    const nextBtn = element.querySelector('button[aria-label="Next month"]');
+    expect(prevBtn?.querySelector('svg')).toBeTruthy();
+    expect(nextBtn?.querySelector('svg')).toBeTruthy();
+  });
+
+  it('should render active filter chip with clear button when selectedDate is set', () => {
+    fixture.componentRef.setInput('selectedDate', new Date(2026, 8, 15));
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const clearBtn = element.querySelector('button[aria-label="Clear date filter"]');
+    expect(clearBtn).toBeTruthy();
+  });
 });

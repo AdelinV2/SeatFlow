@@ -1,13 +1,11 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { AdminVenueApiService } from './admin-venue-api.service';
 import {
   CreateSectionRequest,
   CreateVenueRequest,
+  SaveVenueLayoutRequest,
   UpdateVenueRequest,
   VenueLayout,
   VenueSectionLayout,
@@ -22,11 +20,7 @@ describe('AdminVenueApiService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        AdminVenueApiService,
-        provideHttpClient(),
-        provideHttpClientTesting(),
-      ],
+      providers: [AdminVenueApiService, provideHttpClient(), provideHttpClientTesting()],
     });
 
     service = TestBed.inject(AdminVenueApiService);
@@ -95,17 +89,28 @@ describe('AdminVenueApiService', () => {
     req.flush(mockVenue);
   });
 
-  it('should get full venue layout', () => {
+  it('should get full venue layout via public route', () => {
     const mockLayout: VenueLayout = {
       venueId: 'v-1',
       name: 'Grand Theatre',
       capacity: 1200,
+      totalConfiguredSeats: 1,
+      layoutVersion: 1,
+      elements: [],
       sections: [
         {
           sectionId: 'sec-1',
           name: 'Orchestra',
           rowCount: 2,
           colCount: 2,
+          isActive: true,
+          positionX: 10,
+          positionY: 20,
+          width: 300,
+          height: 150,
+          rotationDeg: 0,
+          zIndex: 1,
+          shapeMetadata: null,
           seats: [
             {
               seatId: 's-1',
@@ -113,6 +118,8 @@ describe('AdminVenueApiService', () => {
               seatNumber: 1,
               gridX: 0,
               gridY: 0,
+              positionX: 15,
+              positionY: 25,
               isActive: true,
             },
           ],
@@ -124,11 +131,181 @@ describe('AdminVenueApiService', () => {
       expect(layout.venueId).toBe('v-1');
       expect(layout.sections.length).toBe(1);
       expect(layout.sections[0].seats[0].rowLabel).toBe('A');
+      expect(layout.sections[0].seats[0].positionX).toBe(15);
+      expect(layout.layoutVersion).toBe(1);
     });
 
     const req = httpMock.expectOne('/api/venues/v-1/layout');
     expect(req.request.method).toBe('GET');
     req.flush(mockLayout);
+  });
+
+  it('should get editable layout via GET /api/admin/venues/{id}/layout', () => {
+    const mockLayout: VenueLayout = {
+      venueId: 'v-1',
+      name: 'Grand Theatre',
+      capacity: 1200,
+      totalConfiguredSeats: 1,
+      layoutVersion: 3,
+      elements: [
+        {
+          elementId: 'el-1',
+          type: 'STAGE',
+          label: 'Main Stage',
+          geometry: { x: 50, y: 10, width: 400, height: 100, rotationDeg: 0 },
+          zIndex: 2,
+        },
+      ],
+      sections: [
+        {
+          sectionId: 'sec-1',
+          name: 'Orchestra',
+          rowCount: 1,
+          colCount: 1,
+          isActive: true,
+          positionX: 50,
+          positionY: 150,
+          width: 400,
+          height: 200,
+          rotationDeg: 0,
+          zIndex: 1,
+          shapeMetadata: null,
+          seats: [
+            {
+              seatId: 's-1',
+              rowLabel: 'A',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 0,
+              positionX: 10,
+              positionY: 10,
+              isActive: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    service.getEditableLayout('v-1').subscribe((layout) => {
+      expect(layout.venueId).toBe('v-1');
+      expect(layout.layoutVersion).toBe(3);
+      expect(layout.elements?.length).toBe(1);
+      expect(layout.elements?.[0].type).toBe('STAGE');
+      expect(layout.sections.length).toBe(1);
+    });
+
+    const req = httpMock.expectOne('/api/admin/venues/v-1/layout');
+    expect(req.request.method).toBe('GET');
+    req.flush(mockLayout);
+  });
+
+  it('should validate layout snapshot via POST /api/admin/venues/{id}/layout/validation', () => {
+    const mockRequest: SaveVenueLayoutRequest = {
+      layoutVersion: 3,
+      sections: [
+        {
+          sectionId: 'sec-1',
+          name: 'Orchestra',
+          rowCount: 1,
+          colCount: 1,
+          isActive: true,
+          positionX: 50,
+          positionY: 150,
+          width: 400,
+          height: 200,
+          rotationDeg: 0,
+          zIndex: 1,
+          shapeMetadata: null,
+          seats: [
+            {
+              seatId: 's-1',
+              rowLabel: 'A',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 0,
+              positionX: 10,
+              positionY: 10,
+              isActive: true,
+            },
+          ],
+        },
+      ],
+      elements: [
+        {
+          elementId: 'el-1',
+          type: 'STAGE',
+          label: 'Main Stage',
+          geometry: { x: 50, y: 10, width: 400, height: 100, rotationDeg: 0 },
+          zIndex: 2,
+        },
+      ],
+    };
+
+    let completed = false;
+    service.validateLayout('v-1', mockRequest).subscribe(() => {
+      completed = true;
+    });
+
+    const req = httpMock.expectOne('/api/admin/venues/v-1/layout/validation');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(mockRequest);
+    req.flush(null, { status: 204, statusText: 'No Content' });
+    expect(completed).toBeTrue();
+  });
+
+  it('should save layout snapshot via PUT /api/admin/venues/{id}/layout', () => {
+    const mockRequest: SaveVenueLayoutRequest = {
+      layoutVersion: 3,
+      sections: [
+        {
+          sectionId: 'sec-1',
+          name: 'Orchestra',
+          rowCount: 1,
+          colCount: 1,
+          isActive: true,
+          positionX: 50,
+          positionY: 150,
+          width: 400,
+          height: 200,
+          rotationDeg: 0,
+          zIndex: 1,
+          shapeMetadata: null,
+          seats: [
+            {
+              seatId: 's-1',
+              rowLabel: 'A',
+              seatNumber: 1,
+              gridX: 0,
+              gridY: 0,
+              positionX: 10,
+              positionY: 10,
+              isActive: true,
+            },
+          ],
+        },
+      ],
+      elements: [],
+    };
+
+    const mockResponse: VenueLayout = {
+      venueId: 'v-1',
+      name: 'Grand Theatre',
+      capacity: 1200,
+      totalConfiguredSeats: 1,
+      layoutVersion: 4,
+      elements: [],
+      sections: mockRequest.sections,
+    };
+
+    service.saveLayout('v-1', mockRequest).subscribe((layout) => {
+      expect(layout.layoutVersion).toBe(4);
+      expect(layout.sections.length).toBe(1);
+    });
+
+    const req = httpMock.expectOne('/api/admin/venues/v-1/layout');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(mockRequest);
+    req.flush(mockResponse);
   });
 
   it('should create new venue via POST /api/admin/venues', () => {
@@ -194,6 +371,14 @@ describe('AdminVenueApiService', () => {
       name: 'Balcony',
       rowCount: 5,
       colCount: 10,
+      isActive: true,
+      positionX: 0,
+      positionY: 200,
+      width: 500,
+      height: 250,
+      rotationDeg: 0,
+      zIndex: 1,
+      shapeMetadata: null,
       seats: [],
     };
 
@@ -215,6 +400,8 @@ describe('AdminVenueApiService', () => {
       seatNumber: 4,
       gridX: 3,
       gridY: 1,
+      positionX: 132,
+      positionY: 44,
       isActive: false,
     };
 

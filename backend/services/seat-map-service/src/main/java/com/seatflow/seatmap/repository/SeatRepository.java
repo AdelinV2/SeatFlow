@@ -18,13 +18,24 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
     @Query("SELECT s FROM Seat s WHERE s.section.id = :sectionId AND s.isActive = true ORDER BY s.gridY ASC, s.gridX ASC")
     List<Seat> findActiveSeatsBySectionId(@Param("sectionId") UUID sectionId);
 
-    @Query("SELECT s FROM Seat s WHERE s.section.venue.id = :venueId AND s.isActive = true ORDER BY s.section.name ASC, s.gridY ASC, s.gridX ASC")
+    @Query("""
+            SELECT s FROM Seat s
+            WHERE s.section.id = :sectionId
+            ORDER BY s.positionY ASC, s.positionX ASC, s.id ASC
+            """)
+    List<Seat> findBySectionIdForEditor(@Param("sectionId") UUID sectionId);
+
+    @Query("""
+            SELECT s FROM Seat s
+            WHERE s.section.venue.id = :venueId AND s.section.isActive = true AND s.isActive = true
+            ORDER BY s.section.zIndex ASC, s.positionY ASC, s.positionX ASC, s.id ASC
+            """)
     List<Seat> findActiveSeatsForVenueLayout(@Param("venueId") UUID venueId);
 
     Optional<Seat> findByIdAndSectionId(UUID seatId, UUID sectionId);
 
     long countBySectionIdAndIsActiveTrue(UUID sectionId);
 
-    @Query("SELECT COUNT(s) FROM Seat s WHERE s.section.venue.id = :venueId AND s.isActive = true")
+    @Query("SELECT COUNT(s) FROM Seat s WHERE s.section.venue.id = :venueId AND s.section.isActive = true AND s.isActive = true")
     long countActiveSeatsByVenueId(@Param("venueId") UUID venueId);
 }

@@ -1,0 +1,99 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layout-canvas-container {
+  background-color: #0b0f19;
+}
+
+.layout-canvas-svg {
+  background-color: #0b0f19;
+
+  &.cursor-move {
+    cursor: grabbing !important;
+  }
+}
+
+.canvas-toolbar {
+  .toolbar-btn {
+    user-select: none;
+  }
+}
+
+.canvas-mode-toolbar {
+  user-select: none;
+
+  .mode-btn {
+    cursor: pointer;
+    user-select: none;
+  }
+}
+
+.canvas-legend {
+  user-select: none;
+}
+
+/* Layout Elements Visual Design (applies to canvas-rendered element chrome;
+   element nodes themselves are styled by LayoutElementNodeComponent) */
+.layout-element {
+  &.element-stage {
+    .stage-rect {
+      fill: #1e1b4b;
+      stroke: #6366f1;
+      stroke-width: 2px;
+      filter: drop-shadow(0 4px 12px rgba(99, 102, 241, 0.2));
+    }
+
+    .stage-title {
+      fill: #e0e7ff;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-family: inherit;
+    }
+  }
+
+  &.element-aisle {
+    .aisle-rect {
+      fill: rgba(30, 41, 59, 0.25);
+      stroke: rgba(100, 116, 139, 0.35);
+      stroke-width: 1.5px;
+      stroke-dasharray: 4 4;
+    }
+
+    .aisle-title {
+      fill: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+  }
+
+  &.element-label {
+    .standalone-label {
+      fill: #e2e8f0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+  }
+
+  &.element-barrier {
+    .barrier-rect {
+      fill: #334155;
+      stroke: #475569;
+      stroke-width: 1.5px;
+    }
+  }
+
+  &.element-decoration {
+    .decoration-rect {
+      fill: rgba(30, 41, 59, 0.3);
+      stroke: rgba(71, 85, 105, 0.3);
+      stroke-width: 1px;
+    }
+  }
+}

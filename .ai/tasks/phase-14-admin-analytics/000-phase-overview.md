@@ -2,6 +2,7 @@
 
 **Status:** `PLANNED`  
 **Architecture:** `.ai/architecture/09-post-mvp-evolution.md`  
+**Related ADR:** `.ai/decisions/ADR-013-analytics-event-driven-read-model.md`  
 **Estimated effort:** ~10–14 focused implementation hours  
 
 ---

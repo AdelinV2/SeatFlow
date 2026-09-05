@@ -26,10 +26,7 @@ describe('functional route guards', () => {
     authService.initialize.and.resolveTo();
 
     TestBed.configureTestingModule({
-      providers: [
-        provideRouter([]),
-        { provide: AuthService, useValue: authService },
-      ],
+      providers: [provideRouter([]), { provide: AuthService, useValue: authService }],
     });
     userContext = TestBed.inject(UserContextService);
     router = TestBed.inject(Router);
@@ -91,6 +88,42 @@ describe('functional route guards', () => {
       confirmDiscardChanges: () => Promise.resolve(false),
     };
     expect(await runPendingGuard(dirtyComponent)).toBeFalse();
+  });
+
+  it('pendingChangesGuard leaves clean routes without prompting', () => {
+    const confirmSpy = spyOn(window, 'confirm');
+    const cleanComponent: PendingChangesAware = { hasPendingChanges: () => false };
+    expect(runPendingGuard(cleanComponent)).toBeTrue();
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it('pendingChangesGuard permits dirty navigation when the user confirms', async () => {
+    const dirtyConfirm: PendingChangesAware = {
+      hasPendingChanges: () => true,
+      confirmDiscardChanges: () => true,
+    };
+    expect(await runPendingGuard(dirtyConfirm)).toBeTrue();
+  });
+
+  it('pendingChangesGuard keeps the user on the page when the user cancels', async () => {
+    const dirtyCancel: PendingChangesAware = {
+      hasPendingChanges: () => true,
+      confirmDiscardChanges: () => false,
+    };
+    expect(await runPendingGuard(dirtyCancel)).toBeFalse();
+  });
+
+  it('pendingChangesGuard falls back to window.confirm with consequence text', async () => {
+    const confirmSpy = spyOn(window, 'confirm').and.returnValue(true);
+    const dirtyNoCustom: PendingChangesAware = { hasPendingChanges: () => true };
+
+    expect(await runPendingGuard(dirtyNoCustom)).toBeTrue();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const message = String(confirmSpy.calls.mostRecent().args[0]);
+    expect(message).toContain('unsaved layout edits will be discarded');
+
+    confirmSpy.and.returnValue(false);
+    expect(await runPendingGuard(dirtyNoCustom)).toBeFalse();
   });
 
   it('guestGuard allows unauthenticated guests to access auth pages', async () => {

@@ -60,6 +60,7 @@ Follow this strict sequence for every frontend task without skipping steps:
    f. Component & Service Unit Tests (src/app/.../*.spec.ts)
 4. Run verification command:
    npm test -- --watch=false --browsers=ChromeHeadless
+5. Mandatory Next Stage Handoff: Upon passing self-verification, provide the user with the mandatory Next Stage Handoff block (Recommended Review AI Model: `Gemini 3.8 Flash High` / `GPT-5.6 Terra High`, and the pre-filled prompt from `.ai/workflows/02-task-execution.md` to initiate independent code review).
 ```
 
 ---
