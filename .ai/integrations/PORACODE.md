@@ -32,6 +32,12 @@ Do not silently replace a requested provider with another provider merely becaus
 
 ---
 
+## 1.1 Delegation Exclusivity — Poracode Crossagents Only
+
+All inter-agent delegation in the SeatFlow autonomous workflow must use Poracode Crossagents. OpenCode's native task/subagent delegation must not be used inside this workflow unless explicitly requested. An OpenCode agent may freely delegate through Poracode Crossagents, including to other OpenCode models and multiple OpenCode Crossagents concurrently.
+
+---
+
 ## 2. Provider Responsibilities
 
 | Logical role | Preferred harness | Notes |
@@ -290,5 +296,7 @@ Muse Spark 1.3 Free
     -> MODEL_ROUTER alternative
     -> escalation only after a quality/risk trigger
 ```
+
+The `MODEL_ROUTER alternative` above is a non-OpenCode harness route. Do not substitute another OpenCode model (GLM, Hy3, Hy4, or any other OpenCode catalog model) for unavailable Muse capacity.
 
 Update exact model IDs here only after they have been verified in the current provider catalog.
