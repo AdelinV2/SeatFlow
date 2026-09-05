@@ -9,14 +9,21 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { EventDetail, EventPricingTier, VenueDetail } from '../../../models/event.model';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  EventDetail,
+  EventPricingTier,
+  EventSession,
+  VenueDetail,
+} from '../../../models/event.model';
 import { EventApiService } from '../../../services/event-api.service';
 import { NominatimGeocodingService } from '../../../services/nominatim-geocoding.service';
 import { VenueApiService } from '../../../services/venue-api.service';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { SessionSelectorComponent } from '../session-selector/session-selector.component';
+import { isSessionCustomerBookable } from '../session-booking-eligibility';
 import { VenueMapViewComponent } from '../venue-map-view/venue-map-view.component';
 
 interface PricingSection {
@@ -33,6 +40,7 @@ interface PricingSection {
     RouterLink,
     StatusBadgeComponent,
     VenueMapViewComponent,
+    SessionSelectorComponent,
     CurrencyFormatPipe,
     DateFormatPipe,
   ],
@@ -42,6 +50,7 @@ interface PricingSection {
 })
 export class EventDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly eventApiService = inject(EventApiService);
   private readonly geocodingService = inject(NominatimGeocodingService);
   private readonly venueApiService = inject(VenueApiService);
@@ -50,6 +59,9 @@ export class EventDetailComponent implements OnInit {
 
   readonly event = signal<EventDetail | null>(null);
   readonly venue = signal<VenueDetail | null>(null);
+  readonly sessions = signal<EventSession[]>([]);
+  readonly selectedSession = signal<EventSession | null>(null);
+  readonly sessionWarning = signal<string | null>(null);
   readonly isLoading = signal<boolean>(true);
   readonly errorMessage = signal<string | null>(null);
   private readonly geocodedCoordinates = signal<{ lat: number; lng: number } | null>(null);
@@ -131,6 +143,8 @@ export class EventDetailComponent implements OnInit {
     this.isLoading.set(true);
     this.errorMessage.set(null);
     this.geocodedCoordinates.set(null);
+    this.selectedSession.set(null);
+    this.sessionWarning.set(null);
 
     this.eventApiService.getEventById(eventId).subscribe({
       next: (detail) => {
@@ -142,6 +156,8 @@ export class EventDetailComponent implements OnInit {
         } else if (!this.hasCoordinates(detail) && (detail.venueName || detail.venueCity || detail.venueAddress)) {
           this.geocodeEvent(detail);
         }
+
+        this.loadSessions(eventId, detail.sessions);
       },
       error: (err) => {
         this.isLoading.set(false);
@@ -155,6 +171,53 @@ export class EventDetailComponent implements OnInit {
           );
         }
       },
+    });
+  }
+
+  private loadSessions(eventId: string, initialSessions?: EventSession[]): void {
+    if (initialSessions && initialSessions.length > 0) {
+      this.processSessions(initialSessions);
+    }
+
+    this.eventApiService.getEventSessions(eventId).subscribe({
+      next: (sessions) => {
+        this.processSessions(sessions);
+      },
+      error: (err) => {
+        console.error('Failed to load event sessions:', err);
+      },
+    });
+  }
+
+  private processSessions(sessions: EventSession[]): void {
+    this.sessions.set(sessions);
+    const querySessionId = this.route.snapshot.queryParamMap.get('sessionId');
+    if (querySessionId) {
+      // Deep links must satisfy the same customer-bookability predicate as
+      // selector clicks (REV-004): SCHEDULED plus a live sale window.
+      const matched = sessions.find(
+        (s) => s.id === querySessionId && isSessionCustomerBookable(s),
+      );
+      if (matched) {
+        this.selectedSession.set(matched);
+        this.sessionWarning.set(null);
+      } else {
+        this.selectedSession.set(null);
+        this.sessionWarning.set('The requested showtime is not available for this event. Please select a showtime below.');
+      }
+    } else {
+      this.selectedSession.set(null);
+    }
+  }
+
+  onSessionSelected(session: EventSession): void {
+    this.selectedSession.set(session);
+    this.sessionWarning.set(null);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { sessionId: session.id },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
     });
   }
 

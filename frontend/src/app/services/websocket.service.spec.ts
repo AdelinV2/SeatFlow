@@ -292,6 +292,47 @@ describe('WebSocketService', () => {
     expect(clients[1].activate).toHaveBeenCalledTimes(1);
   });
 
+  it('should ignore a stale A connect/message after switching to session B (TASK-P12-006 REV-001/REV-006)', () => {
+    service.connectForSession('session-A');
+    service.connectForSession('session-B');
+
+    // Late onConnect from the superseded A client must not subscribe to A's
+    // topic nor reconcile A's availability.
+    configs[0].onConnect?.({} as never);
+
+    expect(clients[0].subscribe).not.toHaveBeenCalled();
+    expect(seatStateService.reconcileAvailability).not.toHaveBeenCalledWith(
+      'session-A',
+      jasmine.anything(),
+      jasmine.anything(),
+    );
+
+    // The current B client still connects, subscribes, and reconciles.
+    configs[1].onConnect?.({} as never);
+
+    expect(clients[1].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-B/seats',
+    );
+    expect(seatStateService.reconcileAvailability).toHaveBeenCalledWith(
+      'session-B',
+      undefined,
+      undefined,
+    );
+
+    // A late A-session message arriving on B's subscription is ignored.
+    clients[1].messageCallback?.({
+      body: JSON.stringify({
+        eventSessionId: 'session-A',
+        eventId: 'event-1',
+        seatId: 'seat-9',
+        status: 'HELD',
+        timestamp: '2026-08-28T10:00:00Z',
+      }),
+    } as IMessage);
+
+    expect(seatStateService.updateSeatStatus).not.toHaveBeenCalled();
+  });
+
   it('should update conflict callbacks and selection ref if re-called with the same event while active', () => {
     const initialConflict = jasmine.createSpy('initialConflict');
     const updatedConflict = jasmine.createSpy('updatedConflict');

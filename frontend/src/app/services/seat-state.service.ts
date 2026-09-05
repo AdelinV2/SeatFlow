@@ -12,8 +12,16 @@ export class SeatStateService implements OnDestroy {
 
   readonly seats = signal<Seat[]>([]);
   readonly isLoading = signal(false);
+  // REV-002 (FIX-2): explicit non-bookable availability-error state. When the
+  // authoritative REST baseline fails for the current session, seats keep
+  // their non-authoritative statuses and must stay non-selectable until a
+  // successful retry or a session change. Cleared on every new reconciliation
+  // attempt, on setSeats/clearSeats, and on destroy.
+  readonly availabilityError = signal(false);
   readonly currentEventId = signal<string | null>(null);
+  readonly currentSessionId = signal<string | null>(null);
 
+  readonly hasSession = computed(() => !!this.currentSessionId());
   readonly availableSeats = computed(() =>
     this.seats().filter((seat) => seat.status === 'AVAILABLE' && seat.isActive),
   );
@@ -21,14 +29,29 @@ export class SeatStateService implements OnDestroy {
   readonly soldSeats = computed(() =>
     this.seats().filter((seat) => seat.status === 'SOLD' || seat.status === 'RESERVED'),
   );
+  readonly totalAvailable = computed(() => this.availableSeats().length);
+  readonly totalHeld = computed(() => this.heldSeats().length);
+  readonly totalSold = computed(() => this.soldSeats().length);
 
-  setSeats(seats: Seat[], eventId: string): void {
+  setSeats(seats: Seat[], eventId: string, sessionId?: string | null): void {
     this.reconciliationRequestId += 1;
     this.isLoading.set(false);
+    this.availabilityError.set(false);
     this.seatUpdateSequence = 0;
     this.seatUpdateVersions.clear();
     this.currentEventId.set(eventId);
+    this.currentSessionId.set(sessionId ?? null);
     this.seats.set(seats);
+  }
+
+  clearSeats(): void {
+    this.reconciliationRequestId += 1;
+    this.isLoading.set(false);
+    this.availabilityError.set(false);
+    this.seatUpdateSequence = 0;
+    this.seatUpdateVersions.clear();
+    this.currentSessionId.set(null);
+    this.seats.set([]);
   }
 
   updateSeatStatus(seatId: string, status: SeatStatus): void {
@@ -39,25 +62,34 @@ export class SeatStateService implements OnDestroy {
   }
 
   reconcileAvailability(
-    eventId: string,
+    eventSessionId: string,
     selectedSeatIds?: Set<string>,
     onConflict?: (conflictSeatId: string) => void,
+    onSettled?: () => void,
+    onError?: () => void,
   ): void {
     const requestId = ++this.reconciliationRequestId;
     const updateSequenceAtRequest = this.seatUpdateSequence;
     this.isLoading.set(true);
+    this.availabilityError.set(false);
+
     this.http
-      .get<SeatAvailabilityResponse>(`/api/reservations/events/${eventId}/availability`)
+      .get<SeatAvailabilityResponse>(`/api/event-sessions/${eventSessionId}/seats/availability`)
       .pipe(
         finalize(() => {
           if (requestId === this.reconciliationRequestId) {
             this.isLoading.set(false);
+            onSettled?.();
           }
         }),
       )
       .subscribe({
         next: (response) => {
-          if (requestId !== this.reconciliationRequestId) {
+          // Ignore delayed responses if reconciliation was superseded or if the session changed
+          if (
+            requestId !== this.reconciliationRequestId ||
+            (this.currentSessionId() && this.currentSessionId() !== eventSessionId)
+          ) {
             return;
           }
 
@@ -67,6 +99,9 @@ export class SeatStateService implements OnDestroy {
               seat.status,
             ]),
           );
+
+          // Authoritative baseline received for the still-current session.
+          this.availabilityError.set(false);
 
           this.seats.update((currentSeats) =>
             currentSeats.map((seat) => {
@@ -92,6 +127,11 @@ export class SeatStateService implements OnDestroy {
         error: (error: unknown) => {
           if (requestId === this.reconciliationRequestId) {
             console.error('Failed to reconcile seat availability:', error);
+            // Enter the explicit non-bookable error state (REV-002 FIX-2):
+            // seats are non-authoritative, so selection/hold stay disabled
+            // until a successful retry or a session change.
+            this.availabilityError.set(true);
+            onError?.();
           }
         },
       });
@@ -100,5 +140,6 @@ export class SeatStateService implements OnDestroy {
   ngOnDestroy(): void {
     this.reconciliationRequestId += 1;
     this.isLoading.set(false);
+    this.availabilityError.set(false);
   }
 }

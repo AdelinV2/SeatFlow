@@ -1,0 +1,81 @@
+<div class="session-selector-container">
+  @if (enrichedSessions().length === 0) {
+    <div class="session-selector-empty p-6 text-center text-sm text-[var(--color-text-muted)] border border-dashed border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)]">
+      <svg class="size-8 mx-auto mb-2 text-[var(--color-text-muted)] opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      <p class="font-semibold text-[var(--color-text-primary)]">No showtimes currently scheduled</p>
+      <p class="text-xs text-[var(--color-text-secondary)] mt-0.5">{{ emptyMessage() }}</p>
+    </div>
+  } @else {
+    <div
+      role="radiogroup"
+      aria-label="Event showtimes"
+      class="session-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+    >
+      @for (item of enrichedSessions(); track item.session.id) {
+        @let isSelected = item.session.id === selectedSessionId();
+        @let isDisabled = disabled() || !item.isSelectable;
+
+        <button
+          type="button"
+          role="radio"
+          [attr.aria-checked]="isSelected"
+          [attr.aria-disabled]="isDisabled"
+          [disabled]="isDisabled"
+          (click)="selectSession(item)"
+          class="session-card text-left p-3.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-3 relative focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 cursor-pointer"
+          [class]="isSelected
+            ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 shadow-sm ring-1 ring-indigo-600'
+            : isDisabled
+              ? 'border-[var(--color-border)]/50 bg-[var(--color-surface)]/40 opacity-60 cursor-not-allowed'
+              : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-indigo-400 hover:shadow-sm'"
+        >
+          <!-- Top Row: Date & Status Badge -->
+          <div class="flex items-start justify-between gap-2 w-full">
+            <div class="font-bold text-sm text-[var(--color-text-primary)] leading-tight">
+              {{ item.session.startsAt | sfDate:'short' }}
+            </div>
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 uppercase tracking-wider border"
+              [class]="item.badgeClass"
+            >
+              {{ item.stateLabel }}
+            </span>
+          </div>
+
+          <!-- Bottom Row: Time Range & Timezone & Selection Check -->
+          <div class="flex items-center justify-between gap-2 w-full mt-1 pt-2 border-t border-[var(--color-border)]/50 text-xs text-[var(--color-text-secondary)]">
+            <div class="flex items-center gap-1.5 font-mono">
+              <svg class="size-3.5 text-[var(--color-text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>{{ item.session.startsAt | sfDate:'time' }} - {{ item.session.endsAt | sfDate:'time' }}</span>
+              @if (item.session.timezone) {
+                <span class="text-[10px] text-[var(--color-text-muted)] px-1.5 py-0.5 rounded bg-[var(--color-canvas)] border border-[var(--color-border)]">
+                  {{ item.session.timezone }}
+                </span>
+              }
+            </div>
+
+            <!-- Selection Indicator -->
+            <div
+              class="size-4 rounded-full border flex items-center justify-center shrink-0 transition-colors"
+              [class]="isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600'"
+            >
+              @if (isSelected) {
+                <svg class="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              }
+            </div>
+          </div>
+        </button>
+      }
+    </div>
+  }
+</div>
