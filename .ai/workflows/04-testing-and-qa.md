@@ -210,8 +210,8 @@ This workflow does not hardcode the final model. Resolve through `.ai/MODEL_ROUT
 Operational intent:
 
 - normal final QA -> Gemini 3.8 Flash High is usually sufficient and cost-effective;
-- subtle backend hidden semantics -> Terra High may be preferred;
-- critical money/security/concurrency/data-integrity judgment -> Sol High when required by risk;
+- subtle backend hidden semantics -> Terra high may be preferred;
+- critical money/security/concurrency/data-integrity judgment -> Sol high when required by risk;
 - if the implementer was Gemini and independence matters, prefer Codex for the judgment-heavy QA/review layer.
 
 All Codex QA/review stages use Fast OFF unless the user explicitly asks otherwise.

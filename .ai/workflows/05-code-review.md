@@ -303,9 +303,9 @@ Do not keep model tables in this workflow. Resolve every review through `.ai/MOD
 
 Operational intent:
 
-- small review -> Codex/Terra Medium, Fast OFF;
-- substantive review -> Codex/Terra High, Fast OFF;
-- critical money/security/concurrency/data-integrity review -> Codex/Sol High, Fast OFF;
+- small review -> Codex/Terra medium, Fast OFF;
+- substantive review -> Codex/Terra high, Fast OFF;
+- critical money/security/concurrency/data-integrity review -> Codex/Sol high, Fast OFF;
 - Gemini High is the normal alternative when Codex quota/provider availability or model-family diversity justifies it.
 
 If implementation was performed by Codex, prefer an independent Antigravity/Gemini normal-risk review rather than same-model self-approval.

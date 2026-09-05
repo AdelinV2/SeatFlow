@@ -150,9 +150,9 @@ Operational intent:
 - mechanical refactor execution -> Muse High (`Free -> Go`);
 - substantive/repo-wide deterministic refactor -> Muse xHigh (`Free -> Go`);
 - frontend/browser-heavy refactor -> Gemini High is a strong alternative/default when visual tooling dominates;
-- architecture-heavy planning -> Terra High or Gemini High according to dominant risk;
-- substantive independent review -> Terra High, Fast OFF;
-- critical-domain refactor review -> Sol High, Fast OFF.
+- architecture-heavy planning -> Terra high or Gemini High according to dominant risk;
+- substantive independent review -> Terra high, Fast OFF;
+- critical-domain refactor review -> Sol high, Fast OFF.
 
 A failed refactor test is a quality/debugging event, not a reason to switch Muse Free -> Go unless Free is actually unavailable.
 
