@@ -94,6 +94,14 @@ public class NotificationServiceImpl implements NotificationService {
         variables.put("netAmount", event.netAmount());
         variables.put("taxAmount", event.taxAmount());
         variables.put("totalAmount", event.price());
+        // P12-004: render the showing from the persisted ticket snapshot carried on
+        // the event, never from mutable catalog state. The stored timezone wins when
+        // present; otherwise the stored offset-aware instant renders per the existing
+        // UTC display convention (no invented venue timezone).
+        variables.put("eventSessionId", event.eventSessionId() != null ? event.eventSessionId().toString() : "");
+        variables.put("sessionTimezone", event.sessionTimezone() != null ? event.sessionTimezone() : "");
+        variables.put("sessionStartsAt", formatSessionInstant(event.sessionStartsAt(), event.sessionTimezone()));
+        variables.put("sessionEndsAt", formatSessionInstant(event.sessionEndsAt(), event.sessionTimezone()));
 
         String subject = "Your SeatFlow Ticket Confirmation — " + event.ticketCode();
 
@@ -172,8 +180,28 @@ public class NotificationServiceImpl implements NotificationService {
         );
     }
 
-    private void dispatchAndRecordLog(
-            String recipientEmail,
+    /**
+     * Formats a stored session instant for email rendering (P12-004). Uses the stored
+     * IANA timezone when present and valid; otherwise renders the stored offset-aware
+     * instant per the existing UTC display convention. Never invents a venue timezone.
+     */
+    public static String formatSessionInstant(Instant instant, String sessionTimezone) {
+        if (instant == null) {
+            return "";
+        }
+        if (sessionTimezone != null && !sessionTimezone.isBlank()) {
+            try {
+                DateTimeFormatter zoned = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z")
+                        .withZone(ZoneId.of(sessionTimezone.trim()));
+                return zoned.format(instant);
+            } catch (Exception ignored) {
+                // Fall through to the UTC convention on unknown/invalid zone IDs.
+            }
+        }
+        return ISO_FORMATTER.format(instant);
+    }
+
+    private void dispatchAndRecordLog(            String recipientEmail,
             String subject,
             NotificationTemplateType templateType,
             String idempotencyKey,

@@ -75,9 +75,12 @@ class TicketServiceImplTest {
     private final UUID userId = UUID.randomUUID();
     private final UUID otherUserId = UUID.randomUUID();
     private final UUID eventId = UUID.randomUUID();
+    private final UUID sessionId = UUID.randomUUID();
     private final UUID seatId = UUID.randomUUID();
     private final UUID reservationId = UUID.randomUUID();
     private final UUID paymentId = UUID.randomUUID();
+    private final Instant sessionStartsAt = Instant.parse("2026-10-05T19:00:00Z");
+    private final Instant sessionEndsAt = Instant.parse("2026-10-05T21:00:00Z");
     private final UUID ticketId = UUID.randomUUID();
 
     @BeforeEach
@@ -123,13 +126,28 @@ class TicketServiceImplTest {
         IssueTicketsCommand.SeatTicketItem seat1 = new IssueTicketsCommand.SeatTicketItem(seatId, new BigDecimal("100.00"), new BigDecimal("19.00"), new BigDecimal("81.00"));
         IssueTicketsCommand.SeatTicketItem seat2 = new IssueTicketsCommand.SeatTicketItem(UUID.randomUUID(), new BigDecimal("50.00"), new BigDecimal("9.50"), new BigDecimal("40.50"));
         IssueTicketsCommand command = new IssueTicketsCommand(paymentId, reservationId, userId, "buyer@example.com",
-                "Jane Doe", eventId, List.of(seat1, seat2), "USD");
+                "Jane Doe", sessionId, eventId, sessionStartsAt, sessionEndsAt, null, List.of(seat1, seat2), "USD");
 
         List<TicketResponse> result = ticketService.issueTickets(command);
 
         assertThat(result).hasSize(2);
         verify(ticketRepository, times(2)).save(any(Ticket.class));
         verify(outboxRepository, times(2)).save(any(OutboxEvent.class));
+
+        ArgumentCaptor<Ticket> ticketCaptor = ArgumentCaptor.forClass(Ticket.class);
+        verify(ticketRepository, times(2)).save(ticketCaptor.capture());
+        for (Ticket ticket : ticketCaptor.getAllValues()) {
+            assertThat(ticket.getEventSessionId()).isEqualTo(sessionId);
+            assertThat(ticket.getSessionStartsAt()).isEqualTo(sessionStartsAt);
+            assertThat(ticket.getSessionEndsAt()).isEqualTo(sessionEndsAt);
+        }
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository, times(2)).save(outboxCaptor.capture());
+        for (OutboxEvent outbox : outboxCaptor.getAllValues()) {
+            assertThat(outbox.getEventType()).isEqualTo("TicketIssued");
+            assertThat(outbox.getPayload()).contains(sessionId.toString());
+        }
     }
 
     @Test

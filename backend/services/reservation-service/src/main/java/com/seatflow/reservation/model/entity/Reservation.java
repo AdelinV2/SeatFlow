@@ -59,6 +59,17 @@ public class Reservation {
     @ToString.Include
     private UUID eventSessionId; // Authoritative inventory partition since P12-003 (ADR-011).
 
+    @Column(name = "session_starts_at", updatable = false)
+    @ToString.Include
+    private Instant sessionStartsAt; // Immutable showing snapshot captured at hold time (P12-004).
+
+    @Column(name = "session_ends_at", updatable = false)
+    @ToString.Include
+    private Instant sessionEndsAt; // Immutable showing snapshot captured at hold time (P12-004).
+
+    @Column(name = "session_timezone", length = 64, updatable = false)
+    private String sessionTimezone; // Nullable IANA ZoneId metadata (P12-004); null until trusted source exposes it.
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     @ToString.Include

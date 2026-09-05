@@ -20,6 +20,9 @@ public record ReservationResponse(
         Instant expiresAt,
         BigDecimal totalAmount,
         Integer seatCount,
+        @Schema(description = "Immutable session start instant captured at hold time") Instant sessionStartsAt,
+        @Schema(description = "Immutable session end instant captured at hold time") Instant sessionEndsAt,
+        @Schema(description = "Nullable IANA session timezone metadata") String sessionTimezone,
         List<SeatHoldResponse> seats,
         Instant createdAt
 ) {

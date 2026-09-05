@@ -56,12 +56,12 @@ class PaymentServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3");
+                .containsExactly("1", "2", "3", "4");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true);
     }
 
     @Test
@@ -90,5 +90,20 @@ class PaymentServiceApplicationTests {
                 "SELECT indexname FROM pg_indexes WHERE indexname = 'uq_payments_stripe_intent'", String.class);
 
         assertThat(indexNames).containsExactly("uq_payments_stripe_intent");
+
+        // P12-004 session audit columns.
+        List<String> sessionColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'payments'
+                  AND column_name IN ('event_session_id', 'session_starts_at', 'session_ends_at', 'session_timezone')
+                """, String.class);
+
+        assertThat(sessionColumns).containsExactlyInAnyOrder(
+                "event_session_id",
+                "session_starts_at",
+                "session_ends_at",
+                "session_timezone");
     }
 }

@@ -57,12 +57,12 @@ class ReservationServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3", "4", "5", "6");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true, true, true);
     }
 
     @Test
@@ -94,5 +94,19 @@ class ReservationServiceApplicationTests {
                 "uq_active_seat_hold_session",
                 "idx_seat_holds_pricing_tier_id",
                 "idx_seat_holds_held_status");
+
+        // P12-004 immutable session schedule snapshot columns.
+        List<String> snapshotColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'reservations'
+                  AND column_name IN ('session_starts_at', 'session_ends_at', 'session_timezone')
+                """, String.class);
+
+        assertThat(snapshotColumns).containsExactlyInAnyOrder(
+                "session_starts_at",
+                "session_ends_at",
+                "session_timezone");
     }
 }

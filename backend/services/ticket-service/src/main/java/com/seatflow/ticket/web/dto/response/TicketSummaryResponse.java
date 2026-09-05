@@ -12,6 +12,8 @@ public record TicketSummaryResponse(
     @Schema(description = "Unique ticket ID") UUID id,
     @Schema(description = "Ticket code") String ticketCode,
     @Schema(description = "Event ID") UUID eventId,
+    @Schema(description = "Authoritative event session ID (immutable showing identity)") UUID eventSessionId,
+    @Schema(description = "Immutable session start instant") Instant sessionStartsAt,
     @Schema(description = "Seat ID") UUID seatId,
     @Schema(description = "Ticket status") TicketStatus status,
     @Schema(description = "Ticket gross price") BigDecimal price,

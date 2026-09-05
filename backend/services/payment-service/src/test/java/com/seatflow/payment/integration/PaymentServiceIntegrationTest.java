@@ -105,6 +105,7 @@ class PaymentServiceIntegrationTest {
 
         when(reservationServiceClient.getReservation(reservationId)).thenReturn(new ReservationClientResponse(
                 reservationId,
+                UUID.randomUUID(),
                 eventId,
                 null,
                 "guest@example.com",
@@ -112,6 +113,9 @@ class PaymentServiceIntegrationTest {
                 Instant.now().plus(java.time.Duration.ofMinutes(15)),
                 new BigDecimal("50.00"),
                 2,
+                Instant.parse("2026-10-05T19:00:00Z"),
+                Instant.parse("2026-10-05T21:00:00Z"),
+                null,
                 List.of(),
                 Instant.now()
         ));

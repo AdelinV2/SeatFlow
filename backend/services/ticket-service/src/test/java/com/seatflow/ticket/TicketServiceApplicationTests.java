@@ -56,12 +56,12 @@ class TicketServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3", "4");
+                .containsExactly("1", "2", "3", "4", "5");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true);
     }
 
     @Test
@@ -108,5 +108,20 @@ class TicketServiceApplicationTests {
                 "SELECT indexname FROM pg_indexes WHERE indexname = 'uq_tickets_event_seat_valid'", String.class);
 
         assertThat(indexNames).containsExactly("uq_tickets_event_seat_valid");
+
+        // P12-004 immutable session snapshot columns.
+        List<String> sessionColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'tickets'
+                  AND column_name IN ('event_session_id', 'session_starts_at', 'session_ends_at', 'session_timezone')
+                """, String.class);
+
+        assertThat(sessionColumns).containsExactlyInAnyOrder(
+                "event_session_id",
+                "session_starts_at",
+                "session_ends_at",
+                "session_timezone");
     }
 }

@@ -30,6 +30,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,7 +56,9 @@ class StripeWebhookServiceImplTest {
     @Mock
     private OutboxEventRepository outboxEventRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private StripeWebhookServiceImpl service;
@@ -132,6 +135,47 @@ class StripeWebhookServiceImplTest {
         JsonNode payloadNode = outbox.getPayload();
         assertThat(payloadNode.get("payload").get("taxAmount").decimalValue()).isEqualByComparingTo("2.00");
         assertThat(payloadNode.get("payload").get("netAmount").decimalValue()).isEqualByComparingTo("8.00");
+    }
+
+    @Test
+    void succeededWebhookPublishesStoredSessionSnapshot() throws Exception {
+        PaymentIntent pi = mock(PaymentIntent.class);
+        when(pi.getId()).thenReturn("pi_456");
+
+        UUID sessionId = UUID.randomUUID();
+        Instant startsAt = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsAt = Instant.parse("2026-10-05T21:00:00Z");
+        Payment payment = Payment.builder()
+                .id(UUID.randomUUID())
+                .reservationId(UUID.randomUUID())
+                .userId(UUID.randomUUID())
+                .customerEmail("cust@example.com")
+                .eventSessionId(sessionId)
+                .eventId(UUID.randomUUID())
+                .sessionStartsAt(startsAt)
+                .sessionEndsAt(endsAt)
+                .sessionTimezone(null)
+                .amount(new BigDecimal("10.00"))
+                .currency("USD")
+                .stripePaymentIntentId("pi_456")
+                .status(PaymentStatus.INITIATED)
+                .build();
+        when(paymentRepository.findByStripePaymentIntentId("pi_456")).thenReturn(Optional.of(payment));
+
+        Event event = paymentIntentEvent("payment_intent.succeeded", pi);
+        when(event.getRawJsonObject()).thenReturn(new JsonObject());
+
+        try (MockedStatic<Webhook> webhook = mockStatic(Webhook.class)) {
+            webhook.when(() -> Webhook.constructEvent(anyString(), anyString(), anyString())).thenReturn(event);
+            service.handleWebhookEvent("{}", "sig");
+        }
+
+        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxEventRepository).save(captor.capture());
+        JsonNode payloadNode = captor.getValue().getPayload();
+        assertThat(payloadNode.get("payload").get("eventSessionId").asText()).isEqualTo(sessionId.toString());
+        assertThat(payloadNode.get("payload").get("sessionStartsAt").asText()).isEqualTo(startsAt.toString());
+        assertThat(payloadNode.get("payload").get("sessionEndsAt").asText()).isEqualTo(endsAt.toString());
     }
 
     @Test

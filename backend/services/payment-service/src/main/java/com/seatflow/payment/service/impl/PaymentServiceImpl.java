@@ -129,10 +129,16 @@ public class PaymentServiceImpl implements PaymentService {
             BigDecimal chargeAmount = resolveChargeAmount(reservation);
 
             // 5. Create Stripe PaymentIntent via Gateway
+            // Session identity below is server-derived from the trusted reservation
+            // response (P12-004). The checkout request carries reservation identity
+            // only; metadata is correlation, never authorization.
             Map<String, String> metadata = new HashMap<>();
             metadata.put("reservationId", reservation.id().toString());
             metadata.put("eventId", reservation.eventId().toString());
             metadata.put("customerEmail", reservation.customerEmail());
+            if (reservation.eventSessionId() != null) {
+                metadata.put("eventSessionId", reservation.eventSessionId().toString());
+            }
             if (reservation.userId() != null) {
                 metadata.put("userId", reservation.userId().toString());
             }
@@ -151,6 +157,10 @@ public class PaymentServiceImpl implements PaymentService {
                     .userId(reservation.userId() != null ? reservation.userId() : authenticatedUserId)
                     .customerEmail(reservation.customerEmail())
                     .eventId(reservation.eventId())
+                    .eventSessionId(reservation.eventSessionId())
+                    .sessionStartsAt(reservation.sessionStartsAt())
+                    .sessionEndsAt(reservation.sessionEndsAt())
+                    .sessionTimezone(reservation.sessionTimezone())
                     .stripePaymentIntentId(stripeResult.paymentIntentId())
                     .clientSecret(stripeResult.clientSecret())
                     .idempotencyKey(request.idempotencyKey())
@@ -216,6 +226,9 @@ public class PaymentServiceImpl implements PaymentService {
         metadata.put("reservationId", reservation.id().toString());
         metadata.put("eventId", reservation.eventId().toString());
         metadata.put("customerEmail", reservation.customerEmail());
+        if (reservation.eventSessionId() != null) {
+            metadata.put("eventSessionId", reservation.eventSessionId().toString());
+        }
         if (reservation.userId() != null) {
             metadata.put("userId", reservation.userId().toString());
         }
@@ -360,7 +373,11 @@ public class PaymentServiceImpl implements PaymentService {
                             payment.getReservationId(),
                             payment.getUserId(),
                             payment.getCustomerEmail(),
+                            payment.getEventSessionId(),
                             payment.getEventId(),
+                            payment.getSessionStartsAt(),
+                            payment.getSessionEndsAt(),
+                            payment.getSessionTimezone(),
                             payment.getAmount(),
                             taxAmount,
                             netAmount,

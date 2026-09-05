@@ -14,7 +14,11 @@ public record TicketIssuedEvent(
     UUID userId,              // Nullable for guest purchases (ADR-001)
     String customerEmail,
     String attendeeName,
-    UUID eventId,
+    UUID eventSessionId,      // Immutable showing identity snapshot (P12-004)
+    UUID eventId,             // Retained for older-consumer compatibility (removed in P12-007)
+    Instant sessionStartsAt,  // Immutable showing snapshot (P12-004)
+    Instant sessionEndsAt,    // Immutable showing snapshot (P12-004)
+    String sessionTimezone,   // Nullable IANA ZoneId metadata (P12-004)
     UUID seatId,
     BigDecimal price,         // Gross total price
     BigDecimal taxAmount,     // Tax / VAT portion (ADR-004)

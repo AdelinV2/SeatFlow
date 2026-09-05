@@ -7,12 +7,16 @@ import java.util.UUID;
 
 public record ReservationClientResponse(
     UUID id,
+    UUID eventSessionId,
     UUID eventId,
     UUID userId,
     String customerEmail,
     String status,
     BigDecimal totalAmount,
     Integer seatCount,
+    Instant sessionStartsAt,
+    Instant sessionEndsAt,
+    String sessionTimezone,
     List<HeldSeatClientDto> seats,
     Instant expiresAt,
     Instant createdAt
