@@ -10,6 +10,7 @@ import java.util.UUID;
 @Schema(description = "Event published when a reservation hold exceeds the 15-minute expiration window and is released")
 public record ReservationExpiredEvent(
         UUID reservationId,
+        UUID eventSessionId,
         UUID eventId,
         List<UUID> seatIds,
         String reason,

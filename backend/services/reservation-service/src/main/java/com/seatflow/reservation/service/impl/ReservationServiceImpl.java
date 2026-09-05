@@ -15,6 +15,7 @@ import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.PricingTierClientDto;
 import com.seatflow.reservation.client.dto.SeatPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.messaging.event.ReservationCancelledEvent;
 import com.seatflow.reservation.messaging.event.ReservationConfirmedEvent;
@@ -111,11 +112,20 @@ public class ReservationServiceImpl implements ReservationService {
                 throw new ValidationException("customerEmail is required (provide in body or via authenticated JWT)",
                         ErrorCode.INVALID_REQUEST);
             }
+            // Resolve the session through event-service BEFORE any inventory mutation.
+            // The parent event, hall/pricing scope, and bookability come from this
+            // trusted response only; a client-supplied eventId is never authoritative.
+            SessionBookingContextDto bookingContext =
+                    eventClient.getSessionBookingContext(request.eventSessionId());
+            validateBookingContext(bookingContext, Instant.now());
+            rejectCompatEventMismatch(request, bookingContext);
             EventPricingDetails eventPricing = eventClient.getEventSeatPricing(
-                    request.eventId(), new HashSet<>(request.seatIds()));
+                    bookingContext.eventId(), new HashSet<>(request.seatIds()));
+            assertPricingBelongsToSession(eventPricing, bookingContext);
             validatePerSeatPricing(request, eventPricing.seatPrices());
 
-            ReservationResponse response = executeCreateReservationTransaction(request, authenticatedUserId, customerEmail, eventPricing);
+            ReservationResponse response = executeCreateReservationTransaction(
+                    request, authenticatedUserId, customerEmail, bookingContext, eventPricing);
             holdOutcome = "SUCCESS";
             return response;
         } catch (ConflictException ex) {
@@ -138,6 +148,7 @@ public class ReservationServiceImpl implements ReservationService {
     public ReservationResponse createReservationTransactional(CreateReservationRequest request,
                                                                    UUID authenticatedUserId,
                                                                    String customerEmail,
+                                                                   SessionBookingContextDto bookingContext,
                                                                    EventPricingDetails eventPricing) {
         Optional<Reservation> existing = reservationRepository.findWithSeatHoldsByIdempotencyKey(request.idempotencyKey());
         if (existing.isPresent()) {
@@ -145,21 +156,23 @@ public class ReservationServiceImpl implements ReservationService {
             Set<UUID> priorSeats = prior.getSeatHolds().stream()
                     .map(SeatHold::getSeatId)
                     .collect(Collectors.toSet());
-            if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                log.info("Idempotent reservation replay. reservationId={}", prior.getId());
+            if (Objects.equals(prior.getEventSessionId(), bookingContext.eventSessionId())
+                    && priorSeats.equals(new HashSet<>(request.seatIds()))) {
+                log.info("Idempotent reservation replay. reservationId={}, eventSessionId={}",
+                        prior.getId(), prior.getEventSessionId());
                 return reservationMapper.toResponse(prior);
             }
-            throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
+            throw new ConflictException("Idempotency key reused with different seats or session", ErrorCode.CONFLICT);
         }
 
         List<UUID> sortedSeatIds = new ArrayList<>(request.seatIds());
         sortedSeatIds.sort(UUID::compareTo);
         List<SeatHold> conflicting = seatHoldRepository.findAndLockSeatsForUpdate(
-                request.eventId(), sortedSeatIds);
+                bookingContext.eventSessionId(), sortedSeatIds);
         if (!conflicting.isEmpty()) {
             List<UUID> conflictingSeatIds = conflicting.stream().map(SeatHold::getSeatId).toList();
-            log.warn("Seat hold collision detected. eventId={}, seatsCount={}",
-                    request.eventId(), conflictingSeatIds.size());
+            log.warn("Seat hold collision detected. eventSessionId={}, eventId={}, seatsCount={}",
+                    bookingContext.eventSessionId(), bookingContext.eventId(), conflictingSeatIds.size());
             throw new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED);
         }
 
@@ -168,6 +181,9 @@ public class ReservationServiceImpl implements ReservationService {
 
         Reservation reservation = reservationMapper.toEntity(request, authenticatedUserId);
         reservation.setCustomerEmail(customerEmail);
+        // Inventory identity comes from the trusted booking context, never client input.
+        reservation.setEventSessionId(bookingContext.eventSessionId());
+        reservation.setEventId(bookingContext.eventId());
         reservation.setTotalAmount(authoritativeTotal);
         reservation.setExpiresAt(Instant.now().plus(HOLD_DURATION));
 
@@ -179,7 +195,8 @@ public class ReservationServiceImpl implements ReservationService {
                     .findFirst()
                     .orElse(null);
             SeatHold hold = SeatHold.builder()
-                    .eventId(request.eventId())
+                    .eventSessionId(bookingContext.eventSessionId())
+                    .eventId(bookingContext.eventId())
                     .seatId(seatId)
                     .status(SeatHoldStatus.HELD)
                     .price(priceMap.getOrDefault(seatId, BigDecimal.ZERO))
@@ -195,26 +212,16 @@ public class ReservationServiceImpl implements ReservationService {
         try {
             saved = reservationRepository.saveAndFlush(reservation);
         } catch (DataIntegrityViolationException ex) {
-            Optional<Reservation> prior = reservationRepository.findWithSeatHoldsByIdempotencyKey(request.idempotencyKey());
-            if (prior.isPresent()) {
-                Set<UUID> priorSeats = prior.get().getSeatHolds().stream()
-                        .map(SeatHold::getSeatId)
-                        .collect(Collectors.toSet());
-                if (priorSeats.equals(new HashSet<>(request.seatIds()))) {
-                    log.info("Idempotent reservation replay after constraint violation. reservationId={}",
-                            prior.get().getId());
-                    return reservationMapper.toResponse(prior.get());
-                }
-                throw new ConflictException("Idempotency key reused with different seats", ErrorCode.CONFLICT);
-            }
-            log.warn("Concurrent seat hold detected. eventId={}, seatsCount={}",
-                    request.eventId(), request.seatIds().size(), ex);
-            throw new ConflictException("One or more seats were taken concurrently", ErrorCode.SEAT_ALREADY_RESERVED);
+            // The JDBC transaction is aborted from here on: no further statement may run
+            // on it. Defer the idempotency-vs-seat-conflict decision until after rollback
+            // (see executeCreateReservationTransaction), where it runs in a fresh transaction.
+            throw new ConcurrentWriteConflict(ex);
         }
 
         Instant now = Instant.now();
         saveOutboxRecord("ReservationHeldEvent", saved.getId(), new ReservationHeldEvent(
                 saved.getId(),
+                saved.getEventSessionId(),
                 saved.getEventId(),
                 saved.getUserId(),
                 saved.getCustomerEmail(),
@@ -225,8 +232,8 @@ public class ReservationServiceImpl implements ReservationService {
 
         AfterCommitMetrics.afterCommit(this::safeIncrementCreated);
 
-        log.info("Reservation hold acquired successfully. reservationId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
-                saved.getId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
+        log.info("Reservation hold acquired successfully. reservationId={}, eventSessionId={}, eventId={}, userId={}, seatsCount={}, totalAmount={}, expiresAt={}",
+                saved.getId(), saved.getEventSessionId(), saved.getEventId(), authenticatedUserId, request.seatIds().size(),
                 saved.getTotalAmount(), saved.getExpiresAt());
 
         return reservationMapper.toResponse(saved);
@@ -256,14 +263,61 @@ public class ReservationServiceImpl implements ReservationService {
     private ReservationResponse executeCreateReservationTransaction(CreateReservationRequest request,
                                                                      UUID authenticatedUserId,
                                                                      String customerEmail,
+                                                                     SessionBookingContextDto bookingContext,
                                                                      EventPricingDetails eventPricing) {
         // The fallback keeps direct unit construction usable; Spring-managed instances always
         // receive the transaction template through configureTransactionTemplate().
+        try {
+            if (transactionTemplate == null) {
+                return createReservationTransactional(request, authenticatedUserId, customerEmail, bookingContext, eventPricing);
+            }
+            return transactionTemplate.execute(status ->
+                    createReservationTransactional(request, authenticatedUserId, customerEmail, bookingContext, eventPricing));
+        } catch (ConcurrentWriteConflict conflict) {
+            // The failed transaction has rolled back here, so the idempotency check below
+            // runs in a fresh transaction instead of on an aborted one.
+            return resolveConcurrentWriteConflict(request, bookingContext, conflict.getCause());
+        }
+    }
+
+    private ReservationResponse resolveConcurrentWriteConflict(CreateReservationRequest request,
+                                                               SessionBookingContextDto bookingContext,
+                                                               Throwable cause) {
+        Optional<Reservation> prior = readIdempotencyPriorFresh(request.idempotencyKey());
+        if (prior.isPresent()) {
+            Set<UUID> priorSeats = prior.get().getSeatHolds().stream()
+                    .map(SeatHold::getSeatId)
+                    .collect(Collectors.toSet());
+            if (Objects.equals(prior.get().getEventSessionId(), bookingContext.eventSessionId())
+                    && priorSeats.equals(new HashSet<>(request.seatIds()))) {
+                log.info("Idempotent reservation replay after constraint violation. reservationId={}, eventSessionId={}",
+                        prior.get().getId(), prior.get().getEventSessionId());
+                return reservationMapper.toResponse(prior.get());
+            }
+            throw new ConflictException("Idempotency key reused with different seats or session", ErrorCode.CONFLICT);
+        }
+        log.warn("Concurrent seat hold detected. eventSessionId={}, eventId={}, seatsCount={}",
+                bookingContext.eventSessionId(), bookingContext.eventId(), request.seatIds().size(), cause);
+        throw new ConflictException("One or more seats were taken concurrently", ErrorCode.SEAT_ALREADY_RESERVED);
+    }
+
+    private Optional<Reservation> readIdempotencyPriorFresh(String idempotencyKey) {
         if (transactionTemplate == null) {
-            return createReservationTransactional(request, authenticatedUserId, customerEmail, eventPricing);
+            return reservationRepository.findWithSeatHoldsByIdempotencyKey(idempotencyKey);
         }
         return transactionTemplate.execute(status ->
-                createReservationTransactional(request, authenticatedUserId, customerEmail, eventPricing));
+                reservationRepository.findWithSeatHoldsByIdempotencyKey(idempotencyKey));
+    }
+
+    /**
+     * Internal control-flow signal for a concurrent write collision during reservation
+     * creation (seat unique violation or duplicate idempotency key). Never escapes the
+     * service: {@link #executeCreateReservationTransaction} converts it after rollback.
+     */
+    static final class ConcurrentWriteConflict extends RuntimeException {
+        ConcurrentWriteConflict(Throwable cause) {
+            super(cause);
+        }
     }
 
     @Override
@@ -281,9 +335,20 @@ public class ReservationServiceImpl implements ReservationService {
         ensureReservationPricingIsMutable(reservation);
         Set<UUID> heldSeatIds = validatePricingSelectionShape(reservation, request);
 
+        // Resolve pricing outside the database transaction from the session stored on
+        // the reservation. The client cannot substitute a different session here.
+        if (reservation.getEventSessionId() == null) {
+            throw new ValidationException("Reservation has no event session and cannot be repriced",
+                    ErrorCode.INVALID_REQUEST);
+        }
+        SessionBookingContextDto bookingContext =
+                eventClient.getSessionBookingContext(reservation.getEventSessionId());
+        validateBookingContext(bookingContext, Instant.now());
+        assertContextMatchesReservation(bookingContext, reservation);
         // Resolve pricing outside the database transaction. The transactional phase below
         // re-reads and re-validates the reservation before applying the returned prices.
-        EventPricingDetails eventPricing = eventClient.getEventSeatPricing(reservation.getEventId(), heldSeatIds);
+        EventPricingDetails eventPricing = eventClient.getEventSeatPricing(bookingContext.eventId(), heldSeatIds);
+        assertPricingBelongsToSession(eventPricing, bookingContext);
         return executeUpdateReservationPricingTransaction(
                 reservationId, request, authenticatedUserId, customerEmailProof, eventPricing);
     }
@@ -383,12 +448,33 @@ public class ReservationServiceImpl implements ReservationService {
 
     @Override
     @Transactional(readOnly = true)
-    public SeatAvailabilityResponse getSeatAvailability(UUID eventId) {
-        List<ActiveSeatHoldProjection> holds = seatHoldRepository.findActiveSeatHoldsByEventId(eventId);
+    public SeatAvailabilityResponse getSeatAvailability(UUID eventSessionId) {
+        if (eventSessionId == null) {
+            throw new ValidationException("eventSessionId is required", ErrorCode.INVALID_REQUEST);
+        }
+        List<ActiveSeatHoldProjection> holds = seatHoldRepository.findActiveSeatHoldsByEventSessionId(eventSessionId);
+        boolean foreignRow = holds.stream()
+                .anyMatch(h -> !eventSessionId.equals(h.getEventSessionId()));
+        if (foreignRow) {
+            log.error("Session-scoped availability query returned a foreign session row. requestedSessionId={}",
+                    eventSessionId);
+        }
         List<EventSeatStatusResponse> statuses = holds.stream()
                 .map(h -> new EventSeatStatusResponse(h.getSeatId(), h.getStatus()))
                 .toList();
-        return new SeatAvailabilityResponse(eventId, statuses);
+        // Derive the display event id from stored holds only (same transaction, no remote call).
+        return new SeatAvailabilityResponse(eventSessionId, displayEventIdFromHolds(holds), statuses);
+    }
+
+    private UUID displayEventIdFromHolds(List<ActiveSeatHoldProjection> holds) {
+        Set<UUID> distinctEventIds = holds.stream()
+                .map(ActiveSeatHoldProjection::getEventId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (distinctEventIds.size() > 1) {
+            log.error("Session holds reference multiple parent events. eventIds={}", distinctEventIds);
+        }
+        return distinctEventIds.stream().findFirst().orElse(null);
     }
 
     @Override
@@ -417,6 +503,7 @@ public class ReservationServiceImpl implements ReservationService {
                 .toList();
         saveOutboxRecord("ReservationCancelledEvent", reservationId, new ReservationCancelledEvent(
                 reservationId,
+                reservation.getEventSessionId(),
                 reservation.getEventId(),
                 reservation.getUserId(),
                 reservation.getCustomerEmail(),
@@ -425,7 +512,8 @@ public class ReservationServiceImpl implements ReservationService {
 
         AfterCommitMetrics.afterCommit(this::safeIncrementCancelled);
 
-        log.info("Reservation cancelled reservationId={}, eventId={}", reservationId, reservation.getEventId());
+        log.info("Reservation cancelled reservationId={}, eventSessionId={}, eventId={}",
+                reservationId, reservation.getEventSessionId(), reservation.getEventId());
     }
 
     @Override
@@ -457,6 +545,7 @@ public class ReservationServiceImpl implements ReservationService {
                 .toList();
         saveOutboxRecord("ReservationConfirmedEvent", reservationId, new ReservationConfirmedEvent(
                 reservationId,
+                reservation.getEventSessionId(),
                 reservation.getEventId(),
                 reservation.getUserId(),
                 reservation.getCustomerEmail(),
@@ -518,19 +607,72 @@ public class ReservationServiceImpl implements ReservationService {
 
             saveOutboxRecord("ReservationExpiredEvent", reservation.getId(), new ReservationExpiredEvent(
                     reservation.getId(),
+                    reservation.getEventSessionId(),
                     reservation.getEventId(),
                     releasedSeatIds,
                     "HOLD_TIMEOUT_EXCEEDED",
                     now));
 
-            log.info("Reservation expired and seat holds released. reservationId={}, eventId={}, seatsCount={}",
-                    reservation.getId(), reservation.getEventId(), releasedSeatIds.size());
+            log.info("Reservation expired and seat holds released. reservationId={}, eventSessionId={}, eventId={}, seatsCount={}",
+                    reservation.getId(), reservation.getEventSessionId(), reservation.getEventId(), releasedSeatIds.size());
             processed++;
         }
 
         int committedCount = processed;
         AfterCommitMetrics.afterCommit(() -> safeIncrementExpired(committedCount));
         return processed;
+    }
+
+    private void validateBookingContext(SessionBookingContextDto context, Instant now) {
+        if (context == null || context.eventSessionId() == null || context.eventId() == null) {
+            throw new ValidationException("Event session booking context is unavailable", ErrorCode.INVALID_REQUEST);
+        }
+        if (!"SCHEDULED".equalsIgnoreCase(context.sessionStatus())) {
+            throw new ValidationException(
+                    "Event session is not bookable: status=" + context.sessionStatus(), ErrorCode.INVALID_REQUEST);
+        }
+        if (!"PUBLISHED".equalsIgnoreCase(context.eventStatus())) {
+            throw new ValidationException(
+                    "Parent event is not published and cannot be reserved", ErrorCode.INVALID_REQUEST);
+        }
+        if (context.saleStartsAt() != null && now.isBefore(context.saleStartsAt())) {
+            throw new ValidationException("Ticket sales for this session have not opened yet", ErrorCode.INVALID_REQUEST);
+        }
+        if (context.saleEndsAt() != null && now.isAfter(context.saleEndsAt())) {
+            throw new ValidationException("Ticket sales for this session have closed", ErrorCode.INVALID_REQUEST);
+        }
+        if (context.startsAt() == null || !context.startsAt().isAfter(now)) {
+            throw new ValidationException("Event session has already started or ended", ErrorCode.INVALID_REQUEST);
+        }
+        if (context.endsAt() != null && !context.endsAt().isAfter(now)) {
+            throw new ValidationException("Event session has already ended", ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private void rejectCompatEventMismatch(CreateReservationRequest request, SessionBookingContextDto context) {
+        if (request.eventId() != null && !request.eventId().equals(context.eventId())) {
+            log.warn("Rejected reservation with spoofed event/session relation. requestedEventId={}, sessionEventId={}, eventSessionId={}",
+                    request.eventId(), context.eventId(), context.eventSessionId());
+            throw new ValidationException(
+                    "eventId does not match the parent event of eventSessionId", ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private void assertPricingBelongsToSession(EventPricingDetails pricing, SessionBookingContextDto context) {
+        if (pricing == null || !context.eventId().equals(pricing.eventId())) {
+            log.error("Seat-map pricing does not belong to the resolved session event. eventSessionId={}, sessionEventId={}",
+                    context.eventSessionId(), context.eventId());
+            throw new ValidationException("Seat pricing is unavailable for this session", ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private void assertContextMatchesReservation(SessionBookingContextDto context, Reservation reservation) {
+        if (!Objects.equals(context.eventSessionId(), reservation.getEventSessionId())
+                || !Objects.equals(context.eventId(), reservation.getEventId())) {
+            log.error("Booking context drifted from stored reservation. reservationId={}, storedSessionId={}, contextSessionId={}",
+                    reservation.getId(), reservation.getEventSessionId(), context.eventSessionId());
+            throw new ValidationException("Event session context does not match the reservation", ErrorCode.INVALID_REQUEST);
+        }
     }
 
     private void validateSeatLists(CreateReservationRequest request) {

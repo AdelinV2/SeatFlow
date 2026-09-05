@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record ReservationCancelledEvent(
         UUID reservationId,
+        UUID eventSessionId,
         UUID eventId,
         UUID userId,
         String customerEmail,

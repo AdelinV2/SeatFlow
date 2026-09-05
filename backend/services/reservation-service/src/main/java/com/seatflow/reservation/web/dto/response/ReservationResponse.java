@@ -12,7 +12,8 @@ import java.util.UUID;
 public record ReservationResponse(
 
         UUID id,
-        UUID eventId,
+        @Schema(description = "Authoritative event session (inventory partition)") UUID eventSessionId,
+        @Schema(description = "Parent event UUID, derived from trusted session context (display only)") UUID eventId,
         UUID userId,
         String customerEmail,
         ReservationStatus status,

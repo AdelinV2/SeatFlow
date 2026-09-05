@@ -21,7 +21,7 @@ public interface ReservationService {
                                                  UUID authenticatedUserId,
                                                  String customerEmailProof);
 
-    SeatAvailabilityResponse getSeatAvailability(UUID eventId);
+    SeatAvailabilityResponse getSeatAvailability(UUID eventSessionId);
 
     void cancelReservation(UUID reservationId, UUID authenticatedUserId, String customerEmailProof);
 

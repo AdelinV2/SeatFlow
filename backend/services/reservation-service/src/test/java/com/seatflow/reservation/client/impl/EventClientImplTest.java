@@ -5,6 +5,8 @@ import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
 import com.seatflow.reservation.client.dto.PricingTierClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
+import com.seatflow.reservation.client.exception.EventClientUnavailableException;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ValidationException;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -149,6 +151,63 @@ class EventClientImplTest {
         assertThatThrownBy(() -> eventClient.getEventSeatPricing(eventId, Set.of(requestedSeat)))
                 .isInstanceOf(ValidationException.class)
                 .satisfies(e -> assertThat(((ValidationException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void getSessionBookingContextReturnsTrustedContext() {
+        UUID sessionId = UUID.randomUUID();
+        SessionBookingContextDto context = new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID());
+        when(responseSpec.body(SessionBookingContextDto.class)).thenReturn(context);
+
+        SessionBookingContextDto result = eventClient.getSessionBookingContext(sessionId);
+
+        assertThat(result.eventSessionId()).isEqualTo(sessionId);
+        assertThat(result.eventId()).isEqualTo(eventId);
+        assertThat(result.sessionStatus()).isEqualTo("SCHEDULED");
+    }
+
+    @Test
+    void getSessionBookingContextRejectsNullSessionId() {
+        assertThatThrownBy(() -> eventClient.getSessionBookingContext(null))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void getSessionBookingContextMapsNotFoundToValidationException() {
+        when(headersSpec.retrieve())
+                .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", null, null, null));
+
+        assertThatThrownBy(() -> eventClient.getSessionBookingContext(UUID.randomUUID()))
+                .isInstanceOf(ValidationException.class)
+                .satisfies(e -> assertThat(((ValidationException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void getSessionBookingContextRejectsMismatchedSession() {
+        UUID requested = UUID.randomUUID();
+        SessionBookingContextDto context = new SessionBookingContextDto(
+                UUID.randomUUID(), eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID());
+        when(responseSpec.body(SessionBookingContextDto.class)).thenReturn(context);
+
+        assertThatThrownBy(() -> eventClient.getSessionBookingContext(requested))
+                .isInstanceOf(EventClientUnavailableException.class);
+    }
+
+    @Test
+    void getSessionBookingContextRejectsIncompleteResponse() {
+        UUID sessionId = UUID.randomUUID();
+        when(responseSpec.body(SessionBookingContextDto.class))
+                .thenReturn(new SessionBookingContextDto(sessionId, null, "PUBLISHED", "SCHEDULED",
+                        Instant.now().plusSeconds(86400), null, null, null, null));
+
+        assertThatThrownBy(() -> eventClient.getSessionBookingContext(sessionId))
+                .isInstanceOf(EventClientUnavailableException.class);
     }
 
     @Test

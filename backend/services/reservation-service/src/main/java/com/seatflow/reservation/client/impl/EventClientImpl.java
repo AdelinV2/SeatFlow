@@ -9,6 +9,7 @@ import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
 import com.seatflow.reservation.client.dto.SeatPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.client.exception.EventClientUnavailableException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -42,6 +43,7 @@ public class EventClientImpl implements EventClient {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
     private static final String SEAT_MAP_PATH = "/api/events/{eventId}/seat-map";
+    private static final String BOOKING_CONTEXT_PATH = "/internal/event-sessions/{sessionId}/booking-context";
     private static final String PUBLISHED_STATUS = "PUBLISHED";
 
     private final RestClient.Builder loadBalancedBuilder;
@@ -105,6 +107,40 @@ public class EventClientImpl implements EventClient {
             return circuitBreaker.executeSupplier(() -> doGetPricing(eventId, requestedSeatIds));
         } catch (CallNotPermittedException e) {
             throw new EventClientUnavailableException("Event service circuit is open for eventId=" + eventId, e);
+        }
+    }
+
+    @Override
+    public SessionBookingContextDto getSessionBookingContext(UUID eventSessionId) {
+        if (eventSessionId == null) {
+            throw new ValidationException("Event session ID is required", ErrorCode.INVALID_REQUEST);
+        }
+        try {
+            return circuitBreaker.executeSupplier(() -> doGetBookingContext(eventSessionId));
+        } catch (CallNotPermittedException e) {
+            throw new EventClientUnavailableException(
+                    "Event service circuit is open for eventSessionId=" + eventSessionId, e);
+        }
+    }
+
+    private SessionBookingContextDto doGetBookingContext(UUID eventSessionId) {
+        try {
+            SessionBookingContextDto response = client().get()
+                    .uri(BOOKING_CONTEXT_PATH, eventSessionId)
+                    .retrieve()
+                    .body(SessionBookingContextDto.class);
+            if (response == null || response.eventSessionId() == null || response.eventId() == null) {
+                throw new EventClientUnavailableException(
+                        "Event service returned an incomplete booking context for eventSessionId=" + eventSessionId);
+            }
+            if (!eventSessionId.equals(response.eventSessionId())) {
+                throw new EventClientUnavailableException(
+                        "Event service returned a booking context for a different session: requested="
+                                + eventSessionId + ", received=" + response.eventSessionId());
+            }
+            return response;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
+            throw new ValidationException("Unknown event session: " + eventSessionId, ErrorCode.INVALID_REQUEST);
         }
     }
 
