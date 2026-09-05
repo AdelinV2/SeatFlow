@@ -56,7 +56,7 @@ Current exact selections:
 - Free: `opencode/muse-spark-1.3-contributor-free`
 - Go: `opencode-go/muse-spark-1.3-contributor`
 
-Other secondary OpenCode Go models may be used only when the route below explicitly calls for them or when the preferred model is unavailable/unsuitable.
+No other OpenCode / OpenCode Go model is recommended. Do not route OpenCode work to GLM 5.3 / GLM-Flash, Hy3, Hy4 (including preview variants), Kimi, Qwen, DeepSeek, MiniMax, Grok, or any other OpenCode catalog model. The only permitted OpenCode routes are the two Muse Spark 1.3 routes above. If both Muse routes are unavailable or prohibited, use the task-specific Alternative from this router (normally a non-OpenCode harness), not another OpenCode model.
 
 ---
 

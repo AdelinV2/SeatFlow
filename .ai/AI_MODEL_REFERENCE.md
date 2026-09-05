@@ -174,16 +174,9 @@ A buggy Free attempt should not automatically be re-run on paid Contributor mere
 
 ## 6. OpenCode Go Economics
 
-Current OpenCode Go product information advertises very generous relative allowance for Muse Spark 1.3 Contributor compared with many other Go models.
+Current OpenCode Go product information advertises a very generous relative allowance for Muse Spark 1.3 Contributor. SeatFlow does not track or compare allowances for other OpenCode / OpenCode Go models because no other OpenCode model is recommended (see section 12).
 
-The September 4 product page currently shows approximately:
-
-- Muse Spark 1.3 Contributor: ~45,300 typical requests / 5h reference window;
-- GPT-5.6 Luna: ~2,050;
-- Hy4 preview: ~1,350;
-- other heavier models substantially lower than Muse.
-
-These figures are **relative product estimates**, not guarantees for SeatFlow-sized prompts. A long agentic run can consume far more than an average request.
+Allowance figures are **relative product estimates**, not guarantees for SeatFlow-sized prompts. A long agentic run can consume far more than an average request.
 
 The useful conclusion is robust:
 
@@ -300,31 +293,13 @@ Fast mode is explicitly disabled by repository policy unless the user asks for i
 
 ---
 
-## 12. Secondary OpenCode Models
+## 12. No Secondary OpenCode Models
 
-### Hy4 preview
+SeatFlow does not recommend any secondary OpenCode / OpenCode Go model.
 
-Useful for:
+In particular, do **not** recommend or route work to GLM 5.3 / GLM-Flash, Hy3, Hy4 (including preview variants), Kimi, Qwen, DeepSeek, MiniMax, Grok, or any other OpenCode catalog model. The only permitted OpenCode routes are Muse Spark 1.3 Contributor Free (`opencode/muse-spark-1.3-contributor-free`) and Muse Spark 1.3 Contributor via OpenCode Go (`opencode-go/muse-spark-1.3-contributor`).
 
-- independent open-model-family attempts;
-- long-horizon/tool-heavy tasks when Muse behaves poorly;
-- terminal-heavy debugging.
-
-Because it is a preview route and materially more expensive in Go allowance than Muse, it is not the default final authority for critical invariants.
-
-### GLM-5.3 / GLM-5.3-Flash
-
-Credible terminal-heavy alternatives, but current Go economics do not justify replacing Muse as the normal implementation worker.
-
-Use when:
-
-- Muse is unavailable;
-- an independent open-model-family attempt is specifically useful;
-- provider behavior makes GLM materially better for the current task.
-
-### Other Go models
-
-Kimi, Qwen, DeepSeek, MiniMax, Grok and others may be capable. They remain secondary until a SeatFlow-specific reason or updated evidence justifies promoting them into the default route.
+If both Muse routes are unavailable or prohibited, use the task-specific Alternative from `.ai/MODEL_ROUTER.md` (normally a non-OpenCode harness), not another OpenCode model.
 
 Avoid churn in the router merely because a new model appears in the catalog.
 
