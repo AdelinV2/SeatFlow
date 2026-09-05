@@ -39,7 +39,6 @@ class ReservationMapperTest {
         UUID userId = UUID.randomUUID();
         CreateReservationRequest request = new CreateReservationRequest(
                 UUID.randomUUID(),
-                UUID.randomUUID(),
                 "guest@example.com",
                 java.util.List.of(UUID.randomUUID(), UUID.randomUUID()),
                 java.util.List.of(new BigDecimal("40.00"), new BigDecimal("60.00")),

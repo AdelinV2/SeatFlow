@@ -20,11 +20,11 @@ public record CreateReservationRequest(
         @NotNull(message = "eventSessionId is required")
         UUID eventSessionId,
 
-        @Schema(description = "Optional legacy event UUID for compatibility only. Never authoritative: "
-                + "when present it must equal the parent event derived from eventSessionId, "
-                + "otherwise the request is rejected. Removed in P12-007.",
-                example = "123e4567-e89b-12d3-a456-426614174000")
-        UUID eventId,
+        // P12-007: legacy eventId compat field removed (ADR-011). The session is
+        // the sole booking key; the parent event is derived server-side from the
+        // trusted session booking context. Unknown JSON properties (including a
+        // legacy eventId) are rejected with 400 via FAIL_ON_UNKNOWN_PROPERTIES,
+        // never silently ignored or used for session inference.
 
         @Schema(description = "Contact email for the reservation. Required for guests; authenticated users may omit to use their JWT email (ADR-001).",
                 example = "guest@example.com")

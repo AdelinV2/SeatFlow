@@ -111,7 +111,8 @@
               {{ ev.title }}
             </h2>
             <p class="text-xs sm:text-sm text-[var(--color-text-muted)] flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>📅 {{ ev.eventDate | sfDate:'full' }}</span>
+              <!-- P12-007: showing date from the reservation session snapshot, then event sessions. -->
+              <span>📅 {{ (reservation()?.sessionStartsAt || ev.sessions?.[0]?.startsAt) | sfDate:'full' }}</span>
               @if (ev.venueName || ev.venueAddress || ev.venueCity) {
                 <span>•</span>
                 <span>📍 {{ ev.venueName || ev.venueAddress || ev.venueCity }}</span>

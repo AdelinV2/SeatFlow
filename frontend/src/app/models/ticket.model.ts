@@ -9,6 +9,10 @@ export interface TicketItem {
   paymentId?: string;
   userId?: string;
   eventId: string;
+  // P12-007: authoritative showing identity from GET /api/tickets/my-tickets
+  // (TicketResponse.eventSessionId). Used to select the ticket's own session
+  // for display; optional because pre-P12-004 rows have no session.
+  eventSessionId?: string;
   seatId: string;
   eventTitle?: string;
   eventDate?: string;

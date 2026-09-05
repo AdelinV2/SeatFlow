@@ -17,7 +17,9 @@ public record EventDetailResponse(
     @Schema(description = "Full event description") String description,
     @Schema(description = "Catalog category") EventCategory category,
     @Schema(description = "Public banner image URL") String bannerUrl,
-    @Schema(description = "UTC start time of the event") Instant eventDate,
+    // P12-007: legacy eventDate removed. Showing schedule lives exclusively on
+    // sessions[] (EventSession owns startsAt/endsAt). No event-level instant
+    // remains; consumers must select an explicit session for booking.
     @Schema(description = "Lifecycle status") EventStatus status,
     @Schema(description = "Configured pricing tiers") List<PricingTierResponse> pricingTiers,
     @Schema(description = "Session summary: all sessions for administration, booking-visible sessions for customers")

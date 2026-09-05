@@ -67,18 +67,19 @@ export class MyTicketsComponent implements OnInit {
 
   readonly upcomingTickets = computed(() => {
     const now = Date.now();
-    const eventMap = this.eventDetailsMap();
     return this.allTickets().filter((ticket) => {
       // 1. Used or Cancelled tickets belong in the past tab
       if (ticket.status === 'USED' || ticket.status === 'CANCELLED') {
         return false;
       }
-      // 2. If event has a known date, check if date is in the future
-      const eventDateStr = ticket.eventDate || eventMap.get(ticket.eventId)?.eventDate;
-      if (eventDateStr) {
-        const eventTime = new Date(eventDateStr).getTime();
-        if (!Number.isNaN(eventTime)) {
-          return eventTime >= now;
+      // 2. P12-007: showing date derives from the reservation session snapshot
+      // first, then the ticket display date, then the event sessions. No
+      // event-level instant remains.
+      const showingDateStr = this.showingDate(ticket);
+      if (showingDateStr) {
+        const showingTime = new Date(showingDateStr).getTime();
+        if (!Number.isNaN(showingTime)) {
+          return showingTime >= now;
         }
       }
       // 3. If event date is not yet loaded or unknown, active VALID tickets default to Upcoming
@@ -88,21 +89,35 @@ export class MyTicketsComponent implements OnInit {
 
   readonly pastTickets = computed(() => {
     const now = Date.now();
-    const eventMap = this.eventDetailsMap();
     return this.allTickets().filter((ticket) => {
       if (ticket.status === 'USED' || ticket.status === 'CANCELLED') {
         return true;
       }
-      const eventDateStr = ticket.eventDate || eventMap.get(ticket.eventId)?.eventDate;
-      if (eventDateStr) {
-        const eventTime = new Date(eventDateStr).getTime();
-        if (!Number.isNaN(eventTime)) {
-          return eventTime < now;
+      const showingDateStr = this.showingDate(ticket);
+      if (showingDateStr) {
+        const showingTime = new Date(showingDateStr).getTime();
+        if (!Number.isNaN(showingTime)) {
+          return showingTime < now;
         }
       }
       return false;
     });
   });
+
+  // P12-007: single source for a ticket's showing instant. Prefers the
+  // immutable reservation session snapshot, then ticket display metadata,
+  // then the ticket's OWN session from the parent event's sessions (matched
+  // by eventSessionId, never sessions[0]). Returns undefined when the
+  // ticket's session cannot be identified, so callers fall back to the
+  // default upcoming rule instead of inventing a date.
+  showingDate(ticket: TicketItem): string | undefined {
+    const reservation = this.reservationDetailsMap().get(ticket.reservationId);
+    if (reservation?.sessionStartsAt) return reservation.sessionStartsAt;
+    if (ticket.eventDate) return ticket.eventDate;
+    const sessions = this.eventDetailsMap().get(ticket.eventId)?.sessions;
+    if (!ticket.eventSessionId) return undefined;
+    return sessions?.find((s) => s.id === ticket.eventSessionId)?.startsAt;
+  }
 
   readonly displayedTickets = computed(() =>
     this.activeTab() === 'upcoming' ? this.upcomingTickets() : this.pastTickets(),
@@ -255,3 +270,4 @@ export class MyTicketsComponent implements OnInit {
       });
   }
 }
+

@@ -59,7 +59,7 @@ public class AdminEventController {
             @RequestParam(required = false) EventStatus status,
             @RequestParam(required = false) EventCategory category,
             @RequestParam(required = false) String search,
-            @PageableDefault(size = 50, sort = "eventDate", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(eventService.findEventsForAdministration(status, category, search, pageable));
     }
 

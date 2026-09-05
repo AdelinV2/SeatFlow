@@ -127,7 +127,8 @@ export interface EventSeatMapResponse {
   venueId: string;
   eventTitle: string;
   status?: string;
-  eventDate: string;
+  // P12-007: legacy eventDate removed. Seat-map carries venue layout + pricing
+  // only; showing schedule lives exclusively on EventSession.
   venueName: string;
   venueCapacity: number;
   totalConfiguredSeats: number;

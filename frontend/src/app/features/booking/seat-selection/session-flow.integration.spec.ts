@@ -117,7 +117,6 @@ describe('SessionFlow Router/DOM integration (TASK-P12-006 REV-006)', () => {
     description: 'A great show',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/concert.jpg',
-    eventDate: '2026-10-10T18:00:00Z',
     status: 'PUBLISHED',
     pricingTiers: [
       {
@@ -136,7 +135,6 @@ describe('SessionFlow Router/DOM integration (TASK-P12-006 REV-006)', () => {
     eventId: 'event-1',
     venueId: 'venue-1',
     eventTitle: 'Live at SeatFlow',
-    eventDate: '2026-10-10T18:00:00Z',
     venueName: 'Main Hall',
     venueCapacity: 100,
     totalConfiguredSeats: 3,

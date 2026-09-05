@@ -14,7 +14,7 @@ public record PaymentCompletedEvent(
     UUID userId,              // Nullable for guest checkouts (ADR-001)
     String customerEmail,
     UUID eventSessionId,      // Required since P12-004; never inferred from eventId
-    UUID eventId,             // Retained for older-consumer compatibility (removed in P12-007)
+    UUID eventId,             // P12-007 retained: non-authoritative parent-event audit/display ref only; never a booking key
     Instant sessionStartsAt,  // Immutable showing snapshot (P12-004)
     Instant sessionEndsAt,    // Immutable showing snapshot (P12-004)
     String sessionTimezone,   // Nullable IANA ZoneId metadata (P12-004)

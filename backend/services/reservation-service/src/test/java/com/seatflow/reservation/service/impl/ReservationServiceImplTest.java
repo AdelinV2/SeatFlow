@@ -94,9 +94,10 @@ class ReservationServiceImplTest {
         SecurityContextHolder.clearContext();
     }
 
-    private CreateReservationRequest buildRequest(UUID sessionId, UUID eventId,
+    private CreateReservationRequest buildRequest(UUID sessionId, UUID ignoredLegacyEventId,
                                                  List<UUID> seatIds, List<BigDecimal> prices, String idem) {
-        return new CreateReservationRequest(sessionId, eventId, "guest@example.com", seatIds, prices, idem);
+        // P12-007: client request carries session only; parent event derives server-side.
+        return new CreateReservationRequest(sessionId, "guest@example.com", seatIds, prices, idem);
     }
 
     private SessionBookingContextDto bookingContext(UUID sessionId, UUID eventId) {
@@ -144,8 +145,7 @@ class ReservationServiceImplTest {
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-1");
 
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
 
         when(reservationMapper.toEntity(any(), any())).thenReturn(stubReservation(null, sessionId, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
         stubBookableSession(sessionId, eventId);
@@ -183,7 +183,7 @@ class ReservationServiceImplTest {
                 List.of(new BigDecimal("20.00"), new BigDecimal("10.00")), "idem-lock-order");
 
         EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), requestedSeatIds,
+                requestedSeatIds,
                 Map.of(firstSeat, new BigDecimal("10.00"), secondSeat, new BigDecimal("20.00")));
 
         stubBookableSession(sessionId, eventId);
@@ -228,8 +228,7 @@ class ReservationServiceImplTest {
         SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).eventSessionId(sessionId).eventId(eventId).seatId(seatId)
                 .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
         Reservation prior = stubReservation(reservationId, sessionId, eventId, null, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-replay")).thenReturn(Optional.of(prior));
@@ -253,8 +252,7 @@ class ReservationServiceImplTest {
         SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).eventSessionId(sessionA).eventId(eventId).seatId(seatId)
                 .status(SeatHoldStatus.HELD).price(new BigDecimal("50.00")).build();
         Reservation prior = stubReservation(UUID.randomUUID(), sessionA, eventId, null, ReservationStatus.PENDING, new HashSet<>(Set.of(hold)));
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionB, eventId);
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-cross")).thenReturn(Optional.of(prior));
@@ -265,21 +263,12 @@ class ReservationServiceImplTest {
     }
 
     @Test
-    void createReservationRejectsSpoofedCompatEventId() {
-        UUID sessionId = UUID.randomUUID();
-        UUID realEventId = UUID.randomUUID();
-        UUID spoofedEventId = UUID.randomUUID();
-        UUID seatId = UUID.randomUUID();
-        CreateReservationRequest request = buildRequest(sessionId, spoofedEventId,
-                List.of(seatId), List.of(new BigDecimal("50.00")), "idem-spoof");
-
-        stubBookableSession(sessionId, realEventId);
-
-        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
-        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
-        verify(eventClient, never()).getEventSeatPricing(any(), any());
-        verify(reservationRepository, never()).saveAndFlush(any());
-        verify(outboxEventRepository, never()).save(any());
+    void createReservationRequestCarriesNoLegacyEventIdField() throws Exception {
+        // P12-007: the session is the sole booking key. The request record must
+        // expose no eventId component, so no caller can supply or spoof one.
+        var eventIdComponent = java.util.Arrays.stream(CreateReservationRequest.class.getRecordComponents())
+                .filter(c -> c.getName().equals("eventId")).findFirst();
+        assertThat(eventIdComponent).isEmpty();
     }
 
     @Test
@@ -300,6 +289,108 @@ class ReservationServiceImplTest {
         verify(eventClient, never()).getEventSeatPricing(any(), any());
         verify(reservationRepository, never()).saveAndFlush(any());
         verify(outboxEventRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservationRejectsSaleNotOpenBeforeMutation() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        CreateReservationRequest request = buildRequest(sessionId, eventId,
+                List.of(seatId), List.of(new BigDecimal("50.00")), "idem-sale-not-open");
+
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                Instant.now().plusSeconds(3600), null, UUID.randomUUID()));
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThat(ex.getMessage()).contains("have not opened yet");
+        verify(eventClient, never()).getEventSeatPricing(any(), any());
+        verify(reservationRepository, never()).saveAndFlush(any());
+        verify(outboxEventRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservationRejectsSaleClosedBeforeMutation() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        CreateReservationRequest request = buildRequest(sessionId, eventId,
+                List.of(seatId), List.of(new BigDecimal("50.00")), "idem-sale-closed");
+
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, Instant.now().minusSeconds(60), UUID.randomUUID()));
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThat(ex.getMessage()).contains("have closed");
+        verify(eventClient, never()).getEventSeatPricing(any(), any());
+        verify(reservationRepository, never()).saveAndFlush(any());
+        verify(outboxEventRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservationRejectsAlreadyStartedSessionBeforeMutation() {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        CreateReservationRequest request = buildRequest(sessionId, eventId,
+                List.of(seatId), List.of(new BigDecimal("50.00")), "idem-started");
+
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600),
+                null, null, UUID.randomUUID()));
+
+        ValidationException ex = assertThrows(ValidationException.class, () -> service.createReservation(request, null));
+        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_REQUEST);
+        assertThat(ex.getMessage()).contains("already started");
+        verify(eventClient, never()).getEventSeatPricing(any(), any());
+        verify(reservationRepository, never()).saveAndFlush(any());
+        verify(outboxEventRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservationPassesValidationForOpenSaleWindow() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        List<UUID> seatIds = List.of(seatId);
+        CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds,
+                List.of(new BigDecimal("50.00")), "idem-open-window");
+
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
+
+        // SCHEDULED/PUBLISHED session with an explicitly open sale window must
+        // clear validateBookingContext and reach the pricing/inventory path.
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600), UUID.randomUUID()));
+        when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
+        when(reservationMapper.toEntity(any(), any())).thenReturn(stubReservation(null, sessionId, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
+        when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-open-window")).thenReturn(Optional.empty());
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), eq(seatIds))).thenReturn(List.of());
+        when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> {
+            Reservation r = inv.getArgument(0);
+            r.setId(reservationId);
+            return r;
+        });
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(reservationMapper.toResponse(any())).thenReturn(sampleResponse(reservationId, sessionId, eventId));
+
+        ReservationResponse result = service.createReservation(request, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(reservationId);
+        verify(eventClient).getSessionBookingContext(sessionId);
+        verify(eventClient).getEventSeatPricing(eventId, new HashSet<>(seatIds));
+        verify(reservationRepository).saveAndFlush(any(Reservation.class));
     }
 
     @Test
@@ -326,8 +417,7 @@ class ReservationServiceImplTest {
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-conflict");
 
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-conflict")).thenReturn(Optional.empty());
@@ -347,8 +437,7 @@ class ReservationServiceImplTest {
         List<UUID> seatIds = List.of(seatId);
         CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds, List.of(new BigDecimal("60.00")), "idem-price");
 
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
 
@@ -427,7 +516,7 @@ class ReservationServiceImplTest {
         when(reservationRepository.findWithSeatHoldsById(id)).thenReturn(Optional.of(res));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eventId, Set.of(seatId))).thenReturn(new EventPricingDetails(
-                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), List.of(seatId),
+                eventId, "PUBLISHED", List.of(seatId),
                 Map.of(seatId, new BigDecimal("50.00")),
                 Map.of(seatId, new SeatPricingDetails(UUID.randomUUID(), "Orchestra", "B", 7, List.of(tier)))));
         when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -612,8 +701,7 @@ class ReservationServiceImplTest {
         CreateReservationRequest request = buildRequest(sessionId, eventId, seatIds,
                 List.of(new BigDecimal("90.00"), new BigDecimal("10.00")), "idem-swap");
 
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds,
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds,
                 Map.of(seatA, new BigDecimal("10.00"), seatB, new BigDecimal("90.00")));
         stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
@@ -707,8 +795,7 @@ class ReservationServiceImplTest {
                 sessionId, eventId, "PUBLISHED", "SCHEDULED", startsAt, endsAt, null, null, UUID.randomUUID());
         lenient().when(eventClient.getSessionBookingContext(sessionId)).thenReturn(context);
 
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
         when(reservationMapper.toEntity(any(), any())).thenReturn(stubReservation(null, sessionId, eventId, null, ReservationStatus.PENDING, new HashSet<>()));
         when(eventClient.getEventSeatPricing(eventId, new HashSet<>(seatIds))).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-snapshot")).thenReturn(Optional.empty());

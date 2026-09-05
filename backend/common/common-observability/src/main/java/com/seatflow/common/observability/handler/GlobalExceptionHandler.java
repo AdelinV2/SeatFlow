@@ -105,6 +105,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotReadable(
+            org.springframework.http.converter.HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
+        // P12-007: legacy schedule/booking fields removed from DTOs are rejected here
+        // via FAIL_ON_UNKNOWN_PROPERTIES. Unknown properties (e.g. legacy eventDate,
+        // startsAt, or eventId booking keys) fail closed with 400, never silently ignored.
+        log.warn("Malformed or unknown-field request body on [{}]: {}", request.getRequestURI(), ex.getMessage());
+        ApiErrorResponse response = ApiErrorResponse.of(
+            HttpStatus.BAD_REQUEST.value(),
+            HttpStatus.BAD_REQUEST.getReasonPhrase(),
+            ErrorCode.INVALID_REQUEST.getCode(),
+            "Malformed request body or unsupported fields",
+            request.getRequestURI(),
+            getCorrelationId()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
         log.warn("Access denied on request [{}]: {}", request.getRequestURI(), ex.getMessage());

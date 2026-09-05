@@ -3,11 +3,8 @@ package com.seatflow.event.web.dto.request;
 import com.seatflow.event.model.enums.EventCategory;
 import com.seatflow.event.model.enums.EventStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-
-import java.time.Instant;
 
 @Schema(description = "Request body for partially updating an existing event. Only provided (non-null) fields are changed.")
 public record UpdateEventRequest(
@@ -28,9 +25,10 @@ public record UpdateEventRequest(
     @Pattern(regexp = "^https?://.+$", message = "bannerUrl must be an HTTP(S) URL")
     String bannerUrl,
 
-    @Schema(description = "UTC start time of the event", example = "2027-06-01T19:30:00Z")
-    @Future(message = "Event date must be in the future")
-    Instant eventDate,
+    // P12-007: legacy eventDate schedule field removed (ADR-011). Session
+    // schedule is managed exclusively via the event-sessions endpoints.
+    // Unknown JSON properties (including legacy eventDate/startsAt) are rejected
+    // with 400 via FAIL_ON_UNKNOWN_PROPERTIES, never silently ignored.
 
     @Schema(description = "Lifecycle status")
     EventStatus status

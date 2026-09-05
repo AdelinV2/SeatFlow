@@ -99,7 +99,7 @@ class ReservationServiceIntegrationTest {
                 Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
                 null, null, UUID.randomUUID()));
         EventPricingDetails pricing = new EventPricingDetails(
-                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds,
+                eventId, "PUBLISHED", seatIds,
                 Map.of(seatId1, new BigDecimal("10.00"), seatId2, new BigDecimal("20.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
@@ -107,8 +107,7 @@ class ReservationServiceIntegrationTest {
         when(kafkaTemplate.send(anyString(), anyString(), anyString()))
                 .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(sendResult));
 
-        CreateReservationRequest request = new CreateReservationRequest(
-                sessionId, eventId, "guest@example.com", seatIds, prices, idempotencyKey);
+        CreateReservationRequest request = new CreateReservationRequest(sessionId, "guest@example.com", seatIds, prices, idempotencyKey);
 
         var response = reservationService.createReservation(request, UUID.randomUUID());
 
@@ -145,3 +144,4 @@ class ReservationServiceIntegrationTest {
         assertThat(published.getRetryCount()).isZero();
     }
 }
+

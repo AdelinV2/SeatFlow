@@ -26,6 +26,7 @@ public final class StagedMigrationSupport {
     private static final String V1 = "db/migration/V1__create_events_and_pricing_tables.sql";
     private static final String V2 = "db/migration/V2__create_outbox_events_table.sql";
     private static final String V3 = "db/migration/V3__create_event_sessions_and_backfill.sql";
+    private static final String V4 = "db/migration/V4__remove_legacy_event_schedule.sql";
 
     private StagedMigrationSupport() {
     }
@@ -54,6 +55,13 @@ public final class StagedMigrationSupport {
         executeScript(database.jdbc(), V3);
     }
 
+    public static void applyV4(FreshDatabase database) {
+        // V4 contains a dollar-quoted DO gate block that Spring's ScriptUtils
+        // would split on inner semicolons, so the whole file is executed as one
+        // statement batch like Flyway does.
+        executeWholeScript(database.jdbc(), V4);
+    }
+
     public static UUID insertLegacyEvent(JdbcTemplate jdbc, String title, Instant eventDate, String status) {
         UUID id = UUID.randomUUID();
         jdbc.update(
@@ -68,6 +76,17 @@ public final class StagedMigrationSupport {
         try (Connection connection = jdbc.getDataSource().getConnection()) {
             org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
                     connection, new ClassPathResource(classpathLocation));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not execute migration script " + classpathLocation, ex);
+        }
+    }
+
+    private static void executeWholeScript(JdbcTemplate jdbc, String classpathLocation) {
+        try (Connection connection = jdbc.getDataSource().getConnection();
+                java.sql.Statement statement = connection.createStatement();
+                java.io.InputStream in = new ClassPathResource(classpathLocation).getInputStream()) {
+            String sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            statement.execute(sql);
         } catch (Exception ex) {
             throw new IllegalStateException("Could not execute migration script " + classpathLocation, ex);
         }

@@ -53,11 +53,20 @@ public class Reservation {
 
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
-    private UUID eventId; // Legacy compat/audit column (P12-003). Non-authoritative; derived from trusted booking-context.
+    // P12-007 retained: non-authoritative parent-event audit/display reference,
+    // always derived from the trusted session booking context. Never a booking
+    // key; inventory is partitioned by eventSessionId only (ADR-011).
+    private UUID eventId;
 
     @Column(name = "event_session_id", updatable = false)
     @ToString.Include
-    private UUID eventSessionId; // Authoritative inventory partition since P12-003 (ADR-011).
+    // P12-007: authoritative inventory partition (ADR-011). Always populated by
+    // the service from the trusted session booking context; V8 aborts migration
+    // when NULLs remain. Hard NOT NULL is tracked follow-up TASK-P12-009 (kept
+    // nullable until the backfill suites that persist legacy-NULL rows move to
+    // a staged pre-constraint schema); SessionIntegrityStartupCheck alerts on
+    // NULL session rows at boot.
+    private UUID eventSessionId;
 
     @Column(name = "session_starts_at", updatable = false)
     @ToString.Include

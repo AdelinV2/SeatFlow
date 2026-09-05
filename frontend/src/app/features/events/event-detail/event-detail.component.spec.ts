@@ -40,7 +40,6 @@ describe('EventDetailComponent', () => {
     description: 'Beethoven masterpiece performed live with choir.',
     category: 'SYMPHONY',
     bannerUrl: 'https://example.com/symphony.jpg',
-    eventDate: '2026-11-15T19:30:00Z',
     status: 'PUBLISHED',
     pricingTiers: [
       {

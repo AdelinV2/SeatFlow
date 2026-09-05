@@ -75,7 +75,7 @@ class EventControllerTest {
     void getEvent_unauthenticated_returns200() throws Exception {
         UUID eventId = UUID.randomUUID();
         EventDetailResponse response = new EventDetailResponse(eventId, UUID.randomUUID(), "Hamlet", "desc",
-                EventCategory.OTHER, null, Instant.now(), EventStatus.PUBLISHED, List.of(), List.of(), Instant.now(), Instant.now());
+                EventCategory.OTHER, null, EventStatus.PUBLISHED, List.of(), List.of(), Instant.now(), Instant.now());
         when(eventService.getPublishedEvent(eventId)).thenReturn(response);
 
         mockMvc.perform(get("/api/events/{id}", eventId))
@@ -100,9 +100,8 @@ class EventControllerTest {
         UUID seatId = UUID.randomUUID();
         UUID elementId = UUID.randomUUID();
         UUID tierId = UUID.randomUUID();
-        Instant eventDate = Instant.parse("2030-06-15T19:30:00Z");
         EventSeatMapResponse response = new EventSeatMapResponse(eventId, venueId, "Hamlet", "PUBLISHED",
-                eventDate, "Grand Hall", 500, 10L,
+                "Grand Hall", 500, 10L,
                 List.of(new SeatMapSectionResponse(sectionId, "Orchestra", 5, 10, true,
                         new BigDecimal("10.5"), new BigDecimal("20.25"),
                         new BigDecimal("440"), new BigDecimal("220"), new BigDecimal("15.5"), 3,
@@ -128,7 +127,6 @@ class EventControllerTest {
         assertThat(tree.get("venueId").asText()).isEqualTo(venueId.toString());
         assertThat(tree.get("eventTitle").asText()).isEqualTo("Hamlet");
         assertThat(tree.get("status").asText()).isEqualTo("PUBLISHED");
-        assertThat(Instant.parse(tree.get("eventDate").asText())).isEqualTo(eventDate);
         assertThat(tree.get("venueName").asText()).isEqualTo("Grand Hall");
         assertThat(tree.get("venueCapacity").asInt()).isEqualTo(500);
         assertThat(tree.get("totalConfiguredSeats").asLong()).isEqualTo(10L);

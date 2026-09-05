@@ -5,7 +5,8 @@ import { SeatAvailabilityResponse } from '../models/seat.model';
 
 export interface CreateReservationRequest {
   eventSessionId: string;
-  eventId?: string;
+  // P12-007: legacy eventId compat field removed. The session is the sole
+  // booking key; the parent event derives server-side from trusted context.
   customerEmail?: string;
   seatIds: string[];
   seatPrices: number[];

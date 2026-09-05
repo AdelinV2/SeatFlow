@@ -584,7 +584,7 @@ export class SeatSelectionComponent implements OnInit {
 
     const request: CreateReservationRequest = {
       eventSessionId: session.id,
-      eventId: this.seatMap()!.eventId,
+      // P12-007: session is the sole booking key; no eventId is sent.
       ...(customerEmail ? { customerEmail } : {}),
       seatIds: selectedSeats.map((seat) => seat.id),
       seatPrices: selectedSeats.map((seat) => seat.price),

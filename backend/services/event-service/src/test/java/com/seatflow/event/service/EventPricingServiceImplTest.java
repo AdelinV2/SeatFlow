@@ -68,7 +68,6 @@ class EventPricingServiceImplTest {
                 .title("Hamlet")
                 .description("A play")
                 .category(com.seatflow.event.model.enums.EventCategory.OTHER)
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(status)
                 .pricingTiers(new ArrayList<>())
                 .build();

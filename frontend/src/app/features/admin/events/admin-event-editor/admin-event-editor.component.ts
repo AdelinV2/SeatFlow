@@ -92,7 +92,7 @@ export class AdminEventEditorComponent implements OnInit {
     title: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
     category: ['CONCERT' as EventCategory, [Validators.required]],
     venueId: ['', [Validators.required]],
-    eventDate: ['', [Validators.required]],
+    // P12-007: eventDate control removed. Sessions own the schedule exclusively.
     description: ['', [Validators.required, Validators.minLength(10), Validators.maxLength(2000)]],
     bannerUrl: ['', [Validators.required]],
   });
@@ -131,13 +131,11 @@ export class AdminEventEditorComponent implements OnInit {
         this.bannerUrl.set(event.bannerUrl || '');
         this.currentDescription.set(event.description || '');
 
-        const localDateString = this.formatDateForInput(event.eventDate);
-
+        // P12-007: no event-level date remains; sessions own the schedule.
         this.eventForm.patchValue({
           title: event.title,
           category: event.category,
           venueId: event.venueId,
-          eventDate: localDateString,
           description: event.description,
           bannerUrl: event.bannerUrl,
         });
@@ -155,22 +153,8 @@ export class AdminEventEditorComponent implements OnInit {
     });
   }
 
-  private formatDateForInput(isoString: string): string {
-    if (!isoString) return '';
-    try {
-      const d = new Date(isoString);
-      if (isNaN(d.getTime())) return '';
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const day = pad(d.getDate());
-      const hours = pad(d.getHours());
-      const mins = pad(d.getMinutes());
-      return `${year}-${month}-${day}T${hours}:${mins}`;
-    } catch {
-      return '';
-    }
-  }
+  // P12-007: legacy event-level date formatting removed with the schedule field.
+  // Session dates are managed exclusively via the admin session manager.
 
   onBannerSelected(url: string): void {
     this.bannerUrl.set(url);
@@ -280,7 +264,6 @@ export class AdminEventEditorComponent implements OnInit {
     this.errorMessage.set(null);
 
     const formVal = this.eventForm.getRawValue();
-    const isoDate = new Date(formVal.eventDate!).toISOString();
 
     if (this.isEditMode() && this.eventId()) {
       const updatePayload = {
@@ -288,7 +271,7 @@ export class AdminEventEditorComponent implements OnInit {
         description: formVal.description!,
         category: formVal.category!,
         bannerUrl: formVal.bannerUrl!,
-        eventDate: isoDate,
+        // P12-007: no eventDate is sent; sessions own the schedule.
       };
 
       this.adminEventApi.updateEvent(this.eventId()!, updatePayload).subscribe({
@@ -310,8 +293,8 @@ export class AdminEventEditorComponent implements OnInit {
         description: formVal.description!,
         category: formVal.category!,
         bannerUrl: formVal.bannerUrl!,
-        eventDate: isoDate,
         venueId: formVal.venueId!,
+        // P12-007: no eventDate is sent; add sessions via the session manager.
       };
 
       this.adminEventApi.createEvent(createPayload).subscribe({

@@ -8,8 +8,8 @@ import java.util.UUID;
  * {@code GET /internal/event-sessions/{sessionId}/booking-context} (P12-002).
  *
  * <p>Reservation-service derives the parent event, hall/pricing scope, and
- * bookability exclusively from this response. A client-supplied {@code eventId}
- * is never authoritative; mismatch with {@link #eventId()} is a hard failure.
+ * bookability exclusively from this response. P12-007: the session is the sole
+ * booking key; no client-supplied eventId exists to compare against.
  */
 public record SessionBookingContextDto(
         UUID eventSessionId,

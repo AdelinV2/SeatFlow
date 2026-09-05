@@ -119,12 +119,13 @@ class SessionScopedInventoryIntegrationTest {
     private void stubPricing(UUID eventId, Map<UUID, BigDecimal> prices) {
         List<UUID> seatIds = new ArrayList<>(prices.keySet());
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(new EventPricingDetails(
-                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, prices));
+                eventId, "PUBLISHED", seatIds, prices));
     }
 
-    private CreateReservationRequest request(UUID sessionId, UUID eventId, List<UUID> seatIds,
+    private CreateReservationRequest request(UUID sessionId, UUID ignoredLegacyEventId, List<UUID> seatIds,
                                              List<BigDecimal> prices, String key) {
-        return new CreateReservationRequest(sessionId, eventId, "guest@seatflow.com", seatIds, prices, key);
+        // P12-007: client request carries session only; parent event derives server-side.
+        return new CreateReservationRequest(sessionId, "guest@seatflow.com", seatIds, prices, key);
     }
 
     @Test

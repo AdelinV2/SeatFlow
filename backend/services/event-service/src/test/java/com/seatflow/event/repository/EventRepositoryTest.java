@@ -57,13 +57,12 @@ class EventRepositoryTest {
     @Autowired
     private EntityManager entityManager;
 
-    private Event publishedEvent(EventCategory category, String title, Instant eventDate) {
+    private Event publishedEvent(EventCategory category, String title, Instant ignoredLegacyDate) {
         return Event.builder()
                 .venueId(UUID.randomUUID())
                 .title(title)
                 .description("A compelling description")
                 .category(category)
-                .eventDate(eventDate)
                 .status(EventStatus.PUBLISHED)
                 .build();
     }
@@ -74,7 +73,6 @@ class EventRepositoryTest {
                 .title("Draft Show")
                 .description("Not yet public")
                 .category(EventCategory.OTHER)
-                .eventDate(Instant.now().plusSeconds(86400))
                 .status(EventStatus.DRAFT)
                 .build();
     }
@@ -128,15 +126,16 @@ class EventRepositoryTest {
     }
 
     @Test
-    void shouldExcludePastEventsFromUpcomingCatalog() {
-        eventRepository.saveAndFlush(publishedEvent(EventCategory.CONCERT, "Past Gig", Instant.now().minusSeconds(86400)));
-        eventRepository.saveAndFlush(publishedEvent(EventCategory.CONCERT, "Future Gig", Instant.now().plusSeconds(86400)));
+    void shouldPersistCatalogWithoutEventLevelSchedule() {
+        // P12-007: Event carries no schedule instant; sessions own startsAt/endsAt.
+        eventRepository.saveAndFlush(publishedEvent(EventCategory.CONCERT, "Sessionless Catalog Entry", Instant.now()));
+        eventRepository.saveAndFlush(publishedEvent(EventCategory.CONCERT, "Another Entry", Instant.now()));
 
-        Specification<Event> upcomingOnly = (root, q, cb) ->
-                cb.greaterThanOrEqualTo(root.get("eventDate"), Instant.now());
-        Page<Event> result = eventRepository.findAll(upcomingOnly, PageRequest.of(0, 20));
+        Specification<Event> publishedOnly = (root, q, cb) -> cb.equal(root.get("status"), EventStatus.PUBLISHED);
+        Page<Event> result = eventRepository.findAll(publishedOnly, PageRequest.of(0, 20));
 
-        assertThat(result.getContent()).extracting(Event::getTitle).containsExactly("Future Gig");
+        assertThat(result.getContent()).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(result.getContent()).allMatch(e -> e.getStatus() == EventStatus.PUBLISHED);
     }
 
     @Test

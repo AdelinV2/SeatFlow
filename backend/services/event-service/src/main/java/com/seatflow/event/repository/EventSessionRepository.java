@@ -40,5 +40,12 @@ public interface EventSessionRepository extends JpaRepository<EventSession, UUID
 
     List<EventSession> findByEvent_IdAndStatusNotAndEndsAtAfter(UUID eventId, EventSessionStatus status, Instant now);
 
+    // P12-007: batch next-session derivation for session-aware catalog search.
+    // Returns all visible future sessions for the given events in one query so
+    // the service can compute MIN(startsAt) per event in memory without N+1
+    // and without duplicating event rows.
+    List<EventSession> findByEvent_IdInAndStatusAndStartsAtAfterAndEndsAtAfterOrderByStartsAtAscIdAsc(
+            List<UUID> eventIds, EventSessionStatus status, Instant startsAfter, Instant endsAfter);
+
     List<EventSession> findByEvent_IdAndStatusAndEndsAtLessThanEqual(UUID eventId, EventSessionStatus status, Instant now);
 }

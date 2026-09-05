@@ -124,12 +124,13 @@ class EventServiceIntegrationTest {
     }
 
     @Test
-    void flywayAppliesV1V2V3ChainOnEmptyDatabase() {
+    void flywayAppliesV1V2V3V4ChainOnEmptyDatabase() {
         List<String> appliedVersions = java.util.Arrays.stream(flyway.info().applied())
                 .map(m -> m.getVersion().getVersion())
                 .toList();
 
-        assertThat(appliedVersions).containsExactly("1", "2", "3");
+        // P12-007: V4 drops the legacy event_date column after the parity gate.
+        assertThat(appliedVersions).containsExactly("1", "2", "3", "4");
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM event_sessions", Integer.class))
                 .isZero();
     }
@@ -192,7 +193,7 @@ class EventServiceIntegrationTest {
     void deletingEventRemovesSessionsThroughDatabaseCascade() {
         UUID eventId = eventService.createEvent(new CreateEventRequest(
                 VENUE_ID, "Cascade Show", "desc", EventCategory.CONCERT,
-                null, Instant.now().plusSeconds(86400))).id();
+                null)).id();
         Event event = eventRepository.findById(eventId).orElseThrow();
         Instant startsAt = Instant.now().plusSeconds(86400);
         eventSessionRepository.saveAndFlush(EventSession.builder()
@@ -225,17 +226,16 @@ class EventServiceIntegrationTest {
     }
 
     @Test
-    void existingEventReadsUnchangedAfterV3() {
-        Instant eventDate = Instant.now().plusSeconds(86400).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+    void existingEventReadsUnchangedAfterV4() {
+        // P12-007: events carry no schedule instant; detail exposes sessions only.
         UUID eventId = eventService.createEvent(new CreateEventRequest(
                 VENUE_ID, "Hamlet", "A play", EventCategory.THEATRE,
-                "https://cdn.example.com/h.png", eventDate)).id();
+                "https://cdn.example.com/h.png")).id();
 
         EventDetailResponse detail = eventService.getEventForAdministration(eventId);
 
         assertThat(detail.id()).isEqualTo(eventId);
         assertThat(detail.title()).isEqualTo("Hamlet");
-        assertThat(detail.eventDate()).isEqualTo(eventDate);
         assertThat(detail.status()).isEqualTo(EventStatus.DRAFT);
         assertThat(detail.category()).isEqualTo(EventCategory.THEATRE);
         assertThat(eventSessionRepository.findByEvent_IdOrderByStartsAtAscIdAsc(eventId)).isEmpty();
@@ -244,7 +244,7 @@ class EventServiceIntegrationTest {
     @Test
     void createConfigureAndPublish_marksOutboxRowsPublished() {
         CreateEventRequest createReq = new CreateEventRequest(VENUE_ID, "Hamlet", "A play",
-                EventCategory.CONCERT, "https://cdn.example.com/h.png", Instant.now().plusSeconds(86400));
+                EventCategory.CONCERT, "https://cdn.example.com/h.png");
         EventDetailResponse created = eventService.createEvent(createReq);
         UUID eventId = created.id();
         assertThat(eventId).isNotNull();
@@ -263,7 +263,7 @@ class EventServiceIntegrationTest {
                 .legacyBackfill(false)
                 .build());
 
-        eventService.updateEvent(eventId, new UpdateEventRequest(null, null, null, null, null, EventStatus.PUBLISHED));
+        eventService.updateEvent(eventId, new UpdateEventRequest(null, null, null, null, EventStatus.PUBLISHED));
 
         List<OutboxEvent> before = outboxRepository.findAll();
         assertThat(before).hasSize(2);
@@ -292,7 +292,7 @@ class EventServiceIntegrationTest {
     void configurePricing_replacesExistingTierWithoutUniqueConstraintViolation() {
         UUID eventId = eventService.createEvent(new CreateEventRequest(
                 VENUE_ID, "Pricing Update", "Test event", EventCategory.CONCERT,
-                null, Instant.now().plusSeconds(86400))).id();
+                null)).id();
 
         eventPricingService.configurePricing(eventId, new ConfigurePricingRequest(List.of(
                 new PricingTierItemRequest(SECTION_ID, "Standard", new BigDecimal("20.00"), "USD"))));
@@ -309,8 +309,8 @@ class EventServiceIntegrationTest {
     @Test
     void cancelEvent_emitsEventCancelledOutbox() {
         UUID eventId = eventService.createEvent(new CreateEventRequest(VENUE_ID, "Othello", "desc",
-                EventCategory.OTHER, null, Instant.now().plusSeconds(86400))).id();
-        eventService.updateEvent(eventId, new UpdateEventRequest(null, null, null, null, null, EventStatus.CANCELLED));
+                EventCategory.OTHER, null)).id();
+        eventService.updateEvent(eventId, new UpdateEventRequest(null, null, null, null, EventStatus.CANCELLED));
 
         List<OutboxEvent> rows = outboxRepository.findAll();
         assertThat(rows).anyMatch(e -> "EVENT_CANCELLED".equals(e.getEventType())
@@ -318,3 +318,4 @@ class EventServiceIntegrationTest {
                 && e.getPublishedAt() == null);
     }
 }
+

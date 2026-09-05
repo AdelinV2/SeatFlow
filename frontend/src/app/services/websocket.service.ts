@@ -177,20 +177,10 @@ export class WebSocketService implements OnDestroy {
     }
   }
 
-  /**
-   * Compatibility alias kept until P12-006 migrates all callers to session IDs.
-   * The argument is treated as an event session ID and subscribed on the canonical
-   * session topic; event-scoped topics are no longer produced for routing.
-   * @deprecated Use {@link connectForSession} with an event session ID.
-   */
-  connectForEvent(
-    eventId: string,
-    onSeatConflict?: (seatId: string) => void,
-    selectedSeatsRef?: () => Set<string>,
-  ): void {
-    this.connectForSession(eventId, onSeatConflict, selectedSeatsRef);
-  }
-
+  // P12-007: legacy connectForEvent compat alias removed. Callers must use
+  // connectForSession with an explicit event session ID. The session topic
+  // /topic/sessions/{id}/seats is the sole realtime channel; the old
+  // event-scoped destination receives nothing.
   disconnect(): void {
     this.onSeatConflict = undefined;
     this.selectedSeatsRef = undefined;

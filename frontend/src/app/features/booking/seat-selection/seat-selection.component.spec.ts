@@ -69,7 +69,6 @@ describe('SeatSelectionComponent', () => {
     description: 'A great show',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/concert.jpg',
-    eventDate: '2026-10-10T18:00:00Z',
     status: 'PUBLISHED',
     pricingTiers: [
       {
@@ -88,7 +87,6 @@ describe('SeatSelectionComponent', () => {
     eventId: 'event-1',
     venueId: 'venue-1',
     eventTitle: 'Live at SeatFlow',
-    eventDate: '2026-10-10T18:00:00Z',
     venueName: 'Main Hall',
     venueCapacity: 100,
     totalConfiguredSeats: 11,
@@ -317,7 +315,7 @@ describe('SeatSelectionComponent', () => {
       .args[0] as CreateReservationRequest;
     expect(request).toEqual({
       eventSessionId: 'session-1',
-      eventId: 'event-1',
+      // P12-007: session is the sole booking key; no eventId is sent.
       customerEmail: 'customer@example.com',
       seatIds: ['seat-1', 'seat-2'],
       seatPrices: [42.5, 42.5],
@@ -675,7 +673,7 @@ describe('SeatSelectionComponent', () => {
 
   it('formats event date with sfDate full variant in 24-hour format matching event detail', () => {
     const pipe = new DateFormatPipe();
-    const formatted = pipe.transform(response.eventDate, 'full');
+    const formatted = pipe.transform(mockSessions[0].startsAt, 'full');
     expect(formatted).toContain('•');
     expect(formatted).not.toMatch(/AM|PM/);
   });
@@ -685,7 +683,6 @@ describe('SeatSelectionComponent', () => {
       eventId: 'event-1',
       venueId: 'venue-1',
       eventTitle: 'Live at SeatFlow',
-      eventDate: '2026-10-10T18:00:00Z',
       venueName: 'Main Hall',
       venueCapacity: 100,
       totalConfiguredSeats: 3,
@@ -850,3 +847,4 @@ describe('SeatSelectionComponent', () => {
     });
   });
 });
+

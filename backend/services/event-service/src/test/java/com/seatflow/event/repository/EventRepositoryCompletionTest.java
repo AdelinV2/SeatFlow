@@ -50,13 +50,12 @@ class EventRepositoryCompletionTest {
     @Autowired
     private EventSessionRepository eventSessionRepository;
 
-    private Event event(EventStatus status, Instant eventDate) {
+    private Event event(EventStatus status, Instant ignoredLegacyDate) {
         return Event.builder()
                 .venueId(UUID.randomUUID())
                 .title("Show " + UUID.randomUUID())
                 .description("desc")
                 .category(EventCategory.CONCERT)
-                .eventDate(eventDate)
                 .status(status)
                 .build();
     }
@@ -106,16 +105,18 @@ class EventRepositoryCompletionTest {
     }
 
     @Test
-    void findPublishedCompletableFallsBackToLegacyDateForSessionlessEvents() {
+    void findPublishedCompletableNeverCompletesSessionlessEvents() {
+        // P12-007: the legacy eventDate fallback was removed. Events without any
+        // non-cancelled session never complete here; an operator must act explicitly.
         Instant now = Instant.now();
-        Event legacyPast = eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600)));
+        eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.minusSeconds(3600)));
         eventRepository.saveAndFlush(event(EventStatus.PUBLISHED, now.plusSeconds(3600)));
         eventRepository.saveAndFlush(event(EventStatus.COMPLETED, now.minusSeconds(3600)));
         eventRepository.saveAndFlush(event(EventStatus.DRAFT, now.minusSeconds(3600)));
 
         List<Event> result = eventRepository.findPublishedCompletableForUpdate(now, PageRequest.of(0, 50));
 
-        assertThat(result).extracting(Event::getId).containsExactly(legacyPast.getId());
+        assertThat(result).isEmpty();
     }
 
     @Test

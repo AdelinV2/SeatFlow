@@ -62,6 +62,16 @@ export class EventDetailComponent implements OnInit {
   readonly sessions = signal<EventSession[]>([]);
   readonly selectedSession = signal<EventSession | null>(null);
   readonly sessionWarning = signal<string | null>(null);
+  // P12-007: hero date derives exclusively from sessions (selected first,
+  // otherwise the earliest visible session). No event-level instant remains.
+  readonly heroStartsAt = computed<string | null>(() => {
+    const selected = this.selectedSession();
+    if (selected?.startsAt) return selected.startsAt;
+    const sessions = this.sessions();
+    if (sessions.length === 0) return null;
+    const sorted = [...sessions].sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt));
+    return sorted[0]?.startsAt ?? null;
+  });
   readonly isLoading = signal<boolean>(true);
   readonly errorMessage = signal<string | null>(null);
   private readonly geocodedCoordinates = signal<{ lat: number; lng: number } | null>(null);

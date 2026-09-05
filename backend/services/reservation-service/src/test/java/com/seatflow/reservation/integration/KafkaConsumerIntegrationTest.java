@@ -91,12 +91,12 @@ class KafkaConsumerIntegrationTest {
 
         stubBookableSession(sessionId, eventId);
         EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds,
+                seatIds,
                 Map.of(seatId1, new BigDecimal("10.00"), seatId2, new BigDecimal("20.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(sessionId, eventId, "guest@seatflow.com", seatIds, prices, idempotencyKey), null);
+                new CreateReservationRequest(sessionId, "guest@seatflow.com", seatIds, prices, idempotencyKey), null);
         UUID reservationId = response.id();
         assertThat(response.status()).isEqualTo(ReservationStatus.PENDING);
 
@@ -126,12 +126,12 @@ class KafkaConsumerIntegrationTest {
 
         stubBookableSession(sessionId, eventId);
         EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED",
-                Instant.now().plusSeconds(3600), seatIds,
+                seatIds,
                 Map.of(seatId, new BigDecimal("15.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(sessionId, eventId, guestEmail, seatIds, prices, idempotencyKey), null);
+                new CreateReservationRequest(sessionId, guestEmail, seatIds, prices, idempotencyKey), null);
         UUID reservationId = response.id();
         assertThat(reservationId).isNotNull();
 
@@ -176,3 +176,4 @@ class KafkaConsumerIntegrationTest {
         throw new IllegalStateException("Reservation " + id + " was not linked to user " + expectedUserId);
     }
 }
+

@@ -14,7 +14,7 @@ describe('UpcomingEventsCarouselComponent', () => {
       description: 'Epic concert',
       category: 'CONCERT',
       bannerUrl: 'https://example.com/e1.jpg',
-      eventDate: '2026-09-18T20:00:00Z',
+      nextSessionStartsAt: '2026-09-18T20:00:00Z',
       minPrice: 65,
       maxPrice: 220,
       currency: 'USD',
@@ -26,7 +26,7 @@ describe('UpcomingEventsCarouselComponent', () => {
       description: 'Classic play',
       category: 'THEATRE',
       bannerUrl: 'https://example.com/e2.jpg',
-      eventDate: '2026-09-24T19:30:00Z',
+      nextSessionStartsAt: '2026-09-24T19:30:00Z',
       minPrice: 45,
       maxPrice: 160,
       currency: 'USD',
@@ -94,3 +94,4 @@ describe('UpcomingEventsCarouselComponent', () => {
     expect(component.selectedEvent()).toBeNull();
   });
 });
+

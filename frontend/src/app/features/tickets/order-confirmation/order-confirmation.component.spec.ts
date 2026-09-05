@@ -53,7 +53,6 @@ describe('OrderConfirmationComponent', () => {
     description: 'Electrifying performance',
     category: 'CONCERT',
     bannerUrl: 'https://cdn.seatflow.com/rock.jpg',
-    eventDate: '2026-11-20T20:00:00Z',
     status: 'PUBLISHED',
     venueName: 'Olympic Arena',
     pricingTiers: [],

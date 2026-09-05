@@ -24,9 +24,18 @@ describe('AdminEventListComponent', () => {
     description: 'Electric Symphony Live',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/banner1.jpg',
-    eventDate: '2026-11-20T20:00:00Z',
     status: 'DRAFT',
     pricingTiers: [{ sectionId: 'sec-1', price: 50, currency: 'USD' }],
+    // P12-007: schedule lives on sessions; the list cell renders first session + count.
+    sessions: [
+      {
+        id: 'sess-1',
+        eventId: 'evt-1',
+        startsAt: '2026-11-20T20:00:00Z',
+        endsAt: '2026-11-20T22:00:00Z',
+        status: 'SCHEDULED',
+      },
+    ],
     createdAt: '2026-08-29T10:00:00Z',
   };
 
@@ -37,9 +46,17 @@ describe('AdminEventListComponent', () => {
     description: 'Shakespeare Drama',
     category: 'THEATRE',
     bannerUrl: 'https://example.com/banner2.jpg',
-    eventDate: '2026-12-05T19:00:00Z',
     status: 'PUBLISHED',
     pricingTiers: [{ sectionId: 'sec-2', price: 100, currency: 'USD' }],
+    sessions: [
+      {
+        id: 'sess-2',
+        eventId: 'evt-2',
+        startsAt: '2026-12-05T19:00:00Z',
+        endsAt: '2026-12-05T21:00:00Z',
+        status: 'SCHEDULED',
+      },
+    ],
     createdAt: '2026-08-29T10:00:00Z',
   };
 

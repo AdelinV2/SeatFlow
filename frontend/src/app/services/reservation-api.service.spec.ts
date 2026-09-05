@@ -31,7 +31,6 @@ describe('ReservationApiService', () => {
   it('should create a reservation hold via POST /api/reservations', () => {
     const request: CreateReservationRequest = {
       eventSessionId: 'sess-101',
-      eventId: 'ev-101',
       customerEmail: 'guest@example.com',
       seatIds: ['s-1', 's-2'],
       seatPrices: [50, 75],
@@ -134,3 +133,4 @@ describe('ReservationApiService', () => {
     });
   });
 });
+

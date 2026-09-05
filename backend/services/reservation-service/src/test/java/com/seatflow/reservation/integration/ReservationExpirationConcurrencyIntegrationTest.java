@@ -145,11 +145,11 @@ class ReservationExpirationConcurrencyIntegrationTest {
                 Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
                 null, null, UUID.randomUUID()));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(new EventPricingDetails(
-                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), List.of(releasedSeat),
+                eventId, "PUBLISHED", List.of(releasedSeat),
                 Map.of(releasedSeat, new BigDecimal("10.00"))));
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(sessionId, eventId, "newguest@seatflow.com",
+                new CreateReservationRequest(sessionId, "newguest@seatflow.com",
                         List.of(releasedSeat), List.of(new BigDecimal("10.00")), "idem-subsequent"),
                 UUID.randomUUID());
 
