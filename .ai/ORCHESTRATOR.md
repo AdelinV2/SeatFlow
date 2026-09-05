@@ -12,7 +12,9 @@ The intended user experience is simple:
 Implement TASK-P12-001 using the SeatFlow autonomous orchestration workflow.
 ```
 
-When the current harness supports delegation (for example Poracode Crossagents), the supervisor should execute the complete workflow without requiring the user to copy prompts between agents.
+When the current harness supports delegation, the supervisor should execute the complete workflow without requiring the user to copy prompts between agents or manually type `continue` to resume the pipeline.
+
+When Poracode is active, required delegated stages should use first-class Poracode worker threads according to `.ai/integrations/PORACODE.md`.
 
 ---
 
@@ -48,14 +50,32 @@ The supervisor:
 - delegates each specialist stage;
 - passes structured context between stages;
 - waits for required gates;
+- collects and validates each worker's handoff;
 - loops review -> fix -> re-review when needed;
+- continues automatically after recoverable worker failures when an allowed retry/fallback exists;
 - reports stage transitions and final evidence to the user.
 
 The user must **not** be asked to manually relay prompts between agents when the delegation mechanism is working.
 
+#### Poracode execution invariant
+
+When Poracode is active and the always-on `poracode` MCP thread tools are available, required stage work must use first-class worker threads:
+
+```text
+create_thread
+  -> wait_for_thread
+  -> read_thread
+  -> validate handoff
+  -> next stage
+```
+
+A worker that settles with an incomplete but resumable result should be continued by the supervisor with `send_to_thread`; the user should not have to reopen the worker or type `continue` manually.
+
+Crossagents are not the canonical mechanism for required SeatFlow stages. Their narrow optional use is defined by `.ai/integrations/PORACODE.md`.
+
 ### 2.2 Manual Fallback Mode
 
-Use only when delegation is unavailable, broken, or the user explicitly wants manual control.
+Use only when delegated execution is unavailable, genuinely broken with no allowed recovery route, or the user explicitly wants manual control.
 
 In manual fallback mode, the acting agent must provide a structured Next Stage Handoff containing:
 
@@ -63,6 +83,8 @@ In manual fallback mode, the acting agent must provide a structured Next Stage H
 - recommended provider/model/effort from `.ai/MODEL_ROUTER.md`;
 - alternative and escalation route;
 - complete copy-paste prompt populated with task, branch, review ledger, and verification context.
+
+Do not enter manual fallback merely because one worker failed if the harness can create/resume another allowed worker autonomously.
 
 ---
 
@@ -162,7 +184,7 @@ Planning may be skipped for an already approved, deterministic atomic task.
 
 Protocol: `.ai/workflows/02-task-execution.md`
 
-The implementation agent must receive:
+The implementation worker must receive:
 
 - task ID and exact task path;
 - current branch/worktree;
@@ -171,7 +193,7 @@ The implementation agent must receive:
 - known pre-existing working-tree changes;
 - exact verification commands.
 
-The implementation agent must not be the final reviewer of its own work.
+The implementation worker must not be the final reviewer of its own work.
 
 ### 4.4 SELF-VERIFY
 
@@ -184,6 +206,8 @@ Self-verification is evidence for review, not a substitute for review.
 Protocol: `.ai/workflows/05-code-review.md`
 
 The reviewer must be independent from the implementation attempt. Prefer a different model family/provider where practical, especially when the implementation was non-trivial.
+
+When first-class worker threads are available, independent review must run in a separate worker thread from implementation.
 
 Review inputs must include:
 
@@ -258,9 +282,12 @@ For every delegated stage:
 2. resolve the logical route there;
 3. apply provider-availability and quota fallbacks;
 4. apply integration rules from `.ai/integrations/PORACODE.md` when using Poracode;
-5. record the actual provider/model/effort used.
+5. create the worker with the resolved provider/model/effort when the harness exposes exact selection;
+6. record the actual provider/model/effort used.
 
 `.ai/MODEL_ROUTER.md` is the single source of truth for model selection. Workflow files define behavior, not model catalogs.
+
+The parent supervisor's own provider does not constrain worker provider choice. An OpenCode/Muse supervisor may create OpenCode/Muse, Gemini, Codex, or other allowed Poracode worker threads.
 
 ---
 
@@ -287,7 +314,11 @@ UNRESOLVED RISKS: ...
 RECOMMENDED NEXT STAGE: ...
 ```
 
+The supervisor may also record the worker thread title/id for auditability when the harness exposes it.
+
 Do not rely on vague summaries such as "looks good" or "implementation complete".
+
+If a worker settles without the required handoff fields or without completing its assigned stage, the supervisor should continue that worker or create an allowed replacement itself rather than asking the user to intervene.
 
 ---
 
@@ -303,19 +334,22 @@ Default limits:
 - one meaningful retry after a failed repair when the root cause is understood;
 - escalate/re-plan when the same issue survives or the failure indicates missing design judgment.
 
-### 7.1 Delegated-Run Lifecycle Invariant
+### 7.1 Delegated Worker Lifecycle Invariant
 
-A bounded harness/MCP wait is not the same thing as an agent execution timeout.
+A bounded harness/MCP wait is not the same thing as a worker execution timeout.
 
-When a delegated run exists:
+When a delegated first-class worker thread exists:
 
-- `running` after a wait window means **keep waiting**, not retry/fallback;
-- lack of streamed progress text is not a failure signal by itself;
-- never start a duplicate writer while the original child is still alive;
-- after an ambiguous transport error, query the run/status when possible before declaring the stage failed;
-- only explicit terminal failure/cancellation or a concrete provider/session failure should trigger fallback/escalation.
+- an active/working state after a `wait_for_thread` synchronization window means **keep waiting**, not retry/fallback;
+- when the worker settles, read its transcript/result before deciding the stage outcome;
+- `idle` means the current turn settled, not automatically that the assigned stage satisfied its contract;
+- if the result is incomplete and the worker is resumable, use `send_to_thread` to continue it;
+- never start a duplicate writer while the original worker is still active;
+- after an error/inactive state, inspect thread state/transcript before replacing it;
+- only a concrete terminal failure, unavailable route, or quality/risk trigger should activate fallback/escalation;
+- the supervisor must continue the main orchestration after any recoverable child failure and must not require the user to type `continue`.
 
-When Poracode is active, `.ai/integrations/PORACODE.md` defines the exact Crossagents polling, silent-provider, and OpenCode native-subagent rules.
+When Poracode is active, `.ai/integrations/PORACODE.md` defines the exact first-class thread lifecycle, optional Crossagents scope, and OpenCode native-subagent rules.
 
 Stop and report a blocker when:
 
@@ -338,7 +372,7 @@ Good candidates:
 - backend and frontend tasks isolated in separate worktrees with stable contracts;
 - independent test/contract analysis.
 
-Prefer sequential execution when agents would:
+Prefer sequential execution when workers would:
 
 - edit the same files;
 - depend on one another's contracts;
@@ -346,9 +380,11 @@ Prefer sequential execution when agents would:
 - operate on the same mutable working tree;
 - resolve findings from an implementation that is still changing.
 
-When multiple writing agents are used concurrently, isolate them with Git worktrees.
+When multiple writing workers are used concurrently, isolate them with Git worktrees.
 
-Provider identity does not make two Poracode Crossagents nested: an OpenCode/Muse supervisor may launch multiple OpenCode/Muse Poracode Crossagents concurrently when their work is independent. OpenCode's own native `task`/subagent mechanism remains disabled for SeatFlow orchestration; all inter-agent delegation goes through the active orchestration layer.
+Under Poracode, parallelism should use independent first-class worker threads. Multiple OpenCode/Muse worker threads are allowed when their work is genuinely independent; the parent being OpenCode/Muse does not prohibit same-provider workers.
+
+OpenCode's own native `task`/subagent mechanism remains disabled for SeatFlow orchestration.
 
 ---
 
@@ -389,6 +425,8 @@ Before editing, record pre-existing modified/untracked files. At final QA, confi
 ### Refactor
 
 `UNDERSTAND -> CHARACTERIZE -> REFACTOR -> VERIFY -> INDEPENDENT REVIEW -> FIX if needed -> QA`
+
+When Poracode is active, each delegated specialist stage in these pipelines should be a first-class worker thread unless the work is intentionally kept in the supervisor itself.
 
 ---
 
