@@ -34,7 +34,36 @@ Do not silently replace a requested provider with another provider merely becaus
 
 ## 1.1 Delegation Exclusivity — Poracode Crossagents Only
 
-All inter-agent delegation in the SeatFlow autonomous workflow must use Poracode Crossagents. OpenCode's native task/subagent delegation must not be used inside this workflow unless explicitly requested. An OpenCode agent may freely delegate through Poracode Crossagents, including to other OpenCode models and multiple OpenCode Crossagents concurrently.
+All inter-agent delegation in the SeatFlow autonomous workflow must use Poracode Crossagents. OpenCode's native `task`/subagent delegation must not be used inside this workflow unless the user explicitly requests a one-off exception.
+
+The repository-level `opencode.json` enforces this by denying OpenCode's native `task` tool. Do not remove or bypass that deny rule during normal SeatFlow orchestration.
+
+An OpenCode/Muse parent may freely delegate through Poracode Crossagents, including:
+
+- OpenCode -> Poracode Crossagent -> OpenCode/Muse;
+- multiple OpenCode Crossagents at the same time for independent work;
+- OpenCode -> Poracode Crossagent -> Gemini/Codex/other allowed providers.
+
+Those are Poracode-managed sibling runs, not native nested OpenCode subagents, and are allowed. The forbidden topology is `OpenCode -> native task/subagent -> child`, because that child lifecycle is not the SeatFlow orchestration authority and can outlive or desynchronize from the Poracode Crossagent handoff.
+
+---
+
+## 1.2 Crossagent Lifecycle, Waits, and Silent Providers
+
+A bounded Crossagents wait is a transport/polling window, **not** the execution lifetime of the child.
+
+Rules:
+
+1. Required workflow stages should normally be delegated in the foreground and awaited to a terminal child status.
+2. If `spawn_agent` or `wait_for_agent` returns `status: running` after a bounded wait (including the current 240-second maximum), the child is still alive. Call `wait_for_agent` again instead of treating the wait expiry as a failed stage.
+3. Preserve incremental cursors such as `total_output_chars` / `after_output_chars` when the harness exposes them so repeated waits do not re-ingest the same transcript.
+4. Do not launch a fallback or duplicate implementation merely because a child produced no visible progress text for several minutes.
+5. Gemini ACP may be silent during internal reasoning. Absence of `Working` text or streamed thought chunks is not evidence that Gemini stalled.
+6. If a Crossagents tool call reports an ambiguous transport/harness error after a run was already created, inspect the run with the available Crossagents status/list tools. If that run is still `running`, keep waiting for it; do not abandon it or start a duplicate worker.
+7. A delegated stage settles only on an explicit terminal outcome: `completed`, `failed`, or `cancelled`, or on a concrete provider/session error proving the child can no longer continue.
+8. Apply `.ai/MODEL_ROUTER.md` fallbacks only after a real provider/model/startup failure, not after silence or a wait-window expiry.
+
+This policy prevents false timeouts, duplicate writers, and the common failure mode where the parent advances while the original child is still working.
 
 ---
 
