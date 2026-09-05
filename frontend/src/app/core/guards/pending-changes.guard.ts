@@ -12,6 +12,8 @@ export const pendingChangesGuard: CanDeactivateFn<PendingChangesAware> = (compon
 
   return (
     component.confirmDiscardChanges?.() ??
-    window.confirm('You have unsaved changes. Leave this page and discard them?')
+    window.confirm(
+      'You have unsaved changes. If you leave now, unsaved layout edits will be discarded. Leave this page?',
+    )
   );
 };

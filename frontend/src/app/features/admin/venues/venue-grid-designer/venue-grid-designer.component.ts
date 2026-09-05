@@ -1,6 +1,8 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  HostListener,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -11,7 +13,6 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
 import {
   VenueLayout,
   VenueLayoutElement,
@@ -49,6 +50,8 @@ import {
   MIN_Z_INDEX,
 } from '../../../../shared/utils/layout-geometry';
 import { SectionPropertiesPanelComponent } from '../section-properties-panel/section-properties-panel.component';
+import { PendingChangesAware } from '../../../../core/guards/pending-changes.guard';
+import { LayoutHistoryService } from '../../../../services/layout-history.service';
 
 export { getRowLabel };
 
@@ -74,15 +77,15 @@ export interface GridMatrixRow {
   styleUrl: './venue-grid-designer.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class VenueGridDesignerComponent implements OnInit {
+export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingChangesAware {
   readonly getRowLabel = getRowLabel;
 
   private readonly route = inject(ActivatedRoute);
-  private readonly venueApi = inject(AdminVenueApiService);
   private readonly editorState = inject(VenueLayoutEditorStateService);
   private readonly generator = inject(SeatLayoutGeneratorService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly fb = inject(FormBuilder);
+  private readonly history = inject(LayoutHistoryService);
 
   readonly canvasRef = viewChild<LayoutCanvasComponent>('canvasRef');
 
@@ -95,11 +98,20 @@ export class VenueGridDesignerComponent implements OnInit {
   readonly validationError = signal<string | null>(null);
   readonly toolMode = signal<CanvasToolMode>('select');
   readonly activePaintColor = signal<string>('#6366f1');
+  readonly announcement = signal<string>('');
+  readonly snapStep = signal<number>(0);
+  readonly selectedLayoutElement = signal<VenueLayoutElement | null>(null);
+  readonly selectedElementIndex = signal<number | null>(null);
+  readonly prefersReducedMotion = signal<boolean>(false);
+
+  private lastFocusedElement: HTMLElement | null = null;
 
   // Expose editor state signals
   readonly isSaving = this.editorState.isSaving;
   readonly isDirty = this.editorState.isDirty;
   readonly loadError = this.editorState.loadError;
+  readonly canUndo = this.history.canUndo;
+  readonly canRedo = this.history.canRedo;
 
   readonly venue = computed<VenueLayoutSnapshot | null>(() => {
     return this.editorState.layout();
@@ -232,10 +244,458 @@ export class VenueGridDesignerComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    try {
+      const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+      this.prefersReducedMotion.set(media?.matches ?? false);
+    } catch {
+      this.prefersReducedMotion.set(false);
+    }
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.venueId.set(id);
       this.loadVenueLayout(id);
+    }
+  }
+
+  ngOnDestroy(): void {
+    // HostListener registrations (keydown, beforeunload) are torn down
+    // automatically by Angular; end any coalesced pointer gesture state.
+    this.history.endCoalesced();
+  }
+
+  // --- PendingChangesAware (route-leave + browser-close protection; UX only) ---
+
+  hasPendingChanges(): boolean {
+    return this.editorState.isDirty();
+  }
+
+  confirmDiscardChanges(): boolean {
+    return window.confirm(
+      'You have unsaved changes. If you leave now, unsaved layout edits will be discarded. Continue?',
+    );
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasPendingChanges()) {
+      // REV-P11-009-001: Chrome/Edge/Firefox only show the refresh/close
+      // confirmation when returnValue is set; preventDefault() alone is not
+      // enough. Keep the clean-state early-out so clean exits never prompt.
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  // --- Local history boundary (single commit point for every mutation) ---
+
+  private currentDraftLayout(): VenueLayout | null {
+    return this.editorState.layout() as VenueLayout | null;
+  }
+
+  private pushHistoryCheckpoint(): void {
+    const current = this.currentDraftLayout();
+    if (current) {
+      this.history.push(current);
+    }
+  }
+
+  private beginPointerGestureCheckpoint(): void {
+    const current = this.currentDraftLayout();
+    if (current) {
+      this.history.beginCoalesced(current);
+    }
+  }
+
+  /** Commits the active coalesced pointer gesture as one undo entry. */
+  endPointerGesture(): void {
+    this.history.endCoalesced();
+  }
+
+  private announceResult(baseMessage: string): void {
+    const seatCount = this.selectedSeatKeys().size;
+    const sectionName = this.currentSection()?.name ?? 'none';
+    this.announcement.set(`${baseMessage} ${seatCount} seats selected in ${sectionName}.`);
+  }
+
+  undo(): void {
+    const current = this.currentDraftLayout();
+    if (!current || !this.history.canUndo()) {
+      return;
+    }
+    const previous = this.history.undo(current);
+    if (!previous) {
+      return;
+    }
+    try {
+      this.editorState.replaceDraft(previous);
+      this.selectedSeatKeys.set(new Set());
+      this.validationError.set(null);
+      this.announceResult('Undo applied.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to undo change';
+      this.validationError.set(msg);
+    }
+  }
+
+  redo(): void {
+    const current = this.currentDraftLayout();
+    if (!current || !this.history.canRedo()) {
+      return;
+    }
+    const next = this.history.redo(current);
+    if (!next) {
+      return;
+    }
+    try {
+      this.editorState.replaceDraft(next);
+      this.selectedSeatKeys.set(new Set());
+      this.validationError.set(null);
+      this.announceResult('Redo applied.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to redo change';
+      this.validationError.set(msg);
+    }
+  }
+
+  onElementSelected(element: VenueLayoutElement | null): void {
+    if (!element) {
+      this.selectedLayoutElement.set(null);
+      this.selectedElementIndex.set(null);
+      return;
+    }
+    this.selectedLayoutElement.set({
+      ...element,
+      geometry: { ...element.geometry },
+    });
+    const internal = this.canvasRef()?.internalElements() ?? [];
+    const idx = internal.indexOf(element);
+    if (idx >= 0) {
+      this.selectedElementIndex.set(idx);
+    } else {
+      const draftElements = this.currentDraftLayout()?.elements ?? [];
+      if (element.elementId) {
+        const byId = draftElements.findIndex((el) => el.elementId === element.elementId);
+        this.selectedElementIndex.set(byId >= 0 ? byId : null);
+      } else {
+        this.selectedElementIndex.set(null);
+      }
+    }
+  }
+
+  private isEditableKeyboardTarget(event: KeyboardEvent): boolean {
+    if (event.isComposing) {
+      return true;
+    }
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.tagName !== 'string') {
+      return false;
+    }
+    const tag = target.tagName.toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      return true;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    try {
+      if (typeof target.closest === 'function' && target.closest('[contenteditable]')) {
+        const closest = target.closest('[contenteditable]') as HTMLElement;
+        if (closest && closest.isContentEditable !== false) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore DOM query failures and treat as non-editable
+    }
+    return false;
+  }
+
+  private arrowStep(shiftKey: boolean): number {
+    const snap = this.snapStep();
+    if (snap > 0) {
+      return shiftKey ? snap * 10 : snap;
+    }
+    return shiftKey ? 10 : 1;
+  }
+
+  private moveSelectedByArrow(deltaX: number, deltaY: number): void {
+    const seatKeys = this.selectedSeatKeys();
+    if (seatKeys.size > 0) {
+      const sec = this.currentSection();
+      if (!sec) {
+        return;
+      }
+      try {
+        const targetKey = getSectionDraftKey(sec);
+        const updated = this.generator.bulkTranslate(sec, seatKeys, {
+          deltaX,
+          deltaY,
+          sectionWidth: sec.width,
+          sectionHeight: sec.height,
+        });
+        this.pushHistoryCheckpoint();
+        this.editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) =>
+            getSectionDraftKey(s) === targetKey
+              ? { ...updated, draftKey: s.draftKey ?? updated.draftKey }
+              : s,
+          );
+          return draft;
+        });
+        this.validationError.set(null);
+        this.announceResult(`Moved ${seatKeys.size} seats by ${deltaX}, ${deltaY}.`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to move seats';
+        this.validationError.set(msg);
+      }
+      return;
+    }
+
+    const elementIndex = this.selectedElementIndex();
+    const selectedElement =
+      this.selectedLayoutElement() ?? this.canvasRef()?.selectedElement() ?? null;
+    if (selectedElement && elementIndex !== null && elementIndex !== undefined) {
+      const draft = this.currentDraftLayout();
+      const target = draft?.elements?.[elementIndex];
+      if (!target) {
+        return;
+      }
+      const nextX = Math.min(100000, Math.max(0, target.geometry.x + deltaX));
+      const nextY = Math.min(100000, Math.max(0, target.geometry.y + deltaY));
+      this.pushHistoryCheckpoint();
+      try {
+        const index = elementIndex;
+        this.editorState.replaceDraft((d) => {
+          d.elements = d.elements.map((el, i) =>
+            i === index ? { ...el, geometry: { ...el.geometry, x: nextX, y: nextY } } : el,
+          );
+          return d;
+        });
+        this.validationError.set(null);
+        this.announceResult(`Moved element by ${deltaX}, ${deltaY}.`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to move element';
+        this.validationError.set(msg);
+      }
+      return;
+    }
+
+    const sec = this.currentSection();
+    if (!sec) {
+      return;
+    }
+    const nextX = Math.min(100000, Math.max(0, sec.positionX + deltaX));
+    const nextY = Math.min(100000, Math.max(0, sec.positionY + deltaY));
+    const projected: VenueSectionLayout = { ...sec, positionX: nextX, positionY: nextY };
+    const geometryError = this.validateSectionGeometry(projected);
+    if (geometryError) {
+      this.validationError.set(geometryError);
+      return;
+    }
+    const targetKey = getSectionDraftKey(sec);
+    this.pushHistoryCheckpoint();
+    try {
+      this.editorState.replaceDraft((draft) => {
+        draft.sections = draft.sections.map((s) =>
+          getSectionDraftKey(s) === targetKey ? { ...projected, draftKey: s.draftKey } : s,
+        );
+        return draft;
+      });
+      this.validationError.set(null);
+      this.announceResult(`Moved section ${sec.name} by ${deltaX}, ${deltaY}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Invalid section move';
+      this.validationError.set(msg);
+    }
+  }
+
+  private handleDeleteKey(): void {
+    const seatKeys = this.selectedSeatKeys();
+    if (seatKeys.size > 0) {
+      const sec = this.currentSection();
+      if (!sec) {
+        return;
+      }
+      const targetKey = getSectionDraftKey(sec);
+      const selectedSeats = (sec.seats || []).filter((s) =>
+        seatKeys.has(s.seatId || `${s.gridY}_${s.gridX}`),
+      );
+      if (selectedSeats.length === 0) {
+        return;
+      }
+      const hasPersisted = selectedSeats.some((s) => s.seatId !== null);
+      const hasDrafts = selectedSeats.some((s) => s.seatId === null);
+      const seatKeyOf = (st: VenueSectionSeat): string => st.seatId || `${st.gridY}_${st.gridX}`;
+      this.pushHistoryCheckpoint();
+      try {
+        this.editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) => {
+            if (getSectionDraftKey(s) !== targetKey) {
+              return s;
+            }
+            if (hasDrafts && !hasPersisted) {
+              return {
+                ...s,
+                seats: (s.seats || []).filter((st) => !seatKeys.has(seatKeyOf(st))),
+              };
+            }
+            if (hasDrafts && hasPersisted) {
+              // REV-P11-009-002: mixed selection applies both documented
+              // semantics in one commit — deactivate selected persisted
+              // seats AND remove selected null-ID draft records.
+              return {
+                ...s,
+                seats: (s.seats || []).flatMap((st) => {
+                  if (!seatKeys.has(seatKeyOf(st))) {
+                    return [st];
+                  }
+                  if (st.seatId === null) {
+                    return [];
+                  }
+                  return [{ ...st, isActive: false }];
+                }),
+              };
+            }
+            return {
+              ...s,
+              seats: (s.seats || []).map((st) =>
+                seatKeys.has(seatKeyOf(st)) && st.seatId !== null ? { ...st, isActive: false } : st,
+              ),
+            };
+          });
+          return draft;
+        });
+        this.selectedSeatKeys.set(new Set());
+        this.validationError.set(null);
+        this.announceResult(
+          hasPersisted && hasDrafts
+            ? 'Deactivated selected seats and removed selected draft seats.'
+            : hasPersisted
+              ? 'Deactivated selected seats.'
+              : 'Removed selected draft seats.',
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to delete seats';
+        this.validationError.set(msg);
+      }
+      return;
+    }
+
+    const elementIndex = this.selectedElementIndex();
+    const hasCanvasElement =
+      elementIndex !== null && elementIndex !== undefined
+        ? true
+        : this.canvasRef()?.selectedElement() !== null &&
+          this.canvasRef()?.selectedElement() !== undefined;
+    if (hasCanvasElement) {
+      const draft = this.currentDraftLayout();
+      const resolvedIndex =
+        elementIndex ??
+        this.canvasRef()?.internalElements().indexOf(this.canvasRef()?.selectedElement()!) ??
+        -1;
+      if (!draft || resolvedIndex < 0 || resolvedIndex >= draft.elements.length) {
+        return;
+      }
+      this.pushHistoryCheckpoint();
+      try {
+        this.editorState.replaceDraft((d) => {
+          d.elements = d.elements.filter((_, i) => i !== resolvedIndex);
+          return d;
+        });
+        this.selectedLayoutElement.set(null);
+        this.selectedElementIndex.set(null);
+        this.canvasRef()?.deselectElement();
+        this.validationError.set(null);
+        this.announceResult('Removed selected element.');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to remove element';
+        this.validationError.set(msg);
+      }
+      return;
+    }
+
+    const sec = this.currentSection();
+    if (!sec) {
+      return;
+    }
+    if (sec.sectionId === null) {
+      this.removeSection();
+    } else {
+      this.deactivateSection();
+    }
+  }
+
+  private handleEscapeKey(): void {
+    if (this.history.isCoalescing()) {
+      const current = this.currentDraftLayout();
+      const baseline = this.history.cancelCoalesced(current);
+      if (baseline && current) {
+        try {
+          this.editorState.replaceDraft(baseline);
+        } catch {
+          // Baseline restore is best-effort; selection is still cleared below.
+        }
+      }
+      this.selectedSeatKeys.set(new Set());
+      this.selectedLayoutElement.set(null);
+      this.selectedElementIndex.set(null);
+      this.canvasRef()?.deselectElement();
+      this.announceResult('Pointer operation cancelled.');
+      return;
+    }
+    this.selectedSeatKeys.set(new Set());
+    this.selectedLayoutElement.set(null);
+    this.selectedElementIndex.set(null);
+    this.canvasRef()?.deselectElement();
+    this.announceResult('Selection cleared.');
+  }
+
+  @HostListener('keydown', ['$event'])
+  onKeyDown(event: KeyboardEvent): void {
+    if (this.isEditableKeyboardTarget(event)) {
+      return;
+    }
+    const key = event.key;
+    const lowerKey = typeof key === 'string' ? key.toLowerCase() : '';
+    const ctrlOrCmd = event.ctrlKey || event.metaKey;
+
+    if (ctrlOrCmd && lowerKey === 'z' && !event.shiftKey) {
+      event.preventDefault();
+      this.undo();
+      return;
+    }
+    if ((ctrlOrCmd && event.shiftKey && lowerKey === 'z') || (event.ctrlKey && lowerKey === 'y')) {
+      event.preventDefault();
+      this.redo();
+      return;
+    }
+    if (key === 'Delete' || key === 'Backspace') {
+      event.preventDefault();
+      this.handleDeleteKey();
+      return;
+    }
+    if (key === 'Escape') {
+      this.handleEscapeKey();
+      return;
+    }
+    if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if (!this.currentSection()) {
+        return;
+      }
+      event.preventDefault();
+      const step = this.arrowStep(event.shiftKey);
+      if (key === 'ArrowUp') {
+        this.moveSelectedByArrow(0, -step);
+      } else if (key === 'ArrowDown') {
+        this.moveSelectedByArrow(0, step);
+      } else if (key === 'ArrowLeft') {
+        this.moveSelectedByArrow(-step, 0);
+      } else {
+        this.moveSelectedByArrow(step, 0);
+      }
     }
   }
 
@@ -249,6 +709,7 @@ export class VenueGridDesignerComponent implements OnInit {
     this.validationError.set(null);
     this.editorState.load(venueId).subscribe({
       next: (layout) => {
+        this.history.clear();
         if (layout.sections && layout.sections.length > 0) {
           if (!this.selectedSectionKey()) {
             this.selectedSectionKey.set(
@@ -404,12 +865,14 @@ export class VenueGridDesignerComponent implements OnInit {
       return;
     }
     try {
+      this.beginPointerGestureCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((sec) =>
           getSectionDraftKey(sec) === targetKey ? { ...projected, draftKey: sec.draftKey } : sec,
         );
         return draft;
       });
+      this.announceResult('Section transform applied.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Invalid transform change';
       this.validationError.set(msg);
@@ -435,10 +898,12 @@ export class VenueGridDesignerComponent implements OnInit {
   onCanvasElementsChanged(elements: VenueLayoutElement[]): void {
     this.validationError.set(null);
     try {
+      this.beginPointerGestureCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.elements = [...(elements || [])];
         return draft;
       });
+      this.announceResult('Layout elements updated.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update layout elements';
       this.validationError.set(msg);
@@ -496,6 +961,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -515,6 +981,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult('Seat toggled.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to toggle seat';
       this.validationError.set(msg);
@@ -531,6 +998,7 @@ export class VenueGridDesignerComponent implements OnInit {
     // `RowLabel_Number` keys are never written; readers fall back to them.
     const colorKey = getSeatColorKey(event.seat);
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -551,6 +1019,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult('Seat color applied.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to paint seat';
       this.validationError.set(msg);
@@ -605,6 +1074,7 @@ export class VenueGridDesignerComponent implements OnInit {
     this.activePaintColor.set(color);
     const targetKey = getSectionDraftKey(sec);
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -622,6 +1092,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult('Section color updated.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update section color';
       this.validationError.set(msg);
@@ -633,6 +1104,7 @@ export class VenueGridDesignerComponent implements OnInit {
     if (!sec) return;
     const targetKey = getSectionDraftKey(sec);
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -655,6 +1127,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult('Seat color assigned.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to assign seat color';
       this.validationError.set(msg);
@@ -682,6 +1155,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -695,6 +1169,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult(`Row ${event.rowLabel} toggled.`);
       this.snackBar.open(
         `Row ${event.rowLabel} ${shouldActivate ? 'activated' : 'turned into aisle'}!`,
         'Close',
@@ -727,6 +1202,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -740,6 +1216,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult(`Column ${event.colIndex + 1} toggled.`);
       this.snackBar.open(
         `Column ${event.colIndex + 1} ${shouldActivate ? 'activated' : 'turned into aisle'}!`,
         'Close',
@@ -781,6 +1258,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -792,6 +1270,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult('All seats activated.');
       this.snackBar.open(`All seats in "${sec.name}" activated!`, 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to activate all seats';
@@ -870,6 +1349,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -885,6 +1365,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult(`Added row ${newRowLabel}.`);
       this.snackBar.open(`Added Row ${newRowLabel}!`, 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to add row';
@@ -963,6 +1444,7 @@ export class VenueGridDesignerComponent implements OnInit {
     }
 
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -978,6 +1460,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
       this.validationError.set(null);
+      this.announceResult(`Added column ${newColIndex + 1}.`);
       this.snackBar.open(`Added Column ${newColIndex + 1}!`, 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to add column';
@@ -991,6 +1474,9 @@ export class VenueGridDesignerComponent implements OnInit {
     this.validationError.set(null);
     this.editorState.save().subscribe({
       next: () => {
+        this.history.clear();
+        this.selectedSeatKeys.set(new Set());
+        this.announceResult('Venue layout saved successfully.');
         this.snackBar.open('Venue layout saved successfully!', 'Close', {
           duration: 4000,
           panelClass: 'snack-success',
@@ -999,6 +1485,7 @@ export class VenueGridDesignerComponent implements OnInit {
       error: (err) => {
         const msg = err?.error?.message || err?.message || 'Failed to save venue layout.';
         this.validationError.set(msg);
+        this.announceResult('Save failed; draft and history retained.');
         this.snackBar.open(msg, 'Close', {
           duration: 4000,
           panelClass: 'snack-error',
@@ -1010,7 +1497,11 @@ export class VenueGridDesignerComponent implements OnInit {
   discardChanges(): void {
     this.validationError.set(null);
     this.editorState.resetToBaseline();
+    this.history.clear();
     this.selectedSeatKeys.set(new Set());
+    this.selectedLayoutElement.set(null);
+    this.selectedElementIndex.set(null);
+    this.announceResult('All draft changes discarded.');
     this.snackBar.open('All draft changes discarded. Reset to baseline.', 'Close', {
       duration: 3000,
     });
@@ -1019,6 +1510,7 @@ export class VenueGridDesignerComponent implements OnInit {
   // --- Section Operations (Local Draft) ---
 
   openAddSectionModal(): void {
+    this.lastFocusedElement = document.activeElement as HTMLElement | null;
     this.sectionForm.reset({
       name: '',
       rowCount: 10,
@@ -1026,10 +1518,23 @@ export class VenueGridDesignerComponent implements OnInit {
       generateSeats: true,
     });
     this.showAddSectionModal.set(true);
+    queueMicrotask(() => {
+      document.getElementById('newSecName')?.focus();
+    });
   }
 
   closeAddSectionModal(): void {
     this.showAddSectionModal.set(false);
+    queueMicrotask(() => {
+      this.lastFocusedElement?.focus?.();
+      this.lastFocusedElement = null;
+    });
+  }
+
+  onSnapStepInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const parsed = Number(input.value);
+    this.snapStep.set(Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
   }
 
   createSection(): void {
@@ -1054,6 +1559,7 @@ export class VenueGridDesignerComponent implements OnInit {
         totalActiveSeats: this.totalConfiguredActiveSeats(),
       });
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = [...draft.sections, newSection];
         return draft;
@@ -1061,6 +1567,7 @@ export class VenueGridDesignerComponent implements OnInit {
 
       this.closeAddSectionModal();
       this.selectSection(newSection);
+      this.announceResult(`Section ${newSection.name} created.`);
       this.snackBar.open(`Section "${newSection.name}" created in draft!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1085,12 +1592,14 @@ export class VenueGridDesignerComponent implements OnInit {
         this.totalConfiguredActiveSeats(),
       );
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = [...draft.sections, duplicated];
         return draft;
       });
 
       this.selectSection(duplicated);
+      this.announceResult(`Section duplicated as ${duplicated.name}.`);
       this.snackBar.open(`Section duplicated as "${duplicated.name}"!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1110,6 +1619,7 @@ export class VenueGridDesignerComponent implements OnInit {
     try {
       const targetKey = getSectionDraftKey(sec);
       const deactivated = this.generator.deactivateSection(sec);
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1118,6 +1628,7 @@ export class VenueGridDesignerComponent implements OnInit {
         );
         return draft;
       });
+      this.announceResult(`Section ${sec.name} deactivated.`);
       this.snackBar.open(`Section "${sec.name}" and its seats deactivated!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1141,6 +1652,7 @@ export class VenueGridDesignerComponent implements OnInit {
         this.venue()?.capacity,
         this.countOtherActiveSeats(targetKey),
       );
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1149,6 +1661,7 @@ export class VenueGridDesignerComponent implements OnInit {
         );
         return draft;
       });
+      this.announceResult(`Section ${sec.name} reactivated.`);
       this.snackBar.open(`Section "${sec.name}" reactivated!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1167,6 +1680,7 @@ export class VenueGridDesignerComponent implements OnInit {
     this.validationError.set(null);
     try {
       const remaining = this.generator.removeSection(sec, this.sections());
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = remaining;
         return draft;
@@ -1177,6 +1691,7 @@ export class VenueGridDesignerComponent implements OnInit {
       } else {
         this.selectSection(null);
       }
+      this.announceResult(`Draft section ${sec.name} removed.`);
       this.snackBar.open(`Draft section "${sec.name}" removed!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1225,6 +1740,7 @@ export class VenueGridDesignerComponent implements OnInit {
       }
     }
     try {
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -1234,6 +1750,7 @@ export class VenueGridDesignerComponent implements OnInit {
         });
         return draft;
       });
+      this.announceResult('Section properties updated.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Invalid section update';
       this.validationError.set(msg);
@@ -1257,6 +1774,7 @@ export class VenueGridDesignerComponent implements OnInit {
       }
       const targetKey = getSectionDraftKey(sec);
       const seats = this.generator.generateSeats(options);
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) => {
           if (getSectionDraftKey(s) === targetKey) {
@@ -1273,6 +1791,7 @@ export class VenueGridDesignerComponent implements OnInit {
       });
 
       this.selectedSeatKeys.set(new Set());
+      this.announceResult(`Generated ${seats.length} seats.`);
       this.snackBar.open(`Generated ${seats.length} seats for section "${sec.name}"!`, 'Close', {
         duration: 3000,
         panelClass: 'snack-success',
@@ -1299,6 +1818,7 @@ export class VenueGridDesignerComponent implements OnInit {
         this.totalConfiguredActiveSeats(),
       );
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1308,6 +1828,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
 
+      this.announceResult('Bulk seat activation updated.');
       this.snackBar.open(`Updated active status for selected seats!`, 'Close', {
         duration: 2500,
       });
@@ -1332,6 +1853,7 @@ export class VenueGridDesignerComponent implements OnInit {
         sectionHeight: sec.height,
       });
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1341,6 +1863,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
 
+      this.announceResult('Moved selected seats.');
       this.snackBar.open('Moved selected seats successfully!', 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to translate seats';
@@ -1364,6 +1887,7 @@ export class VenueGridDesignerComponent implements OnInit {
       const renamed = this.generator.bulkSetRowLabel(sec, this.selectedSeatKeys(), label);
       const updated = this.pruneStaleLabelColorKeys(renamed, staleLabelKeys);
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1373,6 +1897,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
 
+      this.announceResult(`Row label set to ${label}.`);
       this.snackBar.open(`Row label set to "${label}"!`, 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to set row label';
@@ -1396,6 +1921,7 @@ export class VenueGridDesignerComponent implements OnInit {
       const renumbered = this.generator.bulkRenumber(sec, this.selectedSeatKeys(), startNumber);
       const updated = this.pruneStaleLabelColorKeys(renumbered, staleLabelKeys);
 
+      this.pushHistoryCheckpoint();
       this.editorState.replaceDraft((draft) => {
         draft.sections = draft.sections.map((s) =>
           getSectionDraftKey(s) === targetKey
@@ -1405,6 +1931,7 @@ export class VenueGridDesignerComponent implements OnInit {
         return draft;
       });
 
+      this.announceResult(`Seats renumbered from ${startNumber}.`);
       this.snackBar.open(`Seats renumbered from #${startNumber}!`, 'Close', { duration: 2500 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to renumber seats';
@@ -1415,6 +1942,7 @@ export class VenueGridDesignerComponent implements OnInit {
 
   onSeatSelectionChanged(keys: Set<string>): void {
     this.selectedSeatKeys.set(keys);
+    this.announceResult(`${keys.size} seats selected.`);
   }
 
   // --- Canvas Navigation Controls ---
@@ -1436,40 +1964,52 @@ export class VenueGridDesignerComponent implements OnInit {
   }
 
   // --- Legacy Compatibility Method ---
-
+  //
+  // REV-P11-009-003: local-draft-only. This entry point predates the versioned
+  // save flow and must never issue per-seat HTTP writes outside the
+  // SaveVenueLayoutRequest/layoutVersion flow. It reuses the same local-draft
+  // toggle semantics as onCanvasSeatToggle; the explicit versioned save()
+  // persists everything. Zero HTTP by contract (covered by spec).
   toggleSeat(seat: VenueSectionSeat): void {
     const sec = this.currentSection();
-    if (!sec || !sec.sectionId || !seat.seatId) return;
-    const sectionId = sec.sectionId;
+    if (!sec || !seat.seatId) return;
+    const targetKey = getSectionDraftKey(sec);
+    const targetSeat = (sec.seats || []).find((s) => s.seatId === seat.seatId);
+    if (!targetSeat) return;
     const seatId = seat.seatId;
+    const newState = !targetSeat.isActive;
 
-    const previousState = seat.isActive;
-    const newState = !previousState;
+    if (newState) {
+      const cap = this.venue()?.capacity ?? 0;
+      if (cap > 0 && this.totalConfiguredActiveSeats() + 1 > cap) {
+        const msg = `Cannot activate seat: venue capacity limit (${cap}) reached`;
+        this.validationError.set(msg);
+        this.snackBar.open(msg, 'Close', { duration: 4000, panelClass: 'snack-error' });
+        return;
+      }
+    }
 
-    this.venueApi.toggleSeat(this.venueId(), sectionId, seatId, newState).subscribe({
-      next: () => {
-        this.editorState.replaceDraft((draft) => {
-          draft.sections = draft.sections.map((s) => {
-            if (s.sectionId === sectionId) {
-              return {
-                ...s,
-                seats: s.seats.map((st) =>
-                  st.seatId === seatId ? { ...st, isActive: newState } : st,
-                ),
-              };
-            }
+    this.pushHistoryCheckpoint();
+    try {
+      this.editorState.replaceDraft((draft) => {
+        draft.sections = draft.sections.map((s) => {
+          if (getSectionDraftKey(s) !== targetKey) {
             return s;
-          });
-          return draft;
+          }
+          return {
+            ...s,
+            seats: (s.seats || []).map((st) =>
+              st.seatId === seatId ? { ...st, isActive: newState } : st,
+            ),
+          };
         });
-      },
-      error: (err) => {
-        this.snackBar.open(
-          err?.error?.message || 'Failed to update seat status. Reverted.',
-          'Close',
-          { duration: 4000, panelClass: 'snack-error' },
-        );
-      },
-    });
+        return draft;
+      });
+      this.validationError.set(null);
+      this.announceResult('Seat toggled.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to toggle seat';
+      this.validationError.set(msg);
+    }
   }
 }

@@ -13,6 +13,7 @@ import {
   VenueSectionSeat,
 } from '../../../../models/venue.model';
 import { VenueLayoutEditorStateService } from '../../../../services/venue-layout-editor-state.service';
+import { LayoutHistoryService } from '../../../../services/layout-history.service';
 import {
   getSectionDraftKey,
   SeatLayoutGeneratorService,
@@ -864,6 +865,307 @@ describe('VenueGridDesignerComponent', () => {
 
         expect(component.validationError()).toMatch(/between 0 and 100000/);
         expect(JSON.stringify(component.currentSection())).toBe(before);
+      });
+    });
+
+    describe('TASK-P11-009: undo/redo, dirty guard, keyboard, accessibility', () => {
+      let history: LayoutHistoryService;
+
+      beforeEach(() => {
+        history = TestBed.inject(LayoutHistoryService);
+        history.clear();
+        // Re-establish a clean baseline: reload bypasses history, then clear.
+        editorState.applyServerSnapshot(JSON.parse(JSON.stringify(mockLayout)));
+        history.clear();
+        fixture.detectChanges();
+      });
+
+      function keyboardEvent(
+        key: string,
+        target: HTMLElement,
+        extra: Partial<KeyboardEventInit> & {
+          ctrlKey?: boolean;
+          metaKey?: boolean;
+          shiftKey?: boolean;
+          altKey?: boolean;
+        } = {},
+      ): KeyboardEvent {
+        const event = new KeyboardEvent('keydown', {
+          key,
+          bubbles: true,
+          cancelable: true,
+          ...extra,
+        });
+        Object.defineProperty(event, 'target', { value: target });
+        return event;
+      }
+
+      it('should isolate history snapshots from later draft mutations (no shared references)', () => {
+        const before = JSON.stringify(component.sections());
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(history.undoDepth()).toBe(1);
+
+        editorState.replaceDraft((draft) => {
+          draft.sections[0].name = 'Hacked';
+          return draft;
+        });
+        expect(component.currentSection()?.name).toBe('Hacked');
+
+        component.undo();
+        expect(component.currentSection()?.name).toBe('Orchestra');
+        expect(JSON.stringify(component.sections())).toBe(before);
+      });
+
+      it('should not mutate layout for Delete/arrows/undo keys inside inputs or contenteditable', () => {
+        const before = JSON.stringify(component.sections());
+        const input = document.createElement('input');
+        const textarea = document.createElement('textarea');
+        const select = document.createElement('select');
+        const editable = document.createElement('div');
+        editable.setAttribute('contenteditable', 'true');
+
+        component.onKeyDown(keyboardEvent('Delete', input));
+        component.onKeyDown(keyboardEvent('Backspace', textarea));
+        component.onKeyDown(keyboardEvent('ArrowUp', select));
+        component.onKeyDown(keyboardEvent('ArrowLeft', editable));
+        const imeInput = document.createElement('input');
+        const imeEvent = keyboardEvent('Delete', imeInput);
+        Object.defineProperty(imeEvent, 'isComposing', { value: true });
+        component.onKeyDown(imeEvent);
+
+        expect(JSON.stringify(component.sections())).toBe(before);
+        expect(history.undoDepth()).toBe(0);
+      });
+
+      it('should perform undo/redo with zero HTTP calls', () => {
+        venueApiSpy.saveLayout.calls.reset();
+        venueApiSpy.toggleSeat.calls.reset();
+        venueApiSpy.getEditableLayout.calls.reset();
+
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        component.undo();
+        component.redo();
+
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(venueApiSpy.toggleSeat).not.toHaveBeenCalled();
+        expect(venueApiSpy.getEditableLayout).not.toHaveBeenCalled();
+      });
+
+      it('should expose named DOM controls for every mutation class', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        fixture.detectChanges();
+        const root: HTMLElement = fixture.nativeElement;
+        const query = (selector: string): HTMLElement | null => root.querySelector(selector);
+
+        expect(query('[aria-label="Undo layout change"]')).not.toBeNull();
+        expect(query('[aria-label="Redo layout change"]')).not.toBeNull();
+        expect(query('[aria-label="Zoom in"]')).not.toBeNull();
+        expect(query('[aria-label="Zoom out"]')).not.toBeNull();
+        expect(query('[aria-label="Fit venue layout to screen"]')).not.toBeNull();
+        expect(query('#designerSnapStep')).not.toBeNull();
+        expect(query('[data-testid="designer-announcement"]')).not.toBeNull();
+        // Numeric geometry alternatives (section properties panel).
+        expect(query('#secPropPosX')).not.toBeNull();
+        expect(query('#secPropPosY')).not.toBeNull();
+        expect(query('#secPropWidth')).not.toBeNull();
+        expect(query('#secPropHeight')).not.toBeNull();
+        expect(query('#secPropRot')).not.toBeNull();
+        expect(query('#secPropZ')).not.toBeNull();
+        // Activation / duplicate / delete / selection alternatives.
+        expect(query('[aria-label="Bulk activate selected seats"]')).not.toBeNull();
+        expect(query('[aria-label="Duplicate this section"]')).not.toBeNull();
+        expect(
+          query('[aria-label="Deactivate this section and its seats"]') ||
+            query('[aria-label="Remove draft section"]'),
+        ).not.toBeNull();
+        expect(query('[aria-label="Select all seats in this section"]')).not.toBeNull();
+      });
+
+      it('should no-op undo/redo at history boundaries', () => {
+        expect(history.canUndo()).toBeFalse();
+        expect(history.canRedo()).toBeFalse();
+        const before = JSON.stringify(component.sections());
+
+        component.undo();
+        component.redo();
+        expect(JSON.stringify(component.sections())).toBe(before);
+
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        const mutated = JSON.stringify(component.sections());
+        expect(mutated).not.toBe(before);
+
+        component.undo();
+        expect(JSON.stringify(component.sections())).toBe(before);
+        component.undo();
+        expect(JSON.stringify(component.sections())).toBe(before);
+
+        component.redo();
+        expect(JSON.stringify(component.sections())).toBe(mutated);
+        component.redo();
+        expect(JSON.stringify(component.sections())).toBe(mutated);
+      });
+
+      it('should coalesce 50 pointer-move transforms into one undo entry', () => {
+        const sec = component.currentSection()!;
+        const baseX = sec.positionX;
+        for (let i = 1; i <= 50; i++) {
+          component.onSectionTransformChanged({
+            sectionId: sec.sectionId,
+            draftKey: getSectionDraftKey(sec),
+            positionX: baseX + i,
+            positionY: sec.positionY,
+            width: sec.width,
+            height: sec.height,
+            rotationDeg: 0,
+          });
+        }
+        expect(history.undoDepth()).toBe(1);
+        component.endPointerGesture();
+        expect(history.undoDepth()).toBe(1);
+
+        component.undo();
+        expect(component.currentSection()?.positionX).toBe(baseX);
+      });
+
+      it('should clear redo when a new command follows undo', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        component.undo();
+        expect(history.canRedo()).toBeTrue();
+
+        component.onSeatSelectionChanged(new Set(['s-01']));
+        component.onBulkActivate(false);
+        expect(history.canRedo()).toBeFalse();
+        const afterEdit = JSON.stringify(component.sections());
+        component.redo();
+        expect(JSON.stringify(component.sections())).toBe(afterEdit);
+      });
+
+      it('should clear history on save success and retain it on save failure', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(history.canUndo()).toBeTrue();
+
+        component.saveLayout();
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+        expect(history.canUndo()).toBeFalse();
+        expect(history.canRedo()).toBeFalse();
+        expect(component.isDirty()).toBeFalse();
+
+        component.onSeatSelectionChanged(new Set(['s-01']));
+        component.onBulkActivate(false);
+        expect(history.canUndo()).toBeTrue();
+
+        venueApiSpy.saveLayout.and.returnValue(
+          throwError(() => ({ error: { message: 'Conflict' }, message: 'Conflict' })),
+        );
+        component.saveLayout();
+        expect(history.canUndo()).toBeTrue();
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should preserve layoutVersion through undo/redo', () => {
+        expect(component.venue()?.layoutVersion).toBe(1);
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.venue()?.layoutVersion).toBe(1);
+        component.undo();
+        expect(component.venue()?.layoutVersion).toBe(1);
+        component.redo();
+        expect(component.venue()?.layoutVersion).toBe(1);
+      });
+
+      it('should guard dirty state via PendingChangesAware with consequence text', () => {
+        expect(component.hasPendingChanges()).toBeFalse();
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.hasPendingChanges()).toBeTrue();
+
+        const confirmSpy = spyOn(window, 'confirm').and.returnValue(true);
+        expect(component.confirmDiscardChanges()).toBeTrue();
+        const message = String(confirmSpy.calls.mostRecent().args[0]);
+        expect(message).toContain('unsaved layout edits will be discarded');
+      });
+
+      it('should clear selection on Escape without reverting unrelated draft', () => {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        const mutated = JSON.stringify(component.sections());
+        expect(component.hasPendingChanges()).toBeTrue();
+
+        component.onKeyDown(keyboardEvent('Escape', document.createElement('div')));
+        expect(JSON.stringify(component.sections())).toBe(mutated);
+        expect(component['selectedSeatKeys']().size).toBe(0);
+      });
+
+      it('should set returnValue on beforeunload only while dirty (REV-001)', () => {
+        const cleanEvent = {
+          preventDefault: jasmine.createSpy('preventDefault'),
+          returnValue: 'initial',
+        } as unknown as BeforeUnloadEvent;
+        component.onBeforeUnload(cleanEvent);
+        expect(cleanEvent.preventDefault).not.toHaveBeenCalled();
+        expect(cleanEvent.returnValue).toBe('initial');
+
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.hasPendingChanges()).toBeTrue();
+
+        const dirtyEvent = {
+          preventDefault: jasmine.createSpy('preventDefault'),
+          returnValue: 'initial',
+        } as unknown as BeforeUnloadEvent;
+        component.onBeforeUnload(dirtyEvent);
+        expect(dirtyEvent.preventDefault).toHaveBeenCalled();
+        expect(dirtyEvent.returnValue).toBe('');
+      });
+
+      it('should deactivate persisted seats and remove draft seats on mixed Delete (REV-002)', () => {
+        editorState.replaceDraft((draft) => {
+          draft.sections = draft.sections.map((s) => ({
+            ...s,
+            seats: [
+              ...s.seats,
+              {
+                seatId: null,
+                rowLabel: 'C',
+                seatNumber: 1,
+                gridX: 2,
+                gridY: 2,
+                positionX: 100,
+                positionY: 100,
+                isActive: true,
+              },
+            ],
+          }));
+          return draft;
+        });
+
+        component.onSeatSelectionChanged(new Set(['s-00', '2_2']));
+        component.onKeyDown(keyboardEvent('Delete', document.createElement('div')));
+
+        const seats = component.currentSection()?.seats ?? [];
+        expect(seats.find((s) => s.seatId === 's-00')?.isActive).toBeFalse();
+        expect(seats.some((s) => s.seatId === null)).toBeFalse();
+        expect(String(component['announcement']())).toContain('Deactivated');
+        expect(String(component['announcement']())).toContain('draft');
+      });
+
+      it('should toggle seats locally with zero HTTP calls via the legacy entry point (REV-003)', () => {
+        venueApiSpy.toggleSeat.calls.reset();
+        const seat = component.currentSection()?.seats.find((s) => s.seatId === 's-00')!;
+        expect(seat.isActive).toBeTrue();
+
+        component.toggleSeat(seat);
+
+        expect(venueApiSpy.toggleSeat).not.toHaveBeenCalled();
+        expect(
+          component.currentSection()?.seats.find((s) => s.seatId === 's-00')?.isActive,
+        ).toBeFalse();
+        expect(component.hasPendingChanges()).toBeTrue();
       });
     });
   });
