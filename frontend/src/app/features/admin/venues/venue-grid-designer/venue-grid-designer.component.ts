@@ -10,15 +10,24 @@ import {
   viewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {
+  SaveVenueLayoutRequest,
   VenueLayout,
   VenueLayoutElement,
   VenueSectionLayout,
   VenueSectionSeat,
 } from '../../../../models/venue.model';
+import { ApiErrorResponse, ValidationErrorDetail } from '../../../../models/api-error.model';
+import { AdminVenueApiService } from '../../../../services/admin-venue-api.service';
+import {
+  LayoutConflictDialogComponent,
+  LayoutConflictDialogResult,
+} from '../layout-conflict-dialog/layout-conflict-dialog.component';
 import { SkeletonLoaderComponent } from '../../../../shared/components/skeleton-loader/skeleton-loader.component';
 import {
   VenueLayoutEditorStateService,
@@ -86,6 +95,8 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   private readonly snackBar = inject(MatSnackBar);
   private readonly fb = inject(FormBuilder);
   private readonly history = inject(LayoutHistoryService);
+  private readonly venueApi = inject(AdminVenueApiService);
+  private readonly dialog = inject(MatDialog);
 
   readonly canvasRef = viewChild<LayoutCanvasComponent>('canvasRef');
 
@@ -96,6 +107,8 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   readonly selectedSectionKey = signal<string | null>(null);
   readonly selectedSeatKeys = signal<Set<string>>(new Set());
   readonly validationError = signal<string | null>(null);
+  readonly serverValidationErrors = signal<ValidationErrorDetail[]>([]);
+  readonly saveCorrelationId = signal<string | null>(null);
   readonly toolMode = signal<CanvasToolMode>('select');
   readonly activePaintColor = signal<string>('#6366f1');
   readonly announcement = signal<string>('');
@@ -288,6 +301,11 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
 
   // --- Local history boundary (single commit point for every mutation) ---
 
+  /** TASK-P11-010: true while validation/save flight is active; mutations must no-op. */
+  private isMutationLocked(): boolean {
+    return this.editorState.isSaving();
+  }
+
   private currentDraftLayout(): VenueLayout | null {
     return this.editorState.layout() as VenueLayout | null;
   }
@@ -318,6 +336,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   undo(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const current = this.currentDraftLayout();
     if (!current || !this.history.canUndo()) {
       return;
@@ -338,6 +359,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   redo(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const current = this.currentDraftLayout();
     if (!current || !this.history.canRedo()) {
       return;
@@ -419,6 +443,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   private moveSelectedByArrow(deltaX: number, deltaY: number): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const seatKeys = this.selectedSeatKeys();
     if (seatKeys.size > 0) {
       const sec = this.currentSection();
@@ -510,6 +537,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   private handleDeleteKey(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const seatKeys = this.selectedSeatKeys();
     if (seatKeys.size > 0) {
       const sec = this.currentSection();
@@ -626,6 +656,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   private handleEscapeKey(): void {
+    if (this.isMutationLocked() && this.history.isCoalescing()) {
+      return;
+    }
     if (this.history.isCoalescing()) {
       const current = this.currentDraftLayout();
       const baseline = this.history.cancelCoalesced(current);
@@ -654,6 +687,22 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   onKeyDown(event: KeyboardEvent): void {
     if (this.isEditableKeyboardTarget(event)) {
       return;
+    }
+    if (this.isMutationLocked()) {
+      const mutationKey =
+        event.key === 'Delete' ||
+        event.key === 'Backspace' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight' ||
+        ((event.ctrlKey || event.metaKey) &&
+          typeof event.key === 'string' &&
+          event.key.toLowerCase() === 'z') ||
+        (event.ctrlKey && typeof event.key === 'string' && event.key.toLowerCase() === 'y');
+      if (mutationKey) {
+        return;
+      }
     }
     const key = event.key;
     const lowerKey = typeof key === 'string' ? key.toLowerCase() : '';
@@ -838,6 +887,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onSectionTransformChanged(event: SectionTransformChangeEvent): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     this.validationError.set(null);
     const fallbackKey = this.currentSection() ? getSectionDraftKey(this.currentSection()!) : null;
     const targetKey = event.draftKey ?? event.sectionId ?? fallbackKey;
@@ -896,6 +948,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
    * vanish and dropping them from the save payload.
    */
   onCanvasElementsChanged(elements: VenueLayoutElement[]): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     this.validationError.set(null);
     try {
       this.beginPointerGestureCheckpoint();
@@ -945,6 +1000,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onCanvasSeatToggle(event: { seat: VenueSectionSeat; section: VenueSectionLayout }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = event.section;
     const targetKey = getSectionDraftKey(sec);
     const targetSeat = event.seat;
@@ -993,6 +1051,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
     section: VenueSectionLayout;
     color: string;
   }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const targetKey = getSectionDraftKey(event.section);
     // REV-001: exactly one stable entry per seat (seatId || grid key). Legacy
     // `RowLabel_Number` keys are never written; readers fall back to them.
@@ -1069,6 +1130,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onSectionColorChanged(color: string): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     this.activePaintColor.set(color);
@@ -1100,6 +1164,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onSeatColorAssigned(event: { seatKeys: string[]; color: string }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     const targetKey = getSectionDraftKey(sec);
@@ -1135,6 +1202,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onRowToggled(event: { rowLabel: string; active?: boolean }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     const targetKey = getSectionDraftKey(sec);
@@ -1182,6 +1252,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onColToggled(event: { colIndex: number; active?: boolean }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     const targetKey = getSectionDraftKey(sec);
@@ -1229,6 +1302,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onCenterAisleCreated(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec || sec.colCount < 2) return;
     const centerCol = Math.floor(sec.colCount / 2);
@@ -1236,6 +1312,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onDualAislesCreated(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec || sec.colCount < 5) return;
     const col1 = Math.floor(sec.colCount / 3);
@@ -1245,6 +1324,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onAllSeatsActivated(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     const targetKey = getSectionDraftKey(sec);
@@ -1279,6 +1361,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onRowAppended(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     if (sec.rowCount >= 50) {
@@ -1374,6 +1459,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onColAppended(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
     if (sec.colCount >= 50) {
@@ -1468,25 +1556,355 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
     }
   }
 
-  // --- Save / Discard Layout ---
+  // --- Save / Discard Layout (TASK-P11-010 atomic validate -> save) ---
+
+  private resolveSaveVenueId(): string | null {
+    const fromRoute = this.venueId();
+    if (fromRoute) {
+      return fromRoute;
+    }
+    const layout = this.currentDraftLayout();
+    return layout?.venueId ?? null;
+  }
+
+  private runLocalPreSaveValidation(): string | null {
+    const layout = this.currentDraftLayout();
+    if (!layout) {
+      return 'No layout loaded. Reload the venue before saving.';
+    }
+    const sections = (layout.sections as VenueSectionLayout[]) || [];
+    const activeNames = new Set<string>();
+    for (const sec of sections) {
+      const trimmed = (sec.name ?? '').trim();
+      if (!trimmed) {
+        return 'Section name must not be blank';
+      }
+      if (!Number.isInteger(sec.rowCount) || sec.rowCount < 1 || sec.rowCount > 50) {
+        return `Section "${trimmed}" rowCount must be an integer between 1 and 50`;
+      }
+      if (!Number.isInteger(sec.colCount) || sec.colCount < 1 || sec.colCount > 50) {
+        return `Section "${trimmed}" colCount must be an integer between 1 and 50`;
+      }
+      if (sec.isActive) {
+        const lower = trimmed.toLowerCase();
+        if (activeNames.has(lower)) {
+          return `Section name "${trimmed}" already exists`;
+        }
+        activeNames.add(lower);
+      }
+      const geometryError = this.validateSectionGeometry(sec);
+      if (geometryError) {
+        return geometryError;
+      }
+      const boundsError = this.generator.validateSectionBounds(sec);
+      if (boundsError) {
+        return boundsError;
+      }
+      const seen = new Set<string>();
+      for (const seat of sec.seats || []) {
+        if (!seat.rowLabel || !seat.rowLabel.trim()) {
+          return `Seat in section "${trimmed}" has a blank row label`;
+        }
+        if (!Number.isInteger(seat.seatNumber) || seat.seatNumber < 1) {
+          return `Seat Row ${seat.rowLabel} in section "${trimmed}" has an invalid seat number`;
+        }
+        const key = `${seat.rowLabel.trim().toUpperCase()}|${seat.seatNumber}`;
+        if (seen.has(key)) {
+          return `Section "${trimmed}" has duplicate row/seat (${seat.rowLabel}, ${seat.seatNumber})`;
+        }
+        seen.add(key);
+      }
+    }
+    const cap = layout.capacity ?? 0;
+    if (cap > 0 && this.totalConfiguredActiveSeats() > cap) {
+      return `Projected active seat count (${this.totalConfiguredActiveSeats()}) exceeds venue capacity (${cap})`;
+    }
+    return null;
+  }
+
+  private focusSaveValidationSummary(): void {
+    queueMicrotask(() => {
+      try {
+        document.getElementById('saveValidationSummary')?.focus?.();
+      } catch {
+        // Focus is best-effort for screen readers; validation text is still visible.
+      }
+    });
+  }
+
+  private extractSaveApiError(err: unknown): {
+    status: number | null;
+    errorCode: string | null;
+    message: string;
+    validationErrors: ValidationErrorDetail[];
+    correlationId: string | null;
+  } {
+    const httpErr = err as HttpErrorResponse | null | undefined;
+    const status =
+      typeof httpErr?.status === 'number' ? (httpErr as HttpErrorResponse).status : null;
+    const body = (httpErr as HttpErrorResponse | undefined)?.error as
+      Partial<ApiErrorResponse> | string | null | undefined;
+    const apiError = typeof body === 'object' && body !== null ? body : null;
+    const validationErrors = Array.isArray(apiError?.validationErrors)
+      ? ((apiError as ApiErrorResponse).validationErrors ?? [])
+      : [];
+    const correlationId =
+      typeof apiError?.correlationId === 'string' ? apiError.correlationId : null;
+    const message =
+      (validationErrors[0]?.message as string | undefined) ||
+      (typeof apiError?.message === 'string' ? apiError.message : null) ||
+      (err as { message?: string })?.message ||
+      'Failed to save venue layout.';
+    const errorCode = typeof apiError?.errorCode === 'string' ? apiError.errorCode : null;
+    return { status, errorCode, message, validationErrors, correlationId };
+  }
+
+  private isStaleVersionConflict(err: unknown): boolean {
+    const parsed = this.extractSaveApiError(err);
+    return parsed.status === 409 && parsed.errorCode === 'SF_409_CONFLICT';
+  }
 
   saveLayout(): void {
+    if (this.editorState.isSaving()) {
+      return;
+    }
     this.validationError.set(null);
-    this.editorState.save().subscribe({
-      next: () => {
+    this.serverValidationErrors.set([]);
+    this.saveCorrelationId.set(null);
+
+    const localError = this.runLocalPreSaveValidation();
+    if (localError) {
+      this.validationError.set(localError);
+      this.announceResult('Save blocked by local validation; draft retained.');
+      this.focusSaveValidationSummary();
+      return;
+    }
+
+    const venueId = this.resolveSaveVenueId();
+    if (!venueId) {
+      this.validationError.set('Cannot save layout: venueId is required');
+      return;
+    }
+
+    let request: SaveVenueLayoutRequest;
+    try {
+      request = this.editorState.buildSaveRequest();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cannot build save request';
+      this.validationError.set(msg);
+      this.announceResult('Save blocked; draft and history retained.');
+      return;
+    }
+    const immutableSnapshot: SaveVenueLayoutRequest = JSON.parse(JSON.stringify(request));
+
+    this.editorState.setIsSaving(true);
+    this.venueApi.validateLayout(venueId, immutableSnapshot).subscribe({
+      next: () => this.executeSavePut(venueId, immutableSnapshot),
+      error: (err) => this.handleValidationFailure(err),
+    });
+  }
+
+  private executeSavePut(venueId: string, snapshot: SaveVenueLayoutRequest): void {
+    this.venueApi.saveLayout(venueId, snapshot).subscribe({
+      next: (saved) => this.handleSaveSuccess(saved),
+      error: (err) => this.handleSaveError(err, snapshot),
+    });
+  }
+
+  private handleValidationFailure(err: unknown): void {
+    const parsed = this.extractSaveApiError(err);
+    this.editorState.setIsSaving(false);
+    if (parsed.status === 400) {
+      this.serverValidationErrors.set(parsed.validationErrors);
+      this.saveCorrelationId.set(parsed.correlationId);
+      const summary = parsed.correlationId
+        ? `${parsed.message} (ref ${parsed.correlationId})`
+        : parsed.message;
+      this.validationError.set(summary);
+      this.announceResult('Server validation failed; draft and history retained.');
+      this.focusSaveValidationSummary();
+      return;
+    }
+    this.validationError.set(parsed.message);
+    if (parsed.correlationId) {
+      this.saveCorrelationId.set(parsed.correlationId);
+    }
+    this.announceResult('Save failed; draft and history retained.');
+    this.snackBar.open(parsed.message, 'Close', {
+      duration: 4000,
+      panelClass: 'snack-error',
+    });
+  }
+
+  private handleSaveSuccess(saved: VenueLayout): void {
+    try {
+      this.editorState.applyServerSnapshot(saved);
+    } finally {
+      this.editorState.setIsSaving(false);
+    }
+    this.history.clear();
+    this.serverValidationErrors.set([]);
+    this.saveCorrelationId.set(null);
+    this.validationError.set(null);
+    this.pruneSelectionToServerIds(saved);
+    this.announceResult(`Venue layout saved successfully at version ${saved.layoutVersion}.`);
+    this.snackBar.open(`Venue layout saved successfully! (v${saved.layoutVersion})`, 'Close', {
+      duration: 4000,
+      panelClass: 'snack-success',
+    });
+  }
+
+  private handleSaveError(err: unknown, snapshot: SaveVenueLayoutRequest): void {
+    if (this.isStaleVersionConflict(err)) {
+      const parsed = this.extractSaveApiError(err);
+      this.editorState.setIsSaving(false);
+      this.saveCorrelationId.set(parsed.correlationId);
+      this.openConflictDialog(snapshot, parsed.correlationId);
+      this.announceResult('Save conflict; local draft and history retained.');
+      return;
+    }
+    const parsed = this.extractSaveApiError(err);
+    this.editorState.setIsSaving(false);
+    if (parsed.correlationId) {
+      this.saveCorrelationId.set(parsed.correlationId);
+    }
+    this.validationError.set(parsed.message);
+    this.announceResult('Save failed; draft and history retained.');
+    this.snackBar.open(parsed.message, 'Close', {
+      duration: 4000,
+      panelClass: 'snack-error',
+    });
+  }
+
+  private pruneSelectionToServerIds(saved: VenueLayout): void {
+    const valid = new Set<string>();
+    for (const sec of saved.sections || []) {
+      for (const seat of sec.seats || []) {
+        if (seat.seatId) {
+          valid.add(seat.seatId);
+        }
+        valid.add(`${seat.gridY}_${seat.gridX}`);
+      }
+    }
+    this.selectedSeatKeys.update((current) => {
+      const next = new Set<string>();
+      for (const key of current) {
+        if (valid.has(key)) {
+          next.add(key);
+        }
+      }
+      return next;
+    });
+    const selectedElement = this.selectedLayoutElement();
+    if (selectedElement?.elementId) {
+      const validElementIds = new Set(
+        (saved.elements || []).map((el) => el.elementId).filter((id) => id !== null),
+      );
+      if (!validElementIds.has(selectedElement.elementId)) {
+        this.selectedLayoutElement.set(null);
+        this.selectedElementIndex.set(null);
+      }
+    }
+  }
+
+  private openConflictDialog(snapshot: SaveVenueLayoutRequest, correlationId: string | null): void {
+    const localVersion = (this.editorState.baseline() as VenueLayout | null)?.layoutVersion ?? 0;
+    let snapshotJson = '{}';
+    try {
+      snapshotJson = JSON.stringify(snapshot, null, 2);
+    } catch {
+      snapshotJson = '{}';
+    }
+    const ref = this.dialog.open(LayoutConflictDialogComponent, {
+      data: { localVersion, correlationId, snapshotJson },
+      disableClose: false,
+      restoreFocus: true,
+      autoFocus: 'dialog',
+    });
+    ref.afterClosed().subscribe((result: LayoutConflictDialogResult | undefined) => {
+      if (result === 'reload') {
+        this.reloadServerLayout();
+        return;
+      }
+      this.focusSaveButton();
+    });
+  }
+
+  private focusSaveButton(): void {
+    queueMicrotask(() => {
+      try {
+        const saveButton = document.getElementById(
+          'designerSaveButton',
+        ) as HTMLButtonElement | null;
+        if (saveButton && !saveButton.disabled) {
+          saveButton.focus();
+        }
+      } catch {
+        // Focus restoration is best-effort.
+      }
+    });
+  }
+
+  private focusDesignerHeading(): void {
+    queueMicrotask(() => {
+      try {
+        document.getElementById('designerHeading')?.focus?.();
+      } catch {
+        // Focus restoration is best-effort.
+      }
+    });
+  }
+
+  reloadServerLayout(): void {
+    const venueId = this.resolveSaveVenueId();
+    if (!venueId) {
+      this.validationError.set('Cannot reload layout: venueId is required');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Reloading replaces your unsaved draft with the latest server layout. Continue?',
+      )
+    ) {
+      return;
+    }
+    this.editorState.setIsSaving(true);
+    this.venueApi.getEditableLayout(venueId).subscribe({
+      next: (serverLayout) => {
+        try {
+          this.editorState.applyServerSnapshot(serverLayout);
+        } finally {
+          this.editorState.setIsSaving(false);
+        }
         this.history.clear();
         this.selectedSeatKeys.set(new Set());
-        this.announceResult('Venue layout saved successfully.');
-        this.snackBar.open('Venue layout saved successfully!', 'Close', {
+        this.selectedLayoutElement.set(null);
+        this.selectedElementIndex.set(null);
+        this.serverValidationErrors.set([]);
+        this.saveCorrelationId.set(null);
+        this.validationError.set(null);
+        const sections = serverLayout.sections || [];
+        if (sections.length > 0) {
+          const currentKey = this.selectedSectionKey();
+          const stillPresent = sections.some(
+            (s) => getSectionDraftKey(s as VenueSectionLayout) === currentKey,
+          );
+          if (!stillPresent) {
+            this.selectedSectionKey.set(getSectionDraftKey(sections[0] as VenueSectionLayout));
+          }
+        }
+        this.announceResult(`Server layout reloaded at version ${serverLayout.layoutVersion}.`);
+        this.snackBar.open('Server layout reloaded. Local draft replaced.', 'Close', {
           duration: 4000,
-          panelClass: 'snack-success',
         });
+        this.focusDesignerHeading();
       },
       error: (err) => {
-        const msg = err?.error?.message || err?.message || 'Failed to save venue layout.';
-        this.validationError.set(msg);
-        this.announceResult('Save failed; draft and history retained.');
-        this.snackBar.open(msg, 'Close', {
+        this.editorState.setIsSaving(false);
+        const parsed = this.extractSaveApiError(err);
+        this.validationError.set(parsed.message || 'Failed to reload server layout.');
+        this.announceResult('Reload failed; local draft and history retained.');
+        this.snackBar.open(parsed.message || 'Failed to reload server layout.', 'Close', {
           duration: 4000,
           panelClass: 'snack-error',
         });
@@ -1495,7 +1913,12 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   discardChanges(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     this.validationError.set(null);
+    this.serverValidationErrors.set([]);
+    this.saveCorrelationId.set(null);
     this.editorState.resetToBaseline();
     this.history.clear();
     this.selectedSeatKeys.set(new Set());
@@ -1538,6 +1961,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   createSection(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     if (this.sectionForm.invalid) {
       this.sectionForm.markAllAsTouched();
       return;
@@ -1580,6 +2006,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   duplicateSection(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1612,6 +2041,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   deactivateSection(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1640,6 +2072,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   reactivateSection(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1674,6 +2109,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   removeSection(): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1704,6 +2142,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   updateSectionProperties(partial: Partial<VenueSectionLayout>): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1760,6 +2201,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   // --- Seat Generation & Bulk Operations (Local Draft) ---
 
   onGenerateSeats(options: GenerateSeatsOptions): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1804,6 +2248,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onBulkActivate(active: boolean): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1840,6 +2287,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onBulkTranslate(delta: { deltaX: number; deltaY: number }): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1873,6 +2323,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onBulkSetRowLabel(label: string): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1907,6 +2360,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   }
 
   onBulkRenumber(startNumber: number): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec) return;
 
@@ -1971,6 +2427,9 @@ export class VenueGridDesignerComponent implements OnInit, OnDestroy, PendingCha
   // toggle semantics as onCanvasSeatToggle; the explicit versioned save()
   // persists everything. Zero HTTP by contract (covered by spec).
   toggleSeat(seat: VenueSectionSeat): void {
+    if (this.isMutationLocked()) {
+      return;
+    }
     const sec = this.currentSection();
     if (!sec || !seat.seatId) return;
     const targetKey = getSectionDraftKey(sec);

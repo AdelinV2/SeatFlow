@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, ActivatedRoute } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { of, throwError } from 'rxjs';
 import { getRowLabel, VenueGridDesignerComponent } from './venue-grid-designer.component';
@@ -26,6 +27,7 @@ describe('VenueGridDesignerComponent', () => {
   let editorState: VenueLayoutEditorStateService;
   let generator: SeatLayoutGeneratorService;
   let snackBarSpy: jasmine.SpyObj<MatSnackBar>;
+  let dialogSpy: jasmine.SpyObj<MatDialog>;
 
   const mockSeats: VenueSectionSeat[] = [
     {
@@ -122,10 +124,13 @@ describe('VenueGridDesignerComponent', () => {
         'toggleSeat',
       ]);
       snackBarSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
+      dialogSpy = jasmine.createSpyObj('MatDialog', ['open']);
+      dialogSpy.open.and.returnValue({ afterClosed: () => of(undefined) } as never);
 
       venueApiSpy.getEditableLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
       venueApiSpy.getVenueLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
       venueApiSpy.saveLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
+      venueApiSpy.validateLayout.and.returnValue(of(undefined));
 
       await TestBed.configureTestingModule({
         imports: [VenueGridDesignerComponent],
@@ -135,6 +140,7 @@ describe('VenueGridDesignerComponent', () => {
           provideRouter([]),
           { provide: AdminVenueApiService, useValue: venueApiSpy },
           { provide: MatSnackBar, useValue: snackBarSpy },
+          { provide: MatDialog, useValue: dialogSpy },
           {
             provide: ActivatedRoute,
             useValue: {
@@ -596,16 +602,20 @@ describe('VenueGridDesignerComponent', () => {
     });
 
     describe('Save and Discard workflow', () => {
-      it('should save layout draft and display success notification', () => {
+      it('should save layout draft via one validation POST and one atomic PUT', () => {
         component.onSeatSelectionChanged(new Set(['s-00']));
         component.onBulkActivate(false);
         expect(component.isDirty()).toBeTrue();
 
         component.saveLayout();
 
-        expect(venueApiSpy.saveLayout).toHaveBeenCalled();
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout.calls.mostRecent().args[1]).toEqual(
+          venueApiSpy.validateLayout.calls.mostRecent().args[1],
+        );
         expect(snackBarSpy.open).toHaveBeenCalledWith(
-          'Venue layout saved successfully!',
+          jasmine.stringMatching(/Venue layout saved successfully/),
           'Close',
           jasmine.objectContaining({ panelClass: 'snack-success' }),
         );
@@ -1050,6 +1060,7 @@ describe('VenueGridDesignerComponent', () => {
         expect(history.canUndo()).toBeTrue();
 
         component.saveLayout();
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
         expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
         expect(history.canUndo()).toBeFalse();
         expect(history.canRedo()).toBeFalse();
@@ -1059,6 +1070,7 @@ describe('VenueGridDesignerComponent', () => {
         component.onBulkActivate(false);
         expect(history.canUndo()).toBeTrue();
 
+        venueApiSpy.validateLayout.and.returnValue(of(undefined));
         venueApiSpy.saveLayout.and.returnValue(
           throwError(() => ({ error: { message: 'Conflict' }, message: 'Conflict' })),
         );
@@ -1166,6 +1178,383 @@ describe('VenueGridDesignerComponent', () => {
           component.currentSection()?.seats.find((s) => s.seatId === 's-00')?.isActive,
         ).toBeFalse();
         expect(component.hasPendingChanges()).toBeTrue();
+      });
+    });
+
+    describe('TASK-P11-010: atomic save and stale-version conflict recovery', () => {
+      let history: LayoutHistoryService;
+
+      beforeEach(() => {
+        history = TestBed.inject(LayoutHistoryService);
+        history.clear();
+        editorState.applyServerSnapshot(JSON.parse(JSON.stringify(mockLayout)));
+        history.clear();
+        venueApiSpy.validateLayout.calls.reset();
+        venueApiSpy.saveLayout.calls.reset();
+        venueApiSpy.getEditableLayout.calls.reset();
+        dialogSpy.open.calls.reset();
+        dialogSpy.open.and.returnValue({ afterClosed: () => of(undefined) } as never);
+        venueApiSpy.validateLayout.and.returnValue(of(undefined));
+        venueApiSpy.saveLayout.and.returnValue(of(JSON.parse(JSON.stringify(mockLayout))));
+        fixture.detectChanges();
+      });
+
+      function makeDirty(): void {
+        component.onSeatSelectionChanged(new Set(['s-00']));
+        component.onBulkActivate(false);
+        expect(component.isDirty()).toBeTrue();
+      }
+
+      function staleConflictError(): unknown {
+        return {
+          status: 409,
+          error: {
+            status: 409,
+            error: 'Conflict',
+            errorCode: 'SF_409_CONFLICT',
+            message: 'Stale layout version',
+            path: '/api/admin/venues/v-100/layout',
+            timestamp: '2026-09-05T00:00:00Z',
+            correlationId: 'corr-conflict-1',
+          },
+          message: 'Stale layout version',
+        };
+      }
+
+      it('should suppress duplicate clicks while a save flight is in flight', async () => {
+        const { Subject } = await import('rxjs');
+        const validateGate = new Subject<void>();
+        venueApiSpy.validateLayout.and.returnValue(validateGate.asObservable());
+        makeDirty();
+
+        component.saveLayout();
+        component.saveLayout();
+
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+
+        validateGate.next(undefined);
+        validateGate.complete();
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+      });
+
+      it('should send one immutable snapshot where PUT body equals the validated POST body', async () => {
+        const { Subject } = await import('rxjs');
+        const validateGate = new Subject<void>();
+        venueApiSpy.validateLayout.and.returnValue(validateGate.asObservable());
+        makeDirty();
+        const draftBefore = JSON.stringify(component.sections());
+
+        component.saveLayout();
+        // Attempted edit during the validation flight must not alter the sent snapshot.
+        component.onBulkRenumber(99);
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+
+        validateGate.next(undefined);
+        validateGate.complete();
+
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+        const postBody = venueApiSpy.validateLayout.calls.mostRecent().args[1];
+        const putBody = venueApiSpy.saveLayout.calls.mostRecent().args[1];
+        expect(putBody).toEqual(postBody);
+        expect(putBody.layoutVersion).toBe(1);
+      });
+
+      it('should block local-invalid saves with no HTTP and focus the summary', () => {
+        editorState.replaceDraft((draft) => {
+          const copy = {
+            ...draft.sections[0],
+            sectionId: null,
+            draftKey: 'draft-duplicate-name',
+            name: 'ORCHESTRA',
+          };
+          draft.sections = [...draft.sections, copy];
+          return draft;
+        });
+        venueApiSpy.validateLayout.calls.reset();
+        venueApiSpy.saveLayout.calls.reset();
+
+        component.saveLayout();
+
+        expect(venueApiSpy.validateLayout).not.toHaveBeenCalled();
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(component.validationError()).toMatch(/already exists/);
+      });
+
+      it('should adopt server IDs/version on 200, clear history/dirty, and prune selection', () => {
+        component.onSeatSelectionChanged(new Set(['s-00', 'ghost-seat']));
+        component.onBulkActivate(false);
+        expect(history.canUndo()).toBeTrue();
+
+        const serverLayout = JSON.parse(JSON.stringify(mockLayout)) as VenueLayout;
+        serverLayout.layoutVersion = 2;
+        serverLayout.sections[0].seats[0].seatId = 's-00';
+        venueApiSpy.saveLayout.and.returnValue(of(serverLayout));
+
+        component.saveLayout();
+
+        expect(component.venue()?.layoutVersion).toBe(2);
+        expect(component.isDirty()).toBeFalse();
+        expect(history.canUndo()).toBeFalse();
+        expect(component.selectedSeatKeys().has('ghost-seat')).toBeFalse();
+        expect(snackBarSpy.open).toHaveBeenCalledWith(
+          jasmine.stringMatching(/v2/),
+          'Close',
+          jasmine.objectContaining({ panelClass: 'snack-success' }),
+        );
+      });
+
+      it('should display 400 validation details, issue no PUT, and retain history/baseline', () => {
+        makeDirty();
+        const baselineBefore = JSON.stringify(editorState.baseline());
+        venueApiSpy.validateLayout.and.returnValue(
+          throwError(() => ({
+            status: 400,
+            error: {
+              status: 400,
+              error: 'Bad Request',
+              errorCode: 'SF_400_VALIDATION',
+              message: 'Layout validation failed',
+              path: '/api/admin/venues/v-100/layout/validation',
+              timestamp: '2026-09-05T00:00:00Z',
+              correlationId: 'corr-400-1',
+              validationErrors: [
+                { field: 'sections[0].name', message: 'Section name is required' },
+                { field: 'mystery.field', message: 'Unknown rule violated' },
+              ],
+            },
+          })),
+        );
+
+        component.saveLayout();
+
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(component.serverValidationErrors().length).toBe(2);
+        expect(component.saveCorrelationId()).toBe('corr-400-1');
+        expect(history.canUndo()).toBeTrue();
+        expect(component.isDirty()).toBeTrue();
+        expect(JSON.stringify(editorState.baseline())).toBe(baselineBefore);
+        expect(component.venue()?.layoutVersion).toBe(1);
+
+        fixture.detectChanges();
+        const root: HTMLElement = fixture.nativeElement;
+        expect(root.textContent).toContain('sections[0].name');
+        expect(root.textContent).toContain('corr-400-1');
+      });
+
+      it('should open the conflict dialog on 409 SF_409_CONFLICT with no retry PUT', () => {
+        makeDirty();
+        const draftBefore = JSON.stringify(component.sections());
+        venueApiSpy.saveLayout.and.returnValue(throwError(() => staleConflictError()));
+
+        component.saveLayout();
+
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+        expect(dialogSpy.open).toHaveBeenCalledTimes(1);
+        const dialogArgs = dialogSpy.open.calls.mostRecent().args as unknown as [
+          unknown,
+          { data: { localVersion: number; snapshotJson: string } },
+        ];
+        expect(dialogArgs[1].data.localVersion).toBe(1);
+        expect(dialogArgs[1].data.snapshotJson).toContain('"layoutVersion"');
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+        expect(history.canUndo()).toBeTrue();
+        expect(component.venue()?.layoutVersion).toBe(1);
+      });
+
+      it('should use the generic failure path for 409 with any other error code', () => {
+        makeDirty();
+        venueApiSpy.saveLayout.and.returnValue(
+          throwError(() => ({
+            status: 409,
+            error: {
+              status: 409,
+              error: 'Conflict',
+              errorCode: 'SF_409_SEAT_TAKEN',
+              message: 'Seat already taken',
+              path: '/x',
+              timestamp: '2026-09-05T00:00:00Z',
+            },
+          })),
+        );
+
+        component.saveLayout();
+
+        expect(dialogSpy.open).not.toHaveBeenCalled();
+        expect(component.validationError()).toContain('Seat already taken');
+        expect(history.canUndo()).toBeTrue();
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should replace draft/baseline/history on reload success', () => {
+        makeDirty();
+        expect(history.canUndo()).toBeTrue();
+        const confirmSpy = spyOn(window, 'confirm').and.returnValue(true);
+        const serverLayout = JSON.parse(JSON.stringify(mockLayout)) as VenueLayout;
+        serverLayout.layoutVersion = 5;
+        serverLayout.sections[0].name = 'Server Orchestra';
+        venueApiSpy.getEditableLayout.and.returnValue(of(serverLayout));
+
+        component.reloadServerLayout();
+
+        expect(confirmSpy).toHaveBeenCalled();
+        expect(component.venue()?.layoutVersion).toBe(5);
+        expect(component.currentSection()?.name).toBe('Server Orchestra');
+        expect(history.canUndo()).toBeFalse();
+        expect(component.isDirty()).toBeFalse();
+      });
+
+      it('should retain the local draft when reload fails', () => {
+        makeDirty();
+        const draftBefore = JSON.stringify(component.sections());
+        spyOn(window, 'confirm').and.returnValue(true);
+        venueApiSpy.getEditableLayout.and.returnValue(
+          throwError(() => ({ status: 500, error: { message: 'Reload boom' } })),
+        );
+
+        component.reloadServerLayout();
+
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+        expect(history.canUndo()).toBeTrue();
+        expect(component.validationError()).toContain('Reload boom');
+      });
+
+      it('should render hostile server messages as escaped text without HTML injection', () => {
+        makeDirty();
+        const hostile = '<img src=x onerror=alert(1)>';
+        venueApiSpy.validateLayout.and.returnValue(
+          throwError(() => ({
+            status: 400,
+            error: {
+              status: 400,
+              error: 'Bad Request',
+              errorCode: 'SF_400_VALIDATION',
+              message: hostile,
+              path: '/x',
+              timestamp: '2026-09-05T00:00:00Z',
+              correlationId: 'corr-x',
+              validationErrors: [{ field: 'sections[0].name', message: hostile }],
+            },
+          })),
+        );
+
+        component.saveLayout();
+        fixture.detectChanges();
+
+        const root: HTMLElement = fixture.nativeElement;
+        expect(root.querySelector('img')).toBeNull();
+        expect(root.textContent).toContain('<img src=x onerror=alert(1)>');
+      });
+
+      it('should never increment layoutVersion locally on failed saves', () => {
+        makeDirty();
+        expect(component.venue()?.layoutVersion).toBe(1);
+        venueApiSpy.saveLayout.and.returnValue(throwError(() => staleConflictError()));
+
+        component.saveLayout();
+
+        expect(component.venue()?.layoutVersion).toBe(1);
+        component.undo();
+        expect(component.venue()?.layoutVersion).toBe(1);
+      });
+
+      it('should render duplicate-field 400 violations without @for track errors (REV-001)', () => {
+        makeDirty();
+        venueApiSpy.validateLayout.and.returnValue(
+          throwError(() => ({
+            status: 400,
+            error: {
+              status: 400,
+              error: 'Bad Request',
+              errorCode: 'SF_400_VALIDATION',
+              message: 'Layout validation failed',
+              path: '/api/admin/venues/v-100/layout/validation',
+              timestamp: '2026-09-05T00:00:00Z',
+              correlationId: 'corr-dup-field',
+              validationErrors: [
+                { field: 'sections[0].name', message: 'First violation' },
+                { field: 'sections[0].name', message: 'Second violation' },
+              ],
+            },
+          })),
+        );
+
+        component.saveLayout();
+        fixture.detectChanges();
+
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(component.serverValidationErrors().length).toBe(2);
+        const root: HTMLElement = fixture.nativeElement;
+        expect(root.textContent).toContain('First violation');
+        expect(root.textContent).toContain('Second violation');
+      });
+
+      it('should suppress a second save issued while the PUT flight is pending', async () => {
+        const { Subject } = await import('rxjs');
+        const putGate = new Subject<VenueLayout>();
+        venueApiSpy.validateLayout.and.returnValue(of(undefined));
+        venueApiSpy.saveLayout.and.returnValue(putGate.asObservable());
+        makeDirty();
+
+        component.saveLayout();
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+
+        component.saveLayout();
+        expect(venueApiSpy.validateLayout).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+
+        putGate.next(JSON.parse(JSON.stringify(mockLayout)) as VenueLayout);
+        putGate.complete();
+        expect(venueApiSpy.saveLayout).toHaveBeenCalledTimes(1);
+      });
+
+      it('should take the generic path on validation POST 500 with no PUT and retained draft', () => {
+        makeDirty();
+        const draftBefore = JSON.stringify(component.sections());
+        const baselineBefore = JSON.stringify(editorState.baseline());
+        venueApiSpy.validateLayout.and.returnValue(
+          throwError(() => ({
+            status: 500,
+            error: {
+              status: 500,
+              error: 'Internal Server Error',
+              errorCode: 'SF_500_INTERNAL',
+              message: 'Validation service unavailable',
+              path: '/api/admin/venues/v-100/layout/validation',
+              timestamp: '2026-09-05T00:00:00Z',
+              correlationId: 'corr-500-1',
+            },
+          })),
+        );
+
+        component.saveLayout();
+
+        expect(venueApiSpy.saveLayout).not.toHaveBeenCalled();
+        expect(component.validationError()).toContain('Validation service unavailable');
+        expect(component.saveCorrelationId()).toBe('corr-500-1');
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+        expect(JSON.stringify(editorState.baseline())).toBe(baselineBefore);
+        expect(history.canUndo()).toBeTrue();
+        expect(component.isDirty()).toBeTrue();
+      });
+
+      it('should retain draft and issue no reload on dialog dismiss (Escape/undefined)', () => {
+        makeDirty();
+        const draftBefore = JSON.stringify(component.sections());
+        dialogSpy.open.and.returnValue({ afterClosed: () => of(undefined) } as never);
+        venueApiSpy.saveLayout.and.returnValue(throwError(() => staleConflictError()));
+        venueApiSpy.getEditableLayout.calls.reset();
+
+        component.saveLayout();
+
+        expect(dialogSpy.open).toHaveBeenCalledTimes(1);
+        expect(venueApiSpy.getEditableLayout).not.toHaveBeenCalled();
+        expect(JSON.stringify(component.sections())).toBe(draftBefore);
+        expect(history.canUndo()).toBeTrue();
+        expect(component.venue()?.layoutVersion).toBe(1);
       });
     });
   });
