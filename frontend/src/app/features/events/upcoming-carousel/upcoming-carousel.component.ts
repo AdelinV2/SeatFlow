@@ -16,11 +16,12 @@ import { RouterLink } from '@angular/router';
 import { EventSummary } from '../../../models/event.model';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { MarkdownExcerptPipe } from '../../../shared/pipes/markdown-format.pipe';
 
 @Component({
   selector: 'app-upcoming-carousel',
   standalone: true,
-  imports: [CommonModule, RouterLink, CurrencyFormatPipe, DateFormatPipe],
+  imports: [CommonModule, RouterLink, CurrencyFormatPipe, DateFormatPipe, MarkdownExcerptPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './upcoming-carousel.component.html',
   styleUrl: './upcoming-carousel.component.scss',
