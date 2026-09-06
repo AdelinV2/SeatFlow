@@ -1,0 +1,274 @@
+<section
+  class="analytics-dashboard"
+  aria-labelledby="analytics-dashboard-heading"
+  data-testid="admin-analytics-dashboard"
+>
+  <div class="analytics-dashboard__header">
+    <div>
+      <h2 id="analytics-dashboard-heading" class="analytics-dashboard__title">
+        Analytics Dashboard
+      </h2>
+      <p class="analytics-dashboard__subtitle">
+        Event-driven projections for the default 30-day period. In-range listing rows are
+        range-bound sums; session details are lifetime values.
+      </p>
+    </div>
+    @if (hasNonTestRevenue()) {
+      <span
+        class="analytics-dashboard__test-badge analytics-dashboard__test-badge--unverified"
+        data-testid="payment-mode-unverified-badge"
+        role="note"
+        aria-label="Payment mode unverified: unexpected non-test revenue"
+      >
+        Payment mode unverified — check contract
+      </span>
+    } @else {
+      <span
+        class="analytics-dashboard__test-badge"
+        data-testid="stripe-test-mode-badge"
+        role="note"
+        aria-label="Stripe Test Mode: demo transactions only"
+      >
+        Stripe Test Mode — demo transactions only
+      </span>
+    }
+  </div>
+
+  @if (hasNonTestRevenue()) {
+    <p class="analytics-dashboard__alert" role="alert" data-testid="payment-mode-warning">
+      Unexpected payment mode in analytics revenue. Values are shown grouped by currency, but
+      the Test Mode indicator could not be confirmed for all rows.
+    </p>
+  }
+
+  <p class="analytics-dashboard__freshness" data-testid="freshness-disclosure">
+    Analytics are event-driven and eventually consistent — not real-time transactional truth.
+    @if (freshnessText()) {
+      <span>Last projected event: {{ freshnessText() }}</span>
+    } @else {
+      <span>No projected events yet</span>
+    }
+  </p>
+
+  <!-- KPI summary -->
+  <div class="analytics-dashboard__block" data-testid="summary-widget">
+    <h3 class="analytics-dashboard__block-title">Key performance indicators</h3>
+    @if (summaryState() === 'loading' || summaryState() === 'idle') {
+      <div class="analytics-dashboard__grid" aria-busy="true" aria-label="Loading summary">
+        @for (i of [1,2,3,4,5,6]; track i) {
+          <div class="analytics-dashboard__card">
+            <app-skeleton-loader height="16px" width="55%" label="Loading KPI label" />
+            <app-skeleton-loader height="28px" width="40%" label="Loading KPI value" />
+            <app-skeleton-loader height="14px" width="70%" label="Loading KPI detail" />
+          </div>
+        }
+      </div>
+    } @else if (summaryState() === 'error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="summary-error">
+        <p>Analytics summary is unavailable right now.</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadSummary()">
+          Retry summary
+        </button>
+      </div>
+    } @else if (summary() && summaryIsEmpty()) {
+      <div class="analytics-dashboard__state" role="status" data-testid="summary-empty">
+        <p>No analytics data in this period.</p>
+      </div>
+    } @else if (summary()) {
+      @let s = summary()!;
+      <div class="analytics-dashboard__grid">
+        <div class="analytics-dashboard__card" data-testid="kpi-reservations-created">
+          <span class="analytics-dashboard__label">Reservations created</span>
+          <span class="analytics-dashboard__value">{{ s.reservations.created | number }}</span>
+          <span class="analytics-dashboard__detail">In-range count</span>
+        </div>
+        <div class="analytics-dashboard__card" data-testid="kpi-conversion">
+          <span class="analytics-dashboard__label">Reservation → payment conversion</span>
+          <span class="analytics-dashboard__value">{{ formatRate(s.rates.reservationToPayment) }}</span>
+          <span class="analytics-dashboard__detail">{{ rateDetail(s.rates.reservationToPayment) }}</span>
+        </div>
+        <div class="analytics-dashboard__card" data-testid="kpi-expiration">
+          <span class="analytics-dashboard__label">Expiration rate ({{ s.reservations.expired | number }} expired)</span>
+          <span class="analytics-dashboard__value">{{ formatRate(s.rates.expiration) }}</span>
+          <span class="analytics-dashboard__detail">{{ rateDetail(s.rates.expiration) }}</span>
+        </div>
+        <div class="analytics-dashboard__card" data-testid="kpi-tickets-issued">
+          <span class="analytics-dashboard__label">Tickets issued</span>
+          <span class="analytics-dashboard__value">{{ s.tickets.issued | number }}</span>
+          <span class="analytics-dashboard__detail">{{ s.tickets.scanned | number }} scanned · {{ s.tickets.revoked | number }} revoked</span>
+        </div>
+        <div class="analytics-dashboard__card" data-testid="kpi-refund">
+          <span class="analytics-dashboard__label">Refund rate ({{ s.payments.refundsCompleted | number }} completed)</span>
+          <span class="analytics-dashboard__value">{{ formatRate(s.rates.refund) }}</span>
+          <span class="analytics-dashboard__detail">{{ rateDetail(s.rates.refund) }}</span>
+        </div>
+        <div class="analytics-dashboard__card" data-testid="kpi-payments">
+          <span class="analytics-dashboard__label">Payments succeeded</span>
+          <span class="analytics-dashboard__value">{{ s.payments.succeeded | number }}</span>
+          <span class="analytics-dashboard__detail">{{ s.payments.withFailure | number }} with failure evidence</span>
+        </div>
+      </div>
+
+      <h4 class="analytics-dashboard__block-subtitle">Revenue by currency</h4>
+      @if (s.payments.revenueByCurrency.length === 0) {
+        <div class="analytics-dashboard__state" role="status" data-testid="revenue-empty">
+          <p>No revenue in this period.</p>
+        </div>
+      } @else {
+        <div class="analytics-dashboard__grid" data-testid="revenue-groups">
+          @for (m of s.payments.revenueByCurrency; track m.currency) {
+            <div class="analytics-dashboard__card" [attr.data-testid]="'revenue-' + m.currency">
+              <span class="analytics-dashboard__label">Net revenue ({{ m.currency }})</span>
+              <span class="analytics-dashboard__value">{{ formatMoney(m.netMinor, m.currency) }}</span>
+              <span class="analytics-dashboard__detail">
+                Gross {{ formatMoney(m.grossMinor, m.currency) }} ·
+                Refunded {{ formatMoney(m.refundedMinor, m.currency) }}
+              </span>
+              @if (m.testMode === true) {
+                <span class="analytics-dashboard__mini-badge">Stripe Test Mode</span>
+              } @else {
+                <span class="analytics-dashboard__mini-badge analytics-dashboard__mini-badge--unverified">Payment mode unverified</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Trend -->
+  <div class="analytics-dashboard__block" data-testid="trend-widget">
+    <h3 class="analytics-dashboard__block-title">Daily trend</h3>
+    <div class="analytics-dashboard__metric-picker" role="group" aria-label="Trend metric">
+      @for (metric of trendMetricOptions; track metric) {
+        <button
+          type="button"
+          class="analytics-dashboard__metric-btn"
+          [class.analytics-dashboard__metric-btn--active]="metric === selectedTrendMetric()"
+          [attr.aria-pressed]="metric === selectedTrendMetric()"
+          (click)="selectTrendMetric(metric)"
+        >
+          {{ metric }}
+        </button>
+      }
+    </div>
+    @if (trendState() === 'loading' || trendState() === 'idle') {
+      <div aria-busy="true" aria-label="Loading trend">
+        <app-skeleton-loader height="220px" width="100%" label="Loading trend chart" />
+      </div>
+    } @else if (trendState() === 'error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="trend-error">
+        <p>Trend data is unavailable right now.</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadTrend()">
+          Retry trend
+        </button>
+      </div>
+    } @else if (trend()) {
+      <app-analytics-line-chart
+        [seriesList]="trend()!.series"
+        [chartTitle]="selectedTrendMetric() + ' daily trend'"
+        chartDescription="Zero-filled daily analytics series for the selected metric."
+        [formatValue]="formatChartValue"
+      />
+    }
+  </div>
+
+  <!-- Sessions -->
+  <div class="analytics-dashboard__block" data-testid="sessions-widget">
+    <h3 class="analytics-dashboard__block-title">Session performance (in-range sums)</h3>
+    @if (sessionsState() === 'loading' || sessionsState() === 'idle') {
+      <div class="analytics-dashboard__table-wrap" aria-busy="true" aria-label="Loading sessions">
+        <app-skeleton-loader height="20px" width="100%" [lines]="5" label="Loading session rows" />
+      </div>
+    } @else if (sessionsState() === 'error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="sessions-error">
+        <p>Session analytics are unavailable right now. Summary and trend data above are unaffected.</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadSessions()">
+          Retry sessions
+        </button>
+      </div>
+    } @else if (sessions() && sessions()!.content.length === 0) {
+      <div class="analytics-dashboard__state" role="status" data-testid="sessions-empty">
+        <p>No sessions in this period.</p>
+      </div>
+    } @else if (sessions()) {
+      <div class="analytics-dashboard__table-wrap">
+        <table class="analytics-dashboard__table">
+          <caption class="analytics-dashboard__sr-only">
+            In-range session performance. Occupancy and attendance show an em dash when unavailable.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Event / session</th>
+              <th scope="col">Starts at</th>
+              <th scope="col">Reservations (confirmed / expired)</th>
+              <th scope="col">Tickets (issued / scanned / revoked)</th>
+              <th scope="col">Payments (success / failure / refunds)</th>
+              <th scope="col">Revenue by currency</th>
+              <th scope="col">Occupancy</th>
+              <th scope="col">Attendance</th>
+              <th scope="col">Projection recency</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of sessions()!.content; track row.eventSessionId) {
+              <tr [attr.data-testid]="'session-' + row.eventSessionId">
+                <td>
+                  <span class="analytics-dashboard__cell-main">{{ sessionLabel(row) }}</span>
+                  <span class="analytics-dashboard__cell-sub">{{ shortenId(row.eventSessionId) }}</span>
+                </td>
+                <td>{{ row.startsAt ?? '—' }}</td>
+                <td>
+                  {{ row.reservationsCreated | number }} created ·
+                  {{ row.reservationsConfirmed | number }} confirmed ·
+                  {{ row.reservationsExpired | number }} expired
+                </td>
+                <td>
+                  {{ row.ticketsIssued | number }} issued ·
+                  {{ row.ticketsScanned | number }} scanned ·
+                  {{ row.ticketsRevoked | number }} revoked
+                </td>
+                <td>
+                  {{ row.paymentsSucceeded | number }} succeeded ·
+                  {{ row.paymentsWithFailure | number }} with failure ·
+                  {{ row.refundsCompleted | number }} refunds
+                </td>
+                <td>
+                  @if (revenueFor(row).length === 0) {
+                    <span>—</span>
+                  } @else {
+                    @for (m of revenueFor(row); track m.currency) {
+                      <span class="analytics-dashboard__money">
+                        {{ m.currency }}: {{ formatMoney(m.netMinor, m.currency) }}
+                        @if (m.testMode === true) {
+                          <span class="analytics-dashboard__mini-badge">Test</span>
+                        } @else {
+                          <span class="analytics-dashboard__mini-badge analytics-dashboard__mini-badge--unverified">Payment mode unverified</span>
+                        }
+                      </span>
+                    }
+                  }
+                </td>
+                <td>
+                  @if (row.occupancyRatio === null || row.occupancyRatio === undefined) {
+                    <span aria-label="Occupancy unavailable">—</span>
+                  } @else {
+                    <span>{{ formatRatio(row.occupancyRatio) }}</span>
+                  }
+                </td>
+                <td>
+                  @if (row.attendanceRatio === null || row.attendanceRatio === undefined) {
+                    <span aria-label="Attendance unavailable">—</span>
+                  } @else {
+                    <span>{{ formatRatio(row.attendanceRatio) }}</span>
+                  }
+                </td>
+                <td>{{ row.lastProjectedEventAt ?? '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>

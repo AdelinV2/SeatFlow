@@ -15,6 +15,7 @@ import { SystemHealthService } from '../../../services/system-health.service';
 import { VenueSummary } from '../../../models/venue.model';
 import { UserProfile } from '../../../models/user.model';
 import { SkeletonLoaderComponent } from '../../../shared/components/skeleton-loader/skeleton-loader.component';
+import { AdminAnalyticsDashboardComponent } from '../analytics/admin-analytics-dashboard/admin-analytics-dashboard.component';
 
 @Component({
   selector: 'app-admin-portal',
@@ -23,6 +24,7 @@ import { SkeletonLoaderComponent } from '../../../shared/components/skeleton-loa
     CommonModule,
     RouterModule,
     SkeletonLoaderComponent,
+    AdminAnalyticsDashboardComponent,
   ],
   templateUrl: './admin-portal.component.html',
   styleUrl: './admin-portal.component.scss',
