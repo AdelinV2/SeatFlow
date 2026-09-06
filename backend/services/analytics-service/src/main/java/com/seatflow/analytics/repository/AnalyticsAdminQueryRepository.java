@@ -193,6 +193,50 @@ public class AnalyticsAdminQueryRepository {
     }
 
     // ------------------------------------------------------------------
+    // CSV export capped retrieval (TASK-P14-006 REV-001): bounded loads so a
+    // concurrent projection commit between the preflight counts and retrieval
+    // cannot produce an over-limit response. Callers request at most
+    // {@code limit} rows and reject when the actually loaded union exceeds the
+    // export bound before any response bytes are built.
+    // ------------------------------------------------------------------
+
+    /** Bounded operational grains for CSV export (at most {@code limit} rows). */
+    public List<DailyOperationalMetric> findOperationalRowsCapped(
+            LocalDate from, LocalDate to, UUID eventId, UUID eventSessionId, int limit) {
+        return entityManager.createQuery("""
+                SELECT d FROM DailyOperationalMetric d
+                WHERE d.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR d.eventId = :e)
+                  AND (:s IS NULL OR d.eventSessionId = :s)
+                ORDER BY d.metricDate ASC
+                """, DailyOperationalMetric.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .setParameter("s", eventSessionId)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+
+    /** Bounded revenue grains for CSV export (at most {@code limit} rows). */
+    public List<DailyRevenueMetric> findRevenueRowsCapped(
+            LocalDate from, LocalDate to, UUID eventId, UUID eventSessionId, int limit) {
+        return entityManager.createQuery("""
+                SELECT r FROM DailyRevenueMetric r
+                WHERE r.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR r.eventId = :e)
+                  AND (:s IS NULL OR r.eventSessionId = :s)
+                ORDER BY r.metricDate ASC, r.currency ASC
+                """, DailyRevenueMetric.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .setParameter("s", eventSessionId)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+
+    // ------------------------------------------------------------------
     // Session paging: distinct in-range sessions first, then batched enrichment
     // ------------------------------------------------------------------
 
@@ -367,6 +411,137 @@ public class AnalyticsAdminQueryRepository {
                 .map(row -> new SessionRevenueRow((UUID) row[0], (String) row[1],
                         toLong(row[2]), toLong(row[3]), toLong(row[4]), toLong(row[5])))
                 .toList();
+    }
+
+    // ------------------------------------------------------------------
+    // Filter options (TASK-P14-006 §6.1–§6.3): projected values relevant to the range,
+    // sourced from analytics facts/aggregates only — never an Event Service fanout.
+    //
+    // Display snapshots come from analytics_session_facts via an explicit entity join,
+    // so sessions/dates without a projected fact still appear with null labels instead
+    // of vanishing. Callers pass a 501 probe limit, keep the first 500, and report
+    // truncation from the exact bounded count below.
+    // ------------------------------------------------------------------
+
+    /** One projected event candidate with analytics-owned display snapshots. */
+    public record EventOptionRow(UUID eventId, String label, Instant firstStart) {
+    }
+
+    /**
+     * Projected events with operational rows in range, ordered by
+     * {@code COALESCE(label, '') ASC, eventId ASC}.
+     */
+    public List<EventOptionRow> findEventOptions(LocalDate from, LocalDate to, int limit) {
+        return entityManager.createQuery("""
+                SELECT d.eventId, MIN(f.eventTitle), MIN(f.startsAt)
+                FROM DailyOperationalMetric d LEFT JOIN AnalyticsSessionFact f
+                  ON f.eventSessionId = d.eventSessionId
+                WHERE d.metricDate BETWEEN :from AND :to
+                GROUP BY d.eventId
+                ORDER BY COALESCE(MIN(f.eventTitle), '') ASC, d.eventId ASC
+                """, Object[].class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setMaxResults(limit)
+                .getResultList()
+                .stream()
+                .map(row -> new EventOptionRow((UUID) row[0], (String) row[1], (Instant) row[2]))
+                .toList();
+    }
+
+    /** Exact number of projected events with operational rows in range. */
+    public long countEventOptions(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("""
+                SELECT COUNT(DISTINCT d.eventId) FROM DailyOperationalMetric d
+                WHERE d.metricDate BETWEEN :from AND :to
+                """, Long.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getSingleResult();
+    }
+
+    /** One projected session candidate with analytics-owned display snapshots. */
+    public record SessionOptionRow(
+            UUID eventSessionId, UUID eventId, String label, Instant startsAt) {
+    }
+
+    /**
+     * Projected sessions with operational rows in range (and optional event scope),
+     * ordered by {@code startsAt ASC NULLS LAST, eventSessionId ASC}.
+     *
+     * <p>An unknown event scope matches nothing, so callers answer {@code 200} with an
+     * empty envelope rather than an error.
+     */
+    public List<SessionOptionRow> findSessionOptions(
+            LocalDate from, LocalDate to, UUID eventId, int limit) {
+        return entityManager.createQuery("""
+                SELECT d.eventSessionId, MAX(d.eventId), MIN(f.sessionLabel), MIN(f.startsAt)
+                FROM DailyOperationalMetric d LEFT JOIN AnalyticsSessionFact f
+                  ON f.eventSessionId = d.eventSessionId
+                WHERE d.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR d.eventId = :e)
+                GROUP BY d.eventSessionId
+                ORDER BY MIN(f.startsAt) ASC NULLS LAST, d.eventSessionId ASC
+                """, Object[].class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .setMaxResults(limit)
+                .getResultList()
+                .stream()
+                .map(row -> new SessionOptionRow(
+                        (UUID) row[0], (UUID) row[1], (String) row[2], (Instant) row[3]))
+                .toList();
+    }
+
+    /** Exact number of projected sessions with operational rows in range and scope. */
+    public long countSessionOptions(LocalDate from, LocalDate to, UUID eventId) {
+        return entityManager.createQuery("""
+                SELECT COUNT(DISTINCT d.eventSessionId) FROM DailyOperationalMetric d
+                WHERE d.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR d.eventId = :e)
+                """, Long.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .getSingleResult();
+    }
+
+    // ------------------------------------------------------------------
+    // CSV export bounds (TASK-P14-006 §6.9): exact union size before any
+    // streaming so oversized exports fail with no partial file.
+    // ------------------------------------------------------------------
+
+    /** Exact number of operational grains matching the export filters. */
+    public long countOperationalRows(
+            LocalDate from, LocalDate to, UUID eventId, UUID eventSessionId) {
+        return entityManager.createQuery("""
+                SELECT COUNT(d) FROM DailyOperationalMetric d
+                WHERE d.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR d.eventId = :e)
+                  AND (:s IS NULL OR d.eventSessionId = :s)
+                """, Long.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .setParameter("s", eventSessionId)
+                .getSingleResult();
+    }
+
+    /** Exact number of revenue grains matching the export filters. */
+    public long countRevenueRows(
+            LocalDate from, LocalDate to, UUID eventId, UUID eventSessionId) {
+        return entityManager.createQuery("""
+                SELECT COUNT(r) FROM DailyRevenueMetric r
+                WHERE r.metricDate BETWEEN :from AND :to
+                  AND (:e IS NULL OR r.eventId = :e)
+                  AND (:s IS NULL OR r.eventSessionId = :s)
+                """, Long.class)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .setParameter("e", eventId)
+                .setParameter("s", eventSessionId)
+                .getSingleResult();
     }
 
     // ------------------------------------------------------------------

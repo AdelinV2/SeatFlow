@@ -4,6 +4,9 @@ import com.seatflow.analytics.model.enums.AnalyticsSessionSort;
 import com.seatflow.analytics.model.enums.AnalyticsTimeseriesMetric;
 import com.seatflow.analytics.model.enums.AnalyticsTopMetric;
 import com.seatflow.analytics.web.dto.request.AnalyticsDateRange;
+import com.seatflow.analytics.web.dto.response.AnalyticsEventFilterOptionResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsFilterOptionsResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsSessionFilterOptionResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsSummaryResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsTimeSeriesResponse;
 import com.seatflow.analytics.web.dto.response.EventSessionAnalyticsResponse;
@@ -37,4 +40,10 @@ public interface AdminAnalyticsQueryService {
     List<TopAnalyticsItemResponse> getTop(
             AnalyticsDateRange range, UUID eventId,
             AnalyticsTopMetric metric, int limit, String currency);
+
+    AnalyticsFilterOptionsResponse<AnalyticsEventFilterOptionResponse> getEventFilterOptions(
+            AnalyticsDateRange range);
+
+    AnalyticsFilterOptionsResponse<AnalyticsSessionFilterOptionResponse> getSessionFilterOptions(
+            AnalyticsDateRange range, UUID eventId);
 }

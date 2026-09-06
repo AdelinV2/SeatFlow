@@ -2,8 +2,10 @@ package com.seatflow.analytics.web;
 
 import com.seatflow.analytics.config.SecurityConfig;
 import com.seatflow.analytics.service.AdminAnalyticsQueryService;
+import com.seatflow.analytics.service.AnalyticsCsvExportService;
 import com.seatflow.analytics.web.controller.AdminAnalyticsController;
 import com.seatflow.analytics.web.dto.request.AnalyticsDateRange;
+import com.seatflow.analytics.web.dto.response.AnalyticsFilterOptionsResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsSummaryResponse;
 import com.seatflow.common.domain.dto.PagedResult;
 import com.seatflow.common.domain.enums.ErrorCode;
@@ -66,6 +68,9 @@ class AdminAnalyticsControllerTest {
     private AdminAnalyticsQueryService queryService;
 
     @MockitoBean
+    private AnalyticsCsvExportService csvExportService;
+
+    @MockitoBean
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
@@ -85,6 +90,12 @@ class AdminAnalyticsControllerTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/admin/analytics/top").param("metric", "NET_REVENUE"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/analytics/filter-options/events"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/analytics/filter-options/sessions"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/analytics/export/daily.csv"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -96,6 +107,12 @@ class AdminAnalyticsControllerTest {
                         .with(user("staff").roles(SecurityRoles.STAFF)))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/admin/analytics/sessions/{id}", SESSION_ID)
+                        .with(user("customer").roles(SecurityRoles.CUSTOMER)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/admin/analytics/filter-options/events")
+                        .with(user("staff").roles(SecurityRoles.STAFF)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/admin/analytics/export/daily.csv")
                         .with(user("customer").roles(SecurityRoles.CUSTOMER)))
                 .andExpect(status().isForbidden());
     }
@@ -273,6 +290,84 @@ class AdminAnalyticsControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode")
                         .value(ErrorCode.RESOURCE_NOT_FOUND.getCode()));
+    }
+
+    // ------------------------------------------------------------------
+    // TASK-P14-006: filter options + CSV export boundary
+    // ------------------------------------------------------------------
+
+    @Test
+    void shouldExecuteFilterAndExportEndpointsForAdmin() throws Exception {
+        when(queryService.getEventFilterOptions(any()))
+                .thenReturn(AnalyticsFilterOptionsResponse.empty());
+        when(queryService.getSessionFilterOptions(any(), any()))
+                .thenReturn(AnalyticsFilterOptionsResponse.empty());
+        when(csvExportService.exportDailyCsv(any(), any(), any()))
+                .thenReturn("row_type,metric_date\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        mockMvc.perform(get("/api/admin/analytics/filter-options/events")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.truncated").value(false))
+                .andExpect(jsonPath("$.totalProjected").value(0));
+
+        mockMvc.perform(get("/api/admin/analytics/filter-options/sessions")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isArray());
+
+        mockMvc.perform(get("/api/admin/analytics/export/daily.csv")
+                        .param("from", "2026-09-05")
+                        .param("to", "2026-09-06")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(
+                        result.getResponse().getContentType()).startsWith("text/csv"))
+                .andExpect(result -> assertThat(result.getResponse()
+                        .getHeader("Content-Disposition"))
+                        .contains("seatflow-analytics-2026-09-05-2026-09-06.csv"));
+    }
+
+    @Test
+    void shouldValidateDateRangeOnFilterAndExportEndpoints() throws Exception {
+        mockMvc.perform(get("/api/admin/analytics/filter-options/events")
+                        .param("from", "2026-09-06")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode")
+                        .value(ErrorCode.INVALID_ANALYTICS_DATE_RANGE.getCode()));
+
+        mockMvc.perform(get("/api/admin/analytics/export/daily.csv")
+                        .param("from", "2025-09-05")
+                        .param("to", "2026-09-06")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode")
+                        .value(ErrorCode.ANALYTICS_DATE_RANGE_TOO_LARGE.getCode()));
+
+        mockMvc.perform(get("/api/admin/analytics/filter-options/sessions")
+                        .param("eventId", "not-a-uuid")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode")
+                        .value(ErrorCode.INVALID_REQUEST.getCode()));
+    }
+
+    @Test
+    void shouldPropagateExportTooLargeWithoutPartialBody() throws Exception {
+        when(csvExportService.exportDailyCsv(any(), any(), any()))
+                .thenThrow(new ValidationException(
+                        "Analytics export matches 10001 rows", ErrorCode.ANALYTICS_EXPORT_TOO_LARGE));
+
+        mockMvc.perform(get("/api/admin/analytics/export/daily.csv")
+                        .param("from", "2026-09-05")
+                        .param("to", "2026-09-06")
+                        .with(user("admin").roles(SecurityRoles.ADMIN)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode")
+                        .value(ErrorCode.ANALYTICS_EXPORT_TOO_LARGE.getCode()))
+                .andExpect(result -> assertThat(
+                        result.getResponse().getContentAsString()).doesNotContain("row_type"));
     }
 
     private static AnalyticsSummaryResponse emptySummary() {

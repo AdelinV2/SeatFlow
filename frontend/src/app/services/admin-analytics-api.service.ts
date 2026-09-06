@@ -1,15 +1,117 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams, HttpResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { catchError, from, mergeMap, Observable, throwError } from 'rxjs';
 import { PagedResult } from '../models/event.model';
+import { ApiErrorResponse } from '../models/api-error.model';
 import {
+  AnalyticsEventFilterOptions,
   AnalyticsMetric,
   AnalyticsQueryParams,
+  AnalyticsSessionFilterOptions,
   AnalyticsSessionQueryParams,
   AnalyticsSummary,
   AnalyticsTimeSeries,
   EventSessionAnalytics,
 } from '../models/admin-analytics.model';
+
+/**
+ * Narrow an unknown error payload to the shared `ApiErrorResponse` envelope.
+ * Returns null for Blobs (async decode via `decodeExportErrorBody`), malformed
+ * JSON, or any shape without a string `errorCode` — callers fall back safely.
+ */
+export function asApiErrorEnvelope(value: unknown): ApiErrorResponse | null {
+  if (!value || typeof value !== 'object' || value instanceof Blob) {
+    return null;
+  }
+  const code = (value as { errorCode?: unknown }).errorCode;
+  if (typeof code !== 'string' || code === '') {
+    return null;
+  }
+  return value as ApiErrorResponse;
+}
+
+/**
+ * Decode a CSV-export error body, which the browser delivers as a `Blob`
+ * because the request uses `responseType: 'blob'`. Resolves to the validated
+ * envelope, or null when the body is missing/malformed/non-JSON.
+ */
+export function decodeExportErrorBody(error: unknown): Promise<ApiErrorResponse | null> {
+  if (!(error instanceof Blob)) {
+    return Promise.resolve(asApiErrorEnvelope(error));
+  }
+  return error.text().then(
+    (text) => {
+      if (!text) {
+        return null;
+      }
+      try {
+        return asApiErrorEnvelope(JSON.parse(text) as unknown);
+      } catch {
+        return null;
+      }
+    },
+    () => null,
+  );
+}
+
+/**
+ * Re-throw a CSV-export failure with a decoded `Blob` JSON error body, so
+ * downstream mapping (e.g. `ANALYTICS_EXPORT_TOO_LARGE`) sees the stable
+ * error code. Malformed bodies pass through untouched for a safe fallback.
+ */
+function withDecodedExportError(err: unknown): Observable<never> {
+  if (err instanceof HttpErrorResponse && err.error instanceof Blob) {
+    return from(decodeExportErrorBody(err.error)).pipe(
+      mergeMap((parsed) =>
+        throwError(() =>
+          parsed
+            ? new HttpErrorResponse({
+                error: parsed,
+                headers: err.headers,
+                status: err.status,
+                statusText: err.statusText,
+                url: err.url ?? undefined,
+              })
+            : err,
+        ),
+      ),
+    );
+  }
+  return throwError(() => err);
+}
+
+/**
+ * Parse a `Content-Disposition` attachment filename defensively.
+ * Returns the `fallback` when the header is missing, unparsable, or unsafe
+ * (path segments, control characters, reserved filename characters).
+ */
+export function resolveAnalyticsExportFilename(
+  response: HttpResponse<Blob>,
+  fallback: string,
+): string {
+  const header = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename\*?\s*=\s*(?:"([^"]+)"|([^;,\s]+))/i.exec(header);
+  let raw = (match?.[1] ?? match?.[2] ?? '').trim().replace(/^UTF-8''/i, '');
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    // Keep the raw value; sanitization below still applies.
+  }
+  // A trusted server filename is a bare name: any path separator, reserved
+  // character, or control character rejects the header in favor of the fallback.
+  if (
+    raw === '' ||
+    raw === '.' ||
+    raw === '..' ||
+    raw.includes('/') ||
+    raw.includes('\\') ||
+    // eslint-disable-next-line no-control-regex
+    /[<>:"|?*\x00-\x1f]/.test(raw)
+  ) {
+    return fallback;
+  }
+  return raw;
+}
 
 @Injectable({ providedIn: 'root' })
 export class AdminAnalyticsApiService {
@@ -56,6 +158,34 @@ export class AdminAnalyticsApiService {
 
   getSession(sessionId: string): Observable<EventSessionAnalytics> {
     return this.http.get<EventSessionAnalytics>(`${this.baseUrl}/sessions/${sessionId}`);
+  }
+
+  getEventFilterOptions(params?: AnalyticsQueryParams): Observable<AnalyticsEventFilterOptions> {
+    return this.http.get<AnalyticsEventFilterOptions>(
+      `${this.baseUrl}/filter-options/events`,
+      { params: this.buildRangeParams(params) },
+    );
+  }
+
+  getSessionFilterOptions(params?: AnalyticsQueryParams): Observable<AnalyticsSessionFilterOptions> {
+    return this.http.get<AnalyticsSessionFilterOptions>(
+      `${this.baseUrl}/filter-options/sessions`,
+      { params: this.buildRangeParams(params) },
+    );
+  }
+
+  /**
+   * Request the server-built CSV for the **applied** filters. The full export is
+   * generated server-side; the dashboard never builds CSV from the table page.
+   */
+  exportDailyCsv(params?: AnalyticsQueryParams): Observable<HttpResponse<Blob>> {
+    return this.http
+      .get(`${this.baseUrl}/export/daily.csv`, {
+        params: this.buildRangeParams(params),
+        observe: 'response',
+        responseType: 'blob',
+      })
+      .pipe(catchError((err: unknown) => withDecodedExportError(err)));
   }
 
   private buildRangeParams(params?: AnalyticsQueryParams): HttpParams {

@@ -4,7 +4,11 @@ import com.seatflow.analytics.model.enums.AnalyticsSessionSort;
 import com.seatflow.analytics.model.enums.AnalyticsTimeseriesMetric;
 import com.seatflow.analytics.model.enums.AnalyticsTopMetric;
 import com.seatflow.analytics.service.AdminAnalyticsQueryService;
+import com.seatflow.analytics.service.AnalyticsCsvExportService;
 import com.seatflow.analytics.web.dto.request.AnalyticsDateRange;
+import com.seatflow.analytics.web.dto.response.AnalyticsEventFilterOptionResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsFilterOptionsResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsSessionFilterOptionResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsSummaryResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsTimeSeriesResponse;
 import com.seatflow.analytics.web.dto.response.EventSessionAnalyticsResponse;
@@ -21,6 +25,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -61,6 +69,7 @@ import java.util.UUID;
 public class AdminAnalyticsController {
 
     private final AdminAnalyticsQueryService queryService;
+    private final AnalyticsCsvExportService csvExportService;
     private final Clock analyticsClock;
 
     @GetMapping("/summary")
@@ -215,6 +224,92 @@ public class AdminAnalyticsController {
         AnalyticsDateRange range = resolveRange(from, to);
         return ResponseEntity.ok(queryService.getTop(
                 range, eventId, AnalyticsTopMetric.parse(metric), limit, currency));
+    }
+
+    @GetMapping("/filter-options/events")
+    @Operation(summary = "List projected event filter options",
+            description = "Bounded (max 500) projected events relevant to the UTC range, sourced "
+                    + "from analytics facts only — no Event Service fanout. Labels may be null; "
+                    + "the dashboard falls back to event IDs.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Options retrieved",
+                content = @Content(schema = @Schema(implementation = AnalyticsFilterOptionsResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Authentication required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "403", description = "ADMIN role required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<AnalyticsFilterOptionsResponse<AnalyticsEventFilterOptionResponse>> getEventFilterOptions(
+            @Parameter(description = "Inclusive start date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String from,
+            @Parameter(description = "Inclusive end date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String to) {
+        AnalyticsDateRange range = resolveRange(from, to);
+        return ResponseEntity.ok(queryService.getEventFilterOptions(range));
+    }
+
+    @GetMapping("/filter-options/sessions")
+    @Operation(summary = "List projected session filter options",
+            description = "Bounded (max 500) projected sessions relevant to the UTC range and "
+                    + "optional event scope, sourced from analytics facts only. An unknown event "
+                    + "answers 200 with an empty envelope.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Options retrieved",
+                content = @Content(schema = @Schema(implementation = AnalyticsFilterOptionsResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid date range",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Authentication required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "403", description = "ADMIN role required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<AnalyticsFilterOptionsResponse<AnalyticsSessionFilterOptionResponse>> getSessionFilterOptions(
+            @Parameter(description = "Inclusive start date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String from,
+            @Parameter(description = "Inclusive end date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String to,
+            @Parameter(description = "Optional event scope; unknown IDs yield an empty envelope")
+            @RequestParam(required = false) UUID eventId) {
+        AnalyticsDateRange range = resolveRange(from, to);
+        return ResponseEntity.ok(queryService.getSessionFilterOptions(range, eventId));
+    }
+
+    @GetMapping(value = "/export/daily.csv", produces = "text/csv;charset=UTF-8")
+    @Operation(summary = "Export daily analytics as CSV",
+            description = "Bounded (max 10_000 rows) long-form union of currency-neutral "
+                    + "OPERATIONS grains and currency-specific REVENUE grains. Oversized exports "
+                    + "fail with ANALYTICS_EXPORT_TOO_LARGE and no partial file. Filename is "
+                    + "server-generated from the validated dates.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "CSV export generated",
+                content = @Content(mediaType = "text/csv")),
+        @ApiResponse(responseCode = "400", description = "Invalid date range or oversized export",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Authentication required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+        @ApiResponse(responseCode = "403", description = "ADMIN role required",
+                content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<byte[]> exportDailyCsv(
+            @Parameter(description = "Inclusive start date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String from,
+            @Parameter(description = "Inclusive end date (YYYY-MM-DD, UTC)")
+            @RequestParam(required = false) String to,
+            @Parameter(description = "Optional event filter")
+            @RequestParam(required = false) UUID eventId,
+            @Parameter(description = "Optional session filter; may be supplied without eventId")
+            @RequestParam(required = false) UUID eventSessionId) {
+        AnalyticsDateRange range = resolveRange(from, to);
+        byte[] csv = csvExportService.exportDailyCsv(range, eventId, eventSessionId);
+        String filename = "seatflow-analytics-" + range.from() + "-" + range.to() + ".csv";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(new MediaType("text", "csv", StandardCharsets.UTF_8));
+        headers.setContentDisposition(
+                ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
+        headers.setContentLength(csv.length);
+        return ResponseEntity.ok().headers(headers).body(csv);
     }
 
     private AnalyticsDateRange resolveRange(String from, String to) {
