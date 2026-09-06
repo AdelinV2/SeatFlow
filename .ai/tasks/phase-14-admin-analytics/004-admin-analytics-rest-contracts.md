@@ -17,7 +17,7 @@
 - **Verification Strength:** `Strong`
 - **Required Review Depth:** `Critical`
 - **Preferred Workflow:** `critical`
-- **Affected Critical Invariants:** `ADMIN authorization; money correctness; multi-currency isolation; bounded queries; eventual-consistency disclosure; no PII; no source-service fanout`
+- **Affected Critical Invariants:** `ADMIN authorization; money correctness; multi-currency isolation; aggregate-grain correctness; bounded queries; eventual-consistency disclosure; no PII; no source-service fanout`
 
 ---
 
@@ -25,17 +25,18 @@
 
 Expose stable, server-authorized, bounded REST endpoints under `/api/admin/analytics/**` for the Angular admin dashboard.
 
-The API must make analytics semantics explicit rather than returning generic maps or frontend-computed business definitions. It must expose:
+The API must expose:
 
 - KPI summary and cohort rates;
 - daily time series;
 - paginated event-session operational metrics;
-- top event/session ranking;
+- per-session currency-separated revenue;
+- top event/session rankings;
 - projection freshness metadata.
 
-All results come solely from `seatflow_analytics`. No endpoint may synchronously fan out to Event, Reservation, Payment, Ticket, Seat Map, Grafana, or another service to complete a response.
+All results come solely from `seatflow_analytics`. No endpoint may synchronously fan out to Event, Reservation, Payment, Ticket, Seat Map, Grafana, or another service.
 
-CSV/filter helper endpoints belong to P14-006.
+P14-001/P14-003 deliberately separate **currency-neutral operational aggregates** from **currency-keyed financial aggregates**. This API must preserve that boundary: operational counts are read once; revenue is returned as grouped currency values. CSV/filter helper endpoints belong to P14-006.
 
 ---
 
@@ -43,44 +44,46 @@ CSV/filter helper endpoints belong to P14-006.
 
 ### 3.1 Invariants
 
-- [ ] Every `/api/admin/analytics/**` endpoint requires `ROLE_ADMIN` in analytics-service, independent of frontend guards.
-- [ ] Anonymous, CUSTOMER/USER, and STAFF/non-admin callers cannot read analytics data.
-- [ ] API Gateway routing does not replace service-side authorization.
+- [ ] Every `/api/admin/analytics/**` endpoint requires `ROLE_ADMIN` inside analytics-service.
+- [ ] Anonymous and authenticated non-admin callers cannot read analytics.
+- [ ] API Gateway routing is not authorization.
 - [ ] All date ranges are validated and bounded before repository execution.
-- [ ] Date semantics are UTC calendar dates and both `from`/`to` are inclusive.
-- [ ] Default range is deterministic: last 30 UTC calendar days including today when no dates are supplied.
-- [ ] Maximum requested range is 366 calendar days for interactive endpoints.
-- [ ] Money is returned in integer minor units grouped by currency; never return a mixed-currency scalar total.
-- [ ] Every financial DTO clearly communicates `testMode=true` / `Stripe Test Mode` semantics.
-- [ ] Rates use P14-003 cohort definitions, not arbitrary ratios recalculated in the controller.
-- [ ] Zero denominator yields `null`/unavailable rate plus the underlying numerator/denominator, not NaN, Infinity, or misleading 0%.
-- [ ] Pagination size is bounded; sorting is allowlisted.
-- [ ] UUID filters are parsed/validated normally; no string-concatenated SQL.
-- [ ] Responses contain no customer PII, Stripe secrets, raw webhook payload, JWT data, or internal stack traces.
-- [ ] Analytics freshness is visible so eventual consistency is not mistaken for transactional source-of-truth state.
-- [ ] Empty valid data returns `200` with empty collections/zero counts as appropriate, not `404`.
+- [ ] Date semantics are UTC calendar dates; `from`/`to` are inclusive.
+- [ ] Default range is last 30 UTC calendar days including today.
+- [ ] Maximum interactive range is 366 inclusive calendar days.
+- [ ] Operational counts are not multiplied by the number of currencies returned for a session/date.
+- [ ] Money is returned in integer minor units grouped by currency; never a mixed-currency scalar.
+- [ ] Financial DTOs clearly expose `testMode=true` / Stripe Test Mode semantics.
+- [ ] Rates use P14-003 cohort definitions, not arbitrary controller ratios.
+- [ ] Zero denominator yields `ratio=null` with numerator/denominator, never NaN/Infinity.
+- [ ] Pagination is bounded and sorting is allowlisted.
+- [ ] UUID filters use typed parameter binding; no concatenated SQL.
+- [ ] Responses contain no PII, Stripe secrets, raw webhook payload, JWT details, or stack traces.
+- [ ] Projection freshness/eventual consistency is explicit.
+- [ ] Empty valid queries return `200` with empty/zero result, not `404` except explicit session-detail lookup.
 
 ### 3.2 Failure Modes to Prevent
 
-- client-side role guard being the only authorization;
-- `SUM(amount)` across currencies;
-- unbounded 10-year time-series query;
-- arbitrary `sort` field injected into SQL/JPA;
-- current-day local timezone mismatch between API and stored UTC buckets;
-- percentage division by zero;
-- frontend reverse-engineering rate definitions from raw counts;
-- per-row REST calls to Event Service for labels;
-- endpoint returns stale data with no freshness indication;
-- one giant untyped response object that makes contract changes risky.
+- frontend guard as only authorization;
+- joining one `event_session_metrics` row to two revenue rows then summing operational counts twice;
+- `SUM(gross)` across RON and EUR;
+- unbounded time-series query;
+- arbitrary sort field injection;
+- local-timezone date drift;
+- division by zero;
+- frontend reverse-engineering rate definitions;
+- per-row Event Service lookups for labels;
+- stale data presented as transactional truth;
+- generic untyped `Map<String,Object>` contracts.
 
 ---
 
 ## 4. Dependencies / Prerequisites
 
 - P14-001 gateway/service/security scaffold complete.
-- P14-002/P14-003 facts, aggregates, and cohort query support complete.
-- Shared SeatFlow exception/error response and pagination conventions must be reused where compatible.
-- Read current admin controller patterns before implementation; preserve OpenAPI/controller conventions already enforced by `backend/AGENTS.md`.
+- P14-002/P14-003 facts, split aggregates, and cohort query support complete.
+- Reuse shared SeatFlow common-domain error/pagination conventions where compatible.
+- Read current admin controller/OpenAPI conventions before implementation.
 
 ---
 
@@ -90,8 +93,8 @@ Expected additions in `backend/services/analytics-service`:
 
 - `[NEW]` `.../web/controller/AdminAnalyticsController.java`
 - `[NEW]` `.../service/AdminAnalyticsQueryService.java`
-- `[NEW]` `.../service/impl/AdminAnalyticsQueryServiceImpl.java` if interface/impl separation matches current project conventions
-- `[NEW]` `.../web/dto/request/AnalyticsRangeRequest.java` or a validated query object if current controller style supports it
+- `[NEW]` service implementation if current project convention uses interface/impl separation
+- `[NEW]` validated analytics range/filter request object(s)
 - `[NEW]` `.../web/dto/response/AnalyticsSummaryResponse.java`
 - `[NEW]` `.../web/dto/response/MoneyMetricResponse.java`
 - `[NEW]` `.../web/dto/response/RateMetricResponse.java`
@@ -100,39 +103,37 @@ Expected additions in `backend/services/analytics-service`:
 - `[NEW]` `.../web/dto/response/EventSessionAnalyticsResponse.java`
 - `[NEW]` `.../web/dto/response/TopAnalyticsItemResponse.java`
 - `[NEW]` `.../web/dto/response/ProjectionFreshnessResponse.java`
-- `[NEW]` query repository/projection interfaces needed for bounded read queries
-- `[MODIFY]` `.../config/SecurityConfig.java` if P14-001 did not yet enforce the exact matcher
-- `[MODIFY]` API Gateway route/security tests if coverage needs endpoint-specific assertions
+- `[NEW]` bounded query repository/projection interfaces
+- `[MODIFY]` analytics `SecurityConfig.java` if exact matcher is not yet enforced
+- `[MODIFY]` API Gateway route/security tests when endpoint-specific coverage is needed
 - `[NEW]` controller/service/repository tests
 
-DTO names may be consolidated only if type safety and OpenAPI clarity remain equal or better; do not replace them with `Map<String,Object>`.
+DTOs may be consolidated only if type safety/OpenAPI clarity remains equal or better. Do not replace them with generic maps.
 
 ---
 
 ## 6. Technical Specifications & Contracts
 
-## 6.1 Common Query Parameters
-
-Interactive endpoints use:
+### 6.1 Common Query Parameters
 
 ```text
-from       optional YYYY-MM-DD, inclusive UTC date
-to         optional YYYY-MM-DD, inclusive UTC date
-eventId    optional UUID
-eventSessionId optional UUID
+from              optional YYYY-MM-DD, inclusive UTC date
+to                optional YYYY-MM-DD, inclusive UTC date
+eventId           optional UUID
+eventSessionId    optional UUID
 ```
 
 Rules:
 
-- when both dates omitted: `[utcToday - 29 days, utcToday]`;
-- when one date is omitted: reject `400` rather than guessing the missing boundary;
+- both dates omitted -> `[utcToday - 29 days, utcToday]`;
+- exactly one boundary supplied -> `400`;
 - `from <= to`;
 - inclusive span <= 366 days;
-- `eventSessionId` may be supplied alone; do not require `eventId` merely for validation;
-- when both IDs are supplied and no matching projected data exists, return empty/zero data, not a cross-service validation call;
-- use injectable `Clock` in service logic so default-range tests are deterministic.
+- `eventSessionId` may be supplied without `eventId`;
+- when both IDs are supplied and analytics has no matching row, return empty/zero data; do not call another service to validate;
+- inject `Clock` for deterministic UTC defaults/tests.
 
-Recommended stable error codes:
+Stable errors:
 
 ```text
 INVALID_ANALYTICS_DATE_RANGE
@@ -141,13 +142,13 @@ INVALID_ANALYTICS_SORT
 INVALID_ANALYTICS_LIMIT
 ```
 
-Reuse existing common error shape.
+Use the existing common error shape.
 
 ### 6.2 `GET /api/admin/analytics/summary`
 
-Purpose: KPI cards and rates.
+Purpose: KPI cards + rates.
 
-Example semantic shape:
+Semantic response shape:
 
 ```json
 {
@@ -170,7 +171,7 @@ Example semantic shape:
   },
   "payments": {
     "succeeded": 87,
-    "failedAttempts": 11,
+    "withFailure": 11,
     "refundsCompleted": 4,
     "revenueByCurrency": [
       {
@@ -208,17 +209,22 @@ Example semantic shape:
 }
 ```
 
-This is an illustrative field layout, not permission to hardcode sample values.
+Example values are illustrative only.
 
-Rate rules:
+Data source rule:
 
-- `ratio` is decimal `0..1`, rounded/serialized predictably (e.g. scale up to 6); frontend owns percent display formatting.
-- if denominator `0`, `ratio=null`, numerator/denominator still returned.
-- do not expose only a preformatted string like `72.5%`.
+- reservation/ticket/payment counts come from currency-neutral facts/operational aggregate queries;
+- `revenueByCurrency` comes from financial aggregates/facts grouped by currency;
+- do not derive count totals by summing rows from currency-keyed revenue tables.
+
+Rates:
+
+- `ratio` decimal `0..1` with predictable serialization (e.g. up to 6 decimal places);
+- denominator zero -> `ratio=null`;
+- return numerator + denominator so semantics are inspectable;
+- no preformatted-only percentage string.
 
 ### 6.3 `GET /api/admin/analytics/timeseries`
-
-Purpose: daily trend charts.
 
 Parameters: common filters plus:
 
@@ -226,36 +232,33 @@ Parameters: common filters plus:
 metric = GROSS_REVENUE | NET_REVENUE | TICKETS_ISSUED | TICKETS_SCANNED | RESERVATIONS_CREATED | PAYMENTS_SUCCEEDED
 ```
 
-Only `DAY` granularity is in Phase 14. Do not advertise unsupported WEEK/MONTH options.
+Only `DAY` granularity is supported in Phase 14.
 
-Response:
+Data source contract:
 
-```text
-from, to, metric, eventuallyConsistent, series[]
-```
+- money metrics (`GROSS_REVENUE`, `NET_REVENUE`) -> `daily_revenue_metrics`, one series per currency;
+- count metrics -> `daily_operational_metrics`, one currency-neutral series.
 
-For money metrics:
+Response for money:
 
 ```text
 series = [{ currency, testMode: true, points: [{date, valueMinor}] }]
 ```
 
-For count metrics:
+Response for counts:
 
 ```text
 series = [{ points: [{date, value}] }]
 ```
 
-Requirements:
+Rules:
 
-- fill missing dates with zero points so chart x-axis is stable;
-- generate at most 366 daily points per series due range bound;
-- money remains one series per currency;
-- do not perform 366 individual SQL queries; use one bounded aggregate query then fill gaps in memory.
+- fill missing dates with zero so x-axis is stable;
+- max 366 points per series;
+- never duplicate a count series once per currency;
+- one bounded aggregate query per metric request, then fill date gaps in memory; no query-per-day loop.
 
 ### 6.4 `GET /api/admin/analytics/sessions`
-
-Purpose: paginated operational table.
 
 Parameters:
 
@@ -264,10 +267,10 @@ from, to, eventId
 page default 0
 size default 25, min 1, max 100
 sort default startsAt,desc
-allowed sort fields: startsAt, grossRevenue, ticketsIssued, ticketsScanned, reservationsCreated
+allowed sort: startsAt, grossRevenue, ticketsIssued, ticketsScanned, reservationsCreated
 ```
 
-Each row includes only analytics-safe fields such as:
+Each row includes:
 
 ```text
 eventId
@@ -281,7 +284,7 @@ reservationsCreated
 reservationsConfirmed
 reservationsExpired
 paymentsSucceeded
-paymentFailures
+paymentsWithFailure
 refundsCompleted
 ticketsIssued
 ticketsRevoked
@@ -292,17 +295,30 @@ attendanceRatio nullable
 lastProjectedEventAt
 ```
 
-If `eventTitle`/label snapshot is unavailable, return null and let UI fall back to a shortened stable ID. Never live-fetch it.
+Implementation rule:
 
-Pagination uses the repository's standard paged response convention where available.
+- page/sort the currency-neutral session rows first;
+- fetch revenue rows for only the session IDs in that page, in one batched query;
+- group them into `revenueByCurrency[]` in memory;
+- do not SQL-join revenue rows before pagination in a way that duplicates session rows or corrupts `totalElements`.
+
+For sort `grossRevenue` with potentially multiple currencies, ambiguity must be rejected unless a `currency` sort parameter is supplied. Exact contract:
+
+```text
+sort=grossRevenue requires currency=<3-letter code>
+```
+
+If currency omitted -> `400 INVALID_ANALYTICS_SORT`. For other sort fields, currency parameter is ignored/rejected according to one documented policy; prefer reject unused currency when sort is not monetary only if current API style favors strictness.
+
+Missing title/label returns null; never live-fetch.
 
 ### 6.5 `GET /api/admin/analytics/sessions/{eventSessionId}`
 
-Return one projected session analytics detail if that session exists in analytics facts.
+Return one projected session detail with the same operational + `revenueByCurrency[]` composition.
 
-- `404` is appropriate when the analytics read model has no session fact for that ID.
-- Response must still indicate eventual consistency; this does not prove the operational Event Service lacks the session.
-- No source-service lookup to distinguish "not projected yet" from "does not exist".
+- `404` when analytics has no session fact for that ID;
+- response remains eventually consistent and does not prove Event Service lacks the session;
+- no source-service lookup.
 
 ### 6.6 `GET /api/admin/analytics/top`
 
@@ -313,66 +329,69 @@ from, to
 metric = NET_REVENUE | TICKETS_ISSUED | TICKETS_SCANNED | RESERVATIONS_CONFIRMED
 limit default 5, min 1, max 20
 eventId optional
+currency required only for NET_REVENUE
 ```
 
-Return ranked session items. For `NET_REVENUE`, rankings must be **per currency**; never rank by mixed-currency addition. Response may therefore contain grouped rankings by currency.
+Rules:
 
-Stable tie-breaking: after metric descending, use `eventSessionId` ascending (or another explicit deterministic key). No nondeterministic DB ordering.
+- count rankings use currency-neutral operational aggregates;
+- `NET_REVENUE` ranking requires exactly one requested currency and ranks only that currency; never compare mixed-currency money;
+- stable tie-break: metric DESC, `eventSessionId ASC`;
+- missing `currency` for `NET_REVENUE` -> `400` stable validation error.
 
 ### 6.7 Freshness Contract
 
-Provide freshness based on analytics-owned records:
-
 ```text
 generatedAt           server Clock now
-lastProjectedEventAt  max source event occurredAt successfully projected
+lastProjectedEventAt  max successfully projected source event occurredAt
 lastProcessedAt       max processed_events.processed_at
 eventuallyConsistent  true
 ```
 
-Do not label `now - lastProjectedEventAt` as exact Kafka lag; it is only read-model recency and can be misleading during periods with no events. If UI later shows a "last updated" indicator, phrase it accordingly.
+Do not call `now - lastProjectedEventAt` exact Kafka lag. During no-event periods it is only read-model recency.
 
 ### 6.8 Authorization
 
-Analytics-service matcher must enforce:
+Analytics-service:
 
 ```text
 /api/admin/analytics/** -> hasRole("ADMIN")
 ```
 
-Tests must cover:
+Tests:
 
-- anonymous -> `401` according to current resource-server behavior;
+- anonymous -> current resource-server `401` behavior;
 - authenticated non-admin -> `403`;
 - ADMIN -> controller executes.
 
-Do not trust an `X-Role` header or frontend route guard.
+Do not trust role headers or frontend guards.
 
 ### 6.9 Query / Performance Rules
 
 - all queries bounded by date/page/limit;
-- no N+1 per session row;
-- prefer DB aggregation/projections over loading full fact tables;
-- query only columns needed for DTOs;
-- confirm indexes from P14-001 support filters; add additive migration if query plan proves a missing index;
-- no caching required in Phase 14 unless tests/profiling show a real need;
-- never cache one admin's filter result under a key that omits filter/date/currency dimensions.
+- no N+1 for revenue rows/labels;
+- page operational sessions before batched revenue enrichment;
+- query only needed columns;
+- add indexes via additive migration if real query plan needs one;
+- no caching required in Phase 14 unless measured;
+- never cache without date/event/session/currency dimensions in key.
 
 ---
 
 ## 7. Step-by-Step Implementation Sequence
 
-1. Define immutable request/range/filter objects and shared validation.
-2. Add a `Clock` dependency for UTC defaults/freshness timestamps.
-3. Implement repository queries for summary and cohort metrics.
-4. Implement currency-safe money DTO mapping.
-5. Implement daily time-series query + zero-date filling.
-6. Implement paginated session metrics query and allowlisted sort mapping.
-7. Implement session detail and deterministic top rankings.
-8. Add freshness metadata to all top-level responses or a shared envelope without introducing a generic untyped wrapper.
-9. Enforce ADMIN matcher and security tests.
-10. Add OpenAPI annotations/examples consistent with repo conventions.
-11. Add repository/controller integration tests using PostgreSQL and representative multiple-currency fixtures.
+1. Define immutable range/filter objects and validation.
+2. Add injected Clock for UTC defaults/freshness.
+3. Implement summary query from operational counts + separate grouped revenue query.
+4. Implement currency-safe money mapping.
+5. Implement count vs financial time-series paths with date gap filling.
+6. Implement session page query from operational rows, then batched revenue enrichment.
+7. Implement session detail.
+8. Implement top rankings, requiring currency for financial ranking.
+9. Add freshness metadata.
+10. Enforce ADMIN matcher/security tests.
+11. Add OpenAPI annotations/examples matching repository conventions.
+12. Add PostgreSQL integration tests including same-session RON+EUR fixtures.
 
 ---
 
@@ -380,48 +399,53 @@ Do not trust an `X-Role` header or frontend route guard.
 
 ### 8.1 Authorization
 
-- [ ] anonymous cannot access analytics endpoints;
-- [ ] regular authenticated user/customer cannot access;
-- [ ] non-admin staff role cannot access unless current role model explicitly aliases it to ADMIN (do not assume);
+- [ ] anonymous denied;
+- [ ] regular authenticated user/customer denied;
+- [ ] non-admin staff denied unless current role model explicitly maps it to ADMIN;
 - [ ] ADMIN succeeds.
 
 ### 8.2 Range Validation
 
 - [ ] no dates -> exactly last 30 UTC dates via fixed Clock;
-- [ ] only one boundary -> `400`;
+- [ ] one boundary only -> `400`;
 - [ ] `from > to` -> `400` stable code;
 - [ ] exactly 366 inclusive days accepted;
-- [ ] 367 days rejected before DB query.
+- [ ] 367 rejected before DB query.
 
-### 8.3 Money / Currency
+### 8.3 Aggregate Grain / Currency
 
-- [ ] RON + EUR produce separate `revenueByCurrency` items;
-- [ ] `net = gross - refunded` exact in minor units;
-- [ ] every financial group has `testMode=true`;
-- [ ] no scalar mixed-currency `totalRevenue` appears.
+Fixture: one session with RON + EUR financial rows.
+
+- [ ] session appears once in paged result;
+- [ ] reservations/tickets/payment operational counts appear once, not doubled;
+- [ ] `revenueByCurrency` contains separate RON + EUR items;
+- [ ] summary operational counts are not derived from revenue-row count;
+- [ ] no mixed-currency scalar revenue exists.
 
 ### 8.4 Rates
 
-- [ ] cohort definitions match P14-003 fixtures;
-- [ ] denominator zero returns null ratio;
-- [ ] serialization contains finite numeric values only;
-- [ ] frontend need not infer numerator/denominator.
+- [ ] P14-003 cohort definitions match fixtures;
+- [ ] denominator zero -> null ratio;
+- [ ] finite serialized numeric values only.
 
 ### 8.5 Time Series
 
-- [ ] missing DB date becomes zero point;
-- [ ] range boundaries inclusive;
-- [ ] money returns separate currency series;
-- [ ] one bounded query rather than one query per day (verify repository implementation/tests as practical).
+- [ ] missing date -> zero point;
+- [ ] inclusive boundaries;
+- [ ] money -> separate currency series;
+- [ ] count -> one currency-neutral series;
+- [ ] no per-day query loop.
 
 ### 8.6 Sessions / Ranking
 
-- [ ] `size=101` rejected/clamped only according to explicit validation policy; prefer rejection with stable error;
+- [ ] `size > 100` rejected with stable error;
 - [ ] invalid sort rejected;
+- [ ] `sort=grossRevenue` without currency rejected;
+- [ ] financial top without currency rejected;
 - [ ] stable tie ordering;
-- [ ] missing event title does not trigger a source-service call;
-- [ ] unknown projected session detail returns `404` with common error shape;
-- [ ] no PII fields in serialized response.
+- [ ] missing title never triggers source-service call;
+- [ ] unknown projected session detail -> common-shape `404`;
+- [ ] no PII serialized.
 
 ---
 
@@ -432,36 +456,39 @@ cd backend
 ./mvnw -pl services/analytics-service,services/api-gateway -am test
 ```
 
-If OpenAPI contract generation/validation exists in the current repo, run it as part of verification.
+Run current OpenAPI validation/generation if the repository has it.
 
 ---
 
 ## 10. Independent Review Focus
 
-Reviewer must inspect:
+Review:
 
 - server-side ADMIN authorization;
-- UTC/default range boundary math;
+- UTC/default range math;
 - exact cohort definitions;
-- multi-currency separation in every query/DTO;
-- no source-service fanout/N+1;
+- operational-vs-financial query grain;
+- no count multiplication through currency joins;
+- multi-currency separation;
+- page-before-revenue-enrichment behavior;
 - bounded pagination/range/limit/sort;
-- eventual-consistency wording/freshness semantics;
+- eventual-consistency wording;
+- no source-service fanout/N+1;
 - no PII/internal details;
-- deterministic ordering;
-- OpenAPI and frontend-consumable type stability.
+- deterministic ordering/OpenAPI stability.
 
 ---
 
 ## 11. Acceptance Criteria
 
-- [ ] Admin-only summary, timeseries, sessions, session detail, and top endpoints exist under `/api/admin/analytics/**`.
-- [ ] Date ranges, pagination, sorting, and limits are bounded and validated.
-- [ ] Money is minor-unit and currency-separated with explicit Test Mode semantics.
-- [ ] Rates use documented cohort definitions and safe zero-denominator behavior.
-- [ ] Responses expose read-model freshness/eventual consistency.
-- [ ] No endpoint queries or calls operational services/databases.
-- [ ] Security, repository, controller, and multi-currency tests pass.
+- [ ] Admin-only summary, timeseries, sessions, session detail, and top endpoints exist.
+- [ ] Date ranges, pagination, sorting, and limits are bounded/validated.
+- [ ] Operational counts are currency-neutral and never duplicated by currency rows.
+- [ ] Money is minor-unit, currency-separated, and explicitly Test Mode.
+- [ ] Rates use documented cohorts and safe zero-denominator behavior.
+- [ ] Responses expose freshness/eventual consistency.
+- [ ] No endpoint calls operational services/databases.
+- [ ] Security, repository, controller, aggregate-grain, and multi-currency tests pass.
 - [ ] Critical independent review passes.
 
 ---
@@ -470,5 +497,5 @@ Reviewer must inspect:
 
 ```text
 Implement TASK-P14-004 using the SeatFlow autonomous orchestration workflow.
-Treat API semantics, ADMIN authorization, bounded queries, and currency separation as hard contracts. Do not add CSV/filter-option endpoints yet; those belong to TASK-P14-006.
+Treat ADMIN authorization, bounded queries, operational-vs-financial aggregate grain, and currency separation as hard contracts. Do not add CSV/filter-option endpoints yet; those belong to TASK-P14-006.
 ```
