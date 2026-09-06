@@ -112,6 +112,26 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldMapTypeMismatchTo400WithoutReflectingRawValue() {
+        // REV-001 (TASK-P14-004 review): malformed UUID/int params must be 400, never 500.
+        when(request.getRequestURI()).thenReturn("/api/admin/analytics/summary");
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex =
+                new org.springframework.web.method.annotation.MethodArgumentTypeMismatchException(
+                        "not-a-uuid", java.util.UUID.class, "eventId", null,
+                        new IllegalArgumentException("Invalid UUID string: not-a-uuid"));
+
+        ResponseEntity<ApiErrorResponse> response = handler.handleTypeMismatch(ex, request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        ApiErrorResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.errorCode()).isEqualTo(ErrorCode.INVALID_REQUEST.getCode());
+        assertThat(body.status()).isEqualTo(400);
+        assertThat(body.message()).contains("eventId").contains("UUID");
+        assertThat(body.message()).doesNotContain("not-a-uuid");
+    }
+
+    @Test
     void shouldMapMethodArgumentNotValidTo400WithFieldErrors() {
         when(request.getRequestURI()).thenReturn("/api/reservations");
         MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
