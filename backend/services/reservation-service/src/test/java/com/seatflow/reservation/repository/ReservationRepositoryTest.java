@@ -56,6 +56,8 @@ class ReservationRepositoryTest {
     private Reservation reservation(ReservationStatus status, Instant expiresAt, String idempotencyKey, UUID userId) {
         return Reservation.builder()
                 .eventId(UUID.randomUUID())
+                // P12-009: V9 enforces NOT NULL on event_session_id.
+                .eventSessionId(UUID.randomUUID())
                 .customerEmail("guest@example.com")
                 .status(status)
                 .expiresAt(expiresAt)
@@ -94,6 +96,7 @@ class ReservationRepositoryTest {
         Reservation reservation = reservation(ReservationStatus.PENDING, Instant.now().plusSeconds(900), "key-graph", null);
         SeatHold hold = SeatHold.builder()
                 .eventId(reservation.getEventId())
+                .eventSessionId(reservation.getEventSessionId())
                 .seatId(UUID.randomUUID())
                 .status(SeatHoldStatus.HELD)
                 .price(new BigDecimal("50.00"))
@@ -146,6 +149,7 @@ class ReservationRepositoryTest {
                 reservation(ReservationStatus.PENDING, Instant.now().plusSeconds(900), "guest-2", UUID.randomUUID()));
         Reservation otherEmail = Reservation.builder()
                 .eventId(UUID.randomUUID())
+                .eventSessionId(UUID.randomUUID())
                 .customerEmail("other@example.com")
                 .status(ReservationStatus.PENDING)
                 .expiresAt(Instant.now().plusSeconds(900))

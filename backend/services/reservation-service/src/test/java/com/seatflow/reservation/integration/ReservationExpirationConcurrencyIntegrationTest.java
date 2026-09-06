@@ -87,12 +87,15 @@ class ReservationExpirationConcurrencyIntegrationTest {
     @Test
     void concurrentSweepExpiresExactlyOnceAndReleasesSeats() throws Exception {
         UUID eventId = UUID.randomUUID();
+        // P12-009: V9 enforces NOT NULL on event_session_id; expiry is session-agnostic.
+        UUID sessionId = UUID.randomUUID();
         List<UUID> seatIds = new ArrayList<>();
         for (int i = 0; i < 50; i++) {
             UUID seatId = UUID.randomUUID();
             seatIds.add(seatId);
             Reservation reservation = Reservation.builder()
                     .eventId(eventId)
+                    .eventSessionId(sessionId)
                     .customerEmail("guest-" + i + "@seatflow.com")
                     .status(ReservationStatus.PENDING)
                     .expiresAt(Instant.now().minus(1, ChronoUnit.MINUTES))
@@ -103,6 +106,7 @@ class ReservationExpirationConcurrencyIntegrationTest {
                     .build();
             SeatHold hold = SeatHold.builder()
                     .eventId(eventId)
+                    .eventSessionId(sessionId)
                     .seatId(seatId)
                     .status(SeatHoldStatus.HELD)
                     .price(new BigDecimal("10.00"))
@@ -139,9 +143,9 @@ class ReservationExpirationConcurrencyIntegrationTest {
                 .count()).isEqualTo(50);
 
         UUID releasedSeat = seatIds.get(0);
-        UUID sessionId = UUID.randomUUID();
-        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
-                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+        UUID subsequentSessionId = UUID.randomUUID();
+        when(eventClient.getSessionBookingContext(subsequentSessionId)).thenReturn(new SessionBookingContextDto(
+                subsequentSessionId, eventId, "PUBLISHED", "SCHEDULED",
                 Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
                 null, null, UUID.randomUUID()));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(new EventPricingDetails(
@@ -149,7 +153,7 @@ class ReservationExpirationConcurrencyIntegrationTest {
                 Map.of(releasedSeat, new BigDecimal("10.00"))));
 
         var response = reservationService.createReservation(
-                new CreateReservationRequest(sessionId, "newguest@seatflow.com",
+                new CreateReservationRequest(subsequentSessionId, "newguest@seatflow.com",
                         List.of(releasedSeat), List.of(new BigDecimal("10.00")), "idem-subsequent"),
                 UUID.randomUUID());
 
