@@ -126,9 +126,7 @@
             <h2 id="about-heading" class="mb-4 text-xl font-bold text-[var(--color-text-primary)] sm:text-2xl">
               About This Event
             </h2>
-            <div class="prose dark:prose-invert max-w-none text-sm leading-relaxed text-[var(--color-text-secondary)] sm:text-base whitespace-pre-line">
-              {{ ev.description || 'No description available for this event.' }}
-            </div>
+            <div class="prose dark:prose-invert max-w-none text-sm leading-relaxed text-[var(--color-text-secondary)] sm:text-base" [innerHTML]="ev.description | sfMarkdown"></div>
           </section>
 
           <!-- Select Showtime / Sessions Section -->

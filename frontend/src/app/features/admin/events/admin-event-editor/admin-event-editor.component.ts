@@ -18,6 +18,7 @@ import { EventCategory, EventStatus } from '../../../../models/event.model';
 import { VenueSummary } from '../../../../models/venue.model';
 import { BannerGalleryPickerComponent } from '../banner-gallery-picker/banner-gallery-picker.component';
 import { SkeletonLoaderComponent } from '../../../../shared/components/skeleton-loader/skeleton-loader.component';
+import { renderEventDescriptionMarkdown } from '../../../../shared/pipes/markdown-format.pipe';
 
 @Component({
   selector: 'app-admin-event-editor',
@@ -85,7 +86,7 @@ export class AdminEventEditorComponent implements OnInit {
     if (!raw.trim()) {
       return '<p class="text-[var(--color-text-muted)] italic">No description entered yet.</p>';
     }
-    return this.renderSimpleMarkdown(raw);
+    return renderEventDescriptionMarkdown(raw, 'No description entered yet.');
   });
 
   readonly eventForm = this.fb.group({
@@ -203,55 +204,6 @@ export class AdminEventEditorComponent implements OnInit {
     const updated = current + template;
     this.eventForm.patchValue({ description: updated.trim() });
     this.eventForm.controls.description.markAsDirty();
-  }
-
-  private renderSimpleMarkdown(md: string): string {
-    const escapeHtml = (text: string) =>
-      text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-    const lines = md.split('\n');
-    const out: string[] = [];
-    let inList = false;
-
-    for (const rawLine of lines) {
-      const line = escapeHtml(rawLine.trim());
-
-      if (line.startsWith('### ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<h3 class="text-sm font-bold text-indigo-500 mt-3 mb-1">${line.substring(4)}</h3>`);
-      } else if (line.startsWith('## ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<h2 class="text-base font-extrabold text-[var(--color-text-primary)] mt-4 mb-1.5">${line.substring(3)}</h2>`);
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        if (!inList) { out.push('<ul class="list-disc list-inside space-y-1 my-1 text-xs text-[var(--color-text-secondary)]">'); inList = true; }
-        const formatted = this.applyInlineFormatting(line.substring(2));
-        out.push(`<li>${formatted}</li>`);
-      } else if (line.startsWith('&gt; ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<blockquote class="border-l-2 border-indigo-500 pl-3 my-2 text-xs italic text-[var(--color-text-muted)]">${line.substring(5)}</blockquote>`);
-      } else if (line === '---') {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push('<hr class="border-[var(--color-border)] my-3"/>');
-      } else if (line === '') {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push('<div class="h-2"></div>');
-      } else {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<p class="text-xs leading-relaxed text-[var(--color-text-secondary)] mb-1">${this.applyInlineFormatting(line)}</p>`);
-      }
-    }
-    if (inList) out.push('</ul>');
-    return out.join('');
-  }
-
-  private applyInlineFormatting(text: string): string {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[var(--color-text-primary)]">$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
-      .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-[var(--color-canvas)] text-[11px] font-mono text-indigo-400">$1</code>');
   }
 
   onSubmit(): void {

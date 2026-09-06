@@ -22,6 +22,7 @@ import { VenueApiService } from '../../../services/venue-api.service';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { MarkdownFormatPipe } from '../../../shared/pipes/markdown-format.pipe';
 import { SessionSelectorComponent } from '../session-selector/session-selector.component';
 import { isSessionCustomerBookable } from '../session-booking-eligibility';
 import { VenueMapViewComponent } from '../venue-map-view/venue-map-view.component';
@@ -43,6 +44,7 @@ interface PricingSection {
     SessionSelectorComponent,
     CurrencyFormatPipe,
     DateFormatPipe,
+    MarkdownFormatPipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './event-detail.component.html',

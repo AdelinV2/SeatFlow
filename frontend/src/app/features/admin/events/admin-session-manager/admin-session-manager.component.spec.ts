@@ -165,6 +165,31 @@ describe('AdminSessionManagerComponent', () => {
     expect(component.sessionToDelete()).toBeNull();
   });
 
+  describe('terminal event guard', () => {
+    it('reports a terminal event as immutable', () => {
+      expect(component.isTerminalEvent()).toBeFalse();
+
+      component.event.set({ ...mockEventDetail, status: 'COMPLETED' });
+      expect(component.isTerminalEvent()).toBeTrue();
+
+      component.event.set({ ...mockEventDetail, status: 'CANCELLED' });
+      expect(component.isTerminalEvent()).toBeTrue();
+    });
+
+    it('blocks the create modal for terminal events without calling the API', () => {
+      component.event.set({ ...mockEventDetail, status: 'COMPLETED' });
+
+      component.openCreateModal();
+
+      expect(component.showEditModal()).toBeFalse();
+      expect(snackBar.open).toHaveBeenCalledWith(
+        jasmine.stringContaining('sessions are immutable'),
+        'Close',
+        jasmine.any(Object),
+      );
+    });
+  });
+
   describe('schedule contract mirror (TASK-P12-006 REV-005)', () => {
     function openValidForm(): void {
       component.openCreateModal();

@@ -82,6 +82,68 @@ export function renderEventDescriptionMarkdown(
   return output.join('');
 }
 
+/**
+ * Strips the admin-editor markdown subset to plain text for card/compact previews.
+ * Headings, quotes, list markers, dividers, and inline bold/italic/code markers
+ * are removed; content (including emoji) and word order are preserved.
+ */
+export function stripEventDescriptionMarkdown(markdown: string | null | undefined): string {
+  const raw = markdown ?? '';
+  if (!raw.trim()) {
+    return '';
+  }
+
+  const parts: string[] = [];
+  for (const rawLine of raw.split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line || line === '---') {
+      continue;
+    }
+    if (line.startsWith('### ')) {
+      line = line.substring(4);
+    } else if (line.startsWith('## ')) {
+      line = line.substring(3);
+    } else if (line.startsWith('> ')) {
+      line = line.substring(2);
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      line = line.substring(2);
+    }
+    line = line
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (line) {
+      parts.push(line);
+    }
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Plain-text excerpt for compact surfaces (carousel cards, quick-view modals).
+ * Returns '' when there is no content so templates can fall back with `||`.
+ */
+export function getEventDescriptionExcerpt(
+  markdown: string | null | undefined,
+  maxLength = 160,
+): string {
+  const plain = stripEventDescriptionMarkdown(markdown);
+  if (!plain) {
+    return '';
+  }
+  if (plain.length <= maxLength) {
+    return plain;
+  }
+  const sliced = plain.slice(0, maxLength).trimEnd();
+  const lastSpace = sliced.lastIndexOf(' ');
+  if (lastSpace > maxLength * 0.6) {
+    return `${sliced.slice(0, lastSpace)}…`;
+  }
+  return `${sliced}…`;
+}
+
 @Pipe({
   name: 'sfMarkdown',
   standalone: true,
@@ -90,5 +152,16 @@ export function renderEventDescriptionMarkdown(
 export class MarkdownFormatPipe implements PipeTransform {
   transform(value: string | null | undefined, emptyMessage = DEFAULT_EMPTY_MESSAGE): string {
     return renderEventDescriptionMarkdown(value, emptyMessage);
+  }
+}
+
+@Pipe({
+  name: 'sfMarkdownExcerpt',
+  standalone: true,
+  pure: true,
+})
+export class MarkdownExcerptPipe implements PipeTransform {
+  transform(value: string | null | undefined, maxLength = 160): string {
+    return getEventDescriptionExcerpt(value, maxLength);
   }
 }

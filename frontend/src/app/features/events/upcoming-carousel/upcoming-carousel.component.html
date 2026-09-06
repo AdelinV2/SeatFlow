@@ -113,7 +113,7 @@
 
                 <!-- Description / Highlights -->
                 <p class="mt-2.5 line-clamp-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
-                  {{ event.description || 'Join us for an unforgettable live experience with premier audio visual production.' }}
+                  {{ (event.description | sfMarkdownExcerpt:160) || 'Join us for an unforgettable live experience with premier audio visual production.' }}
                 </p>
 
                 <!-- Venue Location -->
@@ -220,7 +220,7 @@
       </h3>
 
       <p class="mt-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">
-        {{ selected.description || 'Experience the vibrant atmosphere and secure your official seats with instant confirmation.' }}
+        {{ (selected.description | sfMarkdownExcerpt:220) || 'Experience the vibrant atmosphere and secure your official seats with instant confirmation.' }}
       </p>
 
       <!-- Pricing Summary & CTA -->

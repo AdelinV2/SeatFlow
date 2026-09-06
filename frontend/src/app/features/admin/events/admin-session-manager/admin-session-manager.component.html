@@ -54,6 +54,21 @@
   } @else {
     <!-- Event Banner Summary Card -->
     @if (event(); as ev) {
+      @if (isTerminalEvent()) {
+        <div class="mb-4 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex items-start gap-3 text-rose-600 dark:text-rose-400">
+          <svg class="size-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div class="text-xs">
+            <p class="font-bold">Event is {{ ev.status }} — sessions are immutable</p>
+            <p class="mt-0.5 text-rose-500/90">
+              Completed or cancelled events cannot gain, change, or lose showtime sessions. Create a new event for additional dates.
+            </p>
+          </div>
+        </div>
+      }
       <div class="mb-8 p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
         <div class="flex items-center gap-4 min-w-0">
           <div class="relative w-16 aspect-video rounded-lg overflow-hidden border border-[var(--color-border)] bg-slate-900 shrink-0">
@@ -76,7 +91,8 @@
                 [ngClass]="{
                   'bg-amber-500/10 text-amber-600 border-amber-500/20': ev.status === 'DRAFT',
                   'bg-emerald-500/10 text-emerald-600 border-emerald-500/20': ev.status === 'PUBLISHED',
-                  'bg-rose-500/10 text-rose-600 border-rose-500/20': ev.status === 'CANCELLED'
+                  'bg-rose-500/10 text-rose-600 border-rose-500/20': ev.status === 'CANCELLED',
+                  'bg-slate-500/10 text-slate-500 border-slate-500/20': ev.status === 'COMPLETED'
                 }"
               >
                 {{ ev.status }}
@@ -88,7 +104,9 @@
         <button
           type="button"
           (click)="openCreateModal()"
-          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 cursor-pointer shrink-0"
+          [disabled]="isTerminalEvent()"
+          [title]="isTerminalEvent() ? 'Event is terminal: sessions are immutable' : 'Add a new showtime session'"
+          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"/>
@@ -112,7 +130,9 @@
         <button
           type="button"
           (click)="openCreateModal()"
-          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20"
+          [disabled]="isTerminalEvent()"
+          [title]="isTerminalEvent() ? 'Event is terminal: sessions are immutable' : 'Create the first showtime session'"
+          class="btn-spring inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"/>

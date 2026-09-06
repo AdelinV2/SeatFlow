@@ -71,6 +71,11 @@ export class AdminSessionManagerComponent implements OnInit {
     );
   });
 
+  readonly isTerminalEvent = computed<boolean>(() => {
+    const status = this.event()?.status;
+    return status === 'CANCELLED' || status === 'COMPLETED';
+  });
+
   ngOnInit(): void {
     const eid = this.eventId();
     if (eid) {
@@ -131,6 +136,15 @@ export class AdminSessionManagerComponent implements OnInit {
   }
 
   openCreateModal(): void {
+    if (this.isTerminalEvent()) {
+      const status = this.event()?.status ?? 'terminal';
+      this.snackBar.open(
+        `Cannot add showtimes: event is ${status} and sessions are immutable once the parent event is terminal.`,
+        'Close',
+        { duration: 5000, panelClass: 'snack-warning' },
+      );
+      return;
+    }
     const now = new Date();
     const defaultStart = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const defaultEnd = new Date(defaultStart.getTime() + 2 * 60 * 60 * 1000);
