@@ -58,12 +58,13 @@ class ReservationServiceApplicationTests {
 
         assertThat(versions)
                 // P12-007: V8 is the fail-closed session-integrity gate.
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
+                // P12-009: V9 promotes the gate to NOT NULL.
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true, true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true, true, true, true, true);
     }
 
     @Test
@@ -109,5 +110,17 @@ class ReservationServiceApplicationTests {
                 "session_starts_at",
                 "session_ends_at",
                 "session_timezone");
+
+        // P12-009: session inventory key is DB-enforced NOT NULL on both tables.
+        List<String> nullableSessionColumns = jdbcTemplate.queryForList(
+                """
+                SELECT table_name
+                FROM information_schema.columns
+                WHERE column_name = 'event_session_id'
+                  AND table_name IN ('reservations', 'seat_holds')
+                  AND is_nullable = 'YES'
+                """, String.class);
+
+        assertThat(nullableSessionColumns).isEmpty();
     }
 }

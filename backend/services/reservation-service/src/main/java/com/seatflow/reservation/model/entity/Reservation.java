@@ -58,14 +58,11 @@ public class Reservation {
     // key; inventory is partitioned by eventSessionId only (ADR-011).
     private UUID eventId;
 
-    @Column(name = "event_session_id", updatable = false)
+    @Column(name = "event_session_id", nullable = false, updatable = false)
     @ToString.Include
-    // P12-007: authoritative inventory partition (ADR-011). Always populated by
-    // the service from the trusted session booking context; V8 aborts migration
-    // when NULLs remain. Hard NOT NULL is tracked follow-up TASK-P12-009 (kept
-    // nullable until the backfill suites that persist legacy-NULL rows move to
-    // a staged pre-constraint schema); SessionIntegrityStartupCheck alerts on
-    // NULL session rows at boot.
+    // P12-009: authoritative inventory partition (ADR-011), DB-enforced NOT NULL
+    // via V9 (V8 gate promoted). Always populated by the service from the
+    // trusted session booking context.
     private UUID eventSessionId;
 
     @Column(name = "session_starts_at", updatable = false)

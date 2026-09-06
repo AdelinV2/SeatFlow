@@ -47,10 +47,10 @@ public class SeatHold {
     // key; inventory is partitioned by eventSessionId only (ADR-011).
     private UUID eventId;
 
-    @Column(name = "event_session_id", updatable = false)
+    @Column(name = "event_session_id", nullable = false, updatable = false)
     @ToString.Include
-    // P12-007: authoritative inventory partition (ADR-011); see Reservation
-    // for the V8 gate / TASK-P12-009 NOT NULL follow-up note.
+    // P12-009: authoritative inventory partition (ADR-011), DB-enforced NOT NULL
+    // via V9; see Reservation.
     private UUID eventSessionId;
 
     @Column(name = "seat_id", nullable = false, updatable = false)

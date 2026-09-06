@@ -8,9 +8,6 @@ import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.messaging.event.ReservationHeldEvent;
-import com.seatflow.reservation.migration.SessionInventoryBackfillService;
-import com.seatflow.reservation.model.entity.Reservation;
-import com.seatflow.reservation.model.entity.SeatHold;
 import com.seatflow.reservation.model.enums.ReservationStatus;
 import com.seatflow.reservation.model.enums.SeatHoldStatus;
 import com.seatflow.reservation.repository.OutboxEventRepository;
@@ -67,6 +64,10 @@ import static org.mockito.Mockito.when;
  * locking, but sufficient for the trusted booking-context input).
  *
  * <p>The expiry sweep test runs last: it expires every PENDING row on purpose.
+ *
+ * <p>P12-009: legacy-NULL backfill coverage lives in
+ * {@code SessionInventoryBackfillStagedSchemaTest} on a staged pre-constraint
+ * schema (V9 NOT NULL rejects NULL inserts here).
  */
 @SpringBootTest
 @Testcontainers
@@ -121,9 +122,6 @@ class SessionScopedInventoryIntegrationTest {
     // the outbox serialization step inside the same production transaction.)
     @MockitoSpyBean
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
-
-    @Autowired
-    private SessionInventoryBackfillService backfillService;
 
     @Autowired
     private com.seatflow.reservation.messaging.producer.OutboxEventPublisher outboxEventPublisher;
@@ -524,140 +522,10 @@ class SessionScopedInventoryIntegrationTest {
         assertThat(outbox.getFirst().getPublishedAt()).isNull();
     }
 
-    @Test
-    @Order(11)
-    void backfillAssignsSessionAndPassesZeroNullGate() {
-        UUID legacyEventId = UUID.randomUUID();
-        UUID sessionId = UUID.randomUUID();
-        stubSession(sessionId, legacyEventId);
-
-        Reservation legacy = Reservation.builder()
-                .eventId(legacyEventId)
-                .customerEmail("legacy@seatflow.com")
-                .status(ReservationStatus.PENDING)
-                .expiresAt(Instant.now().plusSeconds(900))
-                .idempotencyKey("legacy-" + UUID.randomUUID())
-                .totalAmount(new BigDecimal("10.00"))
-                .seatCount(1)
-                .build();
-        SeatHold legacyHold = SeatHold.builder()
-                .eventId(legacyEventId)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("10.00"))
-                .build();
-        legacy.addSeatHold(legacyHold);
-        reservationRepository.saveAndFlush(legacy);
-
-        // P12-008 scenario G: a second legacy event carries a CONFIRMED/SOLD
-        // booking, so the real backfill path proves both reservation states
-        // and both hold states through the same run and gate.
-        UUID legacyEventConfirmed = UUID.randomUUID();
-        UUID sessionConfirmed = UUID.randomUUID();
-        stubSession(sessionConfirmed, legacyEventConfirmed);
-
-        Reservation legacyConfirmed = Reservation.builder()
-                .eventId(legacyEventConfirmed)
-                .customerEmail("legacy-confirmed@seatflow.com")
-                .status(ReservationStatus.CONFIRMED)
-                .expiresAt(Instant.now().plusSeconds(900))
-                .idempotencyKey("legacy-confirmed-" + UUID.randomUUID())
-                .totalAmount(new BigDecimal("10.00"))
-                .seatCount(1)
-                .build();
-        legacyConfirmed.addSeatHold(SeatHold.builder()
-                .eventId(legacyEventConfirmed)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.SOLD)
-                .price(new BigDecimal("10.00"))
-                .build());
-        reservationRepository.saveAndFlush(legacyConfirmed);
-
-        var result = backfillService.backfill(
-                Map.of(legacyEventId, sessionId, legacyEventConfirmed, sessionConfirmed));
-
-        assertThat(result.reservationsUpdated()).isEqualTo(2);
-        assertThat(result.seatHoldsUpdated()).isEqualTo(2);
-        var reloaded = reservationRepository.findWithSeatHoldsById(legacy.getId()).orElseThrow();
-        assertThat(reloaded.getEventSessionId()).isEqualTo(sessionId);
-        assertThat(reloaded.getSeatHolds()).allMatch(h -> sessionId.equals(h.getEventSessionId()));
-        var reloadedConfirmed =
-                reservationRepository.findWithSeatHoldsById(legacyConfirmed.getId()).orElseThrow();
-        assertThat(reloadedConfirmed.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
-        assertThat(reloadedConfirmed.getEventSessionId()).isEqualTo(sessionConfirmed);
-        assertThat(reloadedConfirmed.getSeatHolds())
-                .allMatch(h -> sessionConfirmed.equals(h.getEventSessionId())
-                        && h.getStatus() == SeatHoldStatus.SOLD);
-
-        // Rerun is a safe no-op.
-        var rerun = backfillService.backfill(
-                Map.of(legacyEventId, sessionId, legacyEventConfirmed, sessionConfirmed));
-        assertThat(rerun.reservationsUpdated()).isZero();
-        assertThat(rerun.seatHoldsUpdated()).isZero();
-    }
-
-    @Test
-    @Order(12)
-    void backfillFailsClosedOnMismatchedSession() {
-        UUID legacyEventId = UUID.randomUUID();
-        UUID foreignEventId = UUID.randomUUID();
-        UUID foreignSessionId = UUID.randomUUID();
-        stubSession(foreignSessionId, foreignEventId);
-
-        Reservation legacy = Reservation.builder()
-                .eventId(legacyEventId)
-                .customerEmail("legacy-mismatch@seatflow.com")
-                .status(ReservationStatus.PENDING)
-                .expiresAt(Instant.now().plusSeconds(900))
-                .idempotencyKey("legacy-mismatch-" + UUID.randomUUID())
-                .totalAmount(new BigDecimal("10.00"))
-                .seatCount(1)
-                .build();
-        legacy.addSeatHold(SeatHold.builder()
-                .eventId(legacyEventId)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("10.00"))
-                .build());
-        reservationRepository.saveAndFlush(legacy);
-
-        assertThatThrownBy(() -> backfillService.backfill(Map.of(legacyEventId, foreignSessionId)))
-                .isInstanceOf(ValidationException.class);
-
-        var reloaded = reservationRepository.findWithSeatHoldsById(legacy.getId()).orElseThrow();
-        assertThat(reloaded.getEventSessionId()).isNull();
-    }
-
-    @Test
-    @Order(13)
-    void backfillGateFailsOnUnmappedLegacyEvent() {
-        UUID mappedEventId = UUID.randomUUID();
-        UUID mappedSessionId = UUID.randomUUID();
-        stubSession(mappedSessionId, mappedEventId);
-
-        UUID orphanEventId = UUID.randomUUID();
-        Reservation orphan = Reservation.builder()
-                .eventId(orphanEventId)
-                .customerEmail("orphan@seatflow.com")
-                .status(ReservationStatus.PENDING)
-                .expiresAt(Instant.now().plusSeconds(900))
-                .idempotencyKey("orphan-" + UUID.randomUUID())
-                .totalAmount(new BigDecimal("10.00"))
-                .seatCount(1)
-                .build();
-        orphan.addSeatHold(SeatHold.builder()
-                .eventId(orphanEventId)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("10.00"))
-                .build());
-        reservationRepository.saveAndFlush(orphan);
-
-        // The mapped event has no rows; the orphan legacy event is not in the mapping,
-        // so the zero-null gate must fail closed instead of guessing.
-        assertThatThrownBy(() -> backfillService.backfill(Map.of(mappedEventId, mappedSessionId)))
-                .isInstanceOf(IllegalStateException.class);
-    }
+    // P12-009: legacy-NULL backfill coverage (former orders 11-13) moved to
+    // SessionInventoryBackfillStagedSchemaTest on a staged pre-constraint schema:
+    // V9 NOT NULL rejects those JPA NULL inserts on the live schema. The
+    // live-schema concurrency oracle below keeps its single-database fidelity.
 
     @Test
     @Order(14)
