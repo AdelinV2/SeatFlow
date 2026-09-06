@@ -133,6 +133,7 @@ jobs:
           -f docker/docker-compose.services.yml
           -f docker/docker-compose.monitoring.yml
           -f docker/docker-compose.prod.yml
+          -f docker/docker-compose.prod-health.yml
           config --quiet
 
       - name: Run ShellCheck
@@ -141,7 +142,7 @@ jobs:
           koalaman/shellcheck:v0.10.0
           bootstrap-seatflow-vm.sh configure-http-edge.sh configure-https-edge.sh
           deploy-compose-release.sh refresh-prometheus-token.sh render-runtime-env.sh
-          rollback-compose-release.sh run-production-migrations.sh
+          rollback-compose-release.sh run-production-migrations.sh start-compose-release.sh
           verify-compose-release.sh verify-gcp-foundation.sh
 
       - name: Run actionlint
