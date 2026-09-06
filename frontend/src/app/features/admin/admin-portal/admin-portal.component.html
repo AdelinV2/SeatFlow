@@ -259,8 +259,7 @@
   </div>
 
   <!-- Recent Venues Preview Section -->
-  <div class="border border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)] p-6 shadow-xs">
-    <div class="flex items-center justify-between mb-6 pb-4 border-b border-[var(--color-border)]">
+  <div class="border border-[var(--color-border)] rounded-2xl bg-[var(--color-surface)] p-6 shadow-xs">    <div class="flex items-center justify-between mb-6 pb-4 border-b border-[var(--color-border)]">
       <div>
         <h3 class="text-lg font-bold text-[var(--color-text-primary)]">
           Configured Venues Overview
@@ -343,4 +342,7 @@
       </div>
     }
   </div>
+
+  <!-- Admin Analytics (P14-005): isolated child owns all analytics state -->
+  <app-admin-analytics-dashboard />
 </div>

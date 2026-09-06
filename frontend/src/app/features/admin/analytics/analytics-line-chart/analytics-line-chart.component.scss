@@ -1,0 +1,97 @@
+.analytics-chart {
+  width: 100%;
+}
+
+.analytics-chart__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.analytics-chart__grid {
+  stroke: var(--color-border, #e5e7eb);
+  stroke-width: 1;
+}
+
+.analytics-chart__baseline {
+  stroke: var(--color-text-muted, #6b7280);
+  stroke-width: 1.5;
+}
+
+.analytics-chart__line {
+  stroke: var(--color-accent, #4f46e5);
+  stroke-width: 2;
+}
+
+.analytics-chart__dot {
+  fill: var(--color-accent, #4f46e5);
+}
+
+.analytics-chart__tick {
+  font-size: 10px;
+  fill: var(--color-text-muted, #6b7280);
+}
+
+.analytics-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.analytics-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.analytics-chart__swatch {
+  display: inline-block;
+  width: 1.25rem;
+  height: 0.25rem;
+  background: var(--color-accent, #4f46e5);
+  border-radius: 9999px;
+}
+
+.analytics-chart__data {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.analytics-chart__data summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.analytics-chart__table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.analytics-chart__data table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.analytics-chart__data th,
+.analytics-chart__data td {
+  border: 1px solid var(--color-border, #e5e7eb);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.analytics-chart__empty {
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytics-chart__svg * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
