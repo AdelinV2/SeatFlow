@@ -636,4 +636,83 @@ describe('SessionFlow Router/DOM integration (TASK-P12-006 REV-006)', () => {
     expect(fixture.nativeElement.querySelector('app-seat-map')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.selection-dock')).toBeNull();
   });
+
+  it('ignores a late session-A HTTP response after A -> B and keeps B reconnect pinned to B (TASK-P12-008 REV-008)', async () => {
+    // --- Deep link to A and connect it, but keep HTTP responses delayed ----
+    await router.navigateByUrl('/events/event-1/seats?sessionId=session-1');
+    await stable();
+
+    expect(seatComp().selectedSession()?.id).toBe('session-1');
+    await fireOnConnect(0);
+    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-1/seats',
+    );
+    // Deferred flush: capture A's availability requests (component baseline +
+    // WS reconcile) while they are still in flight. SeatStateService never
+    // cancels a superseded request (its request-id guard ignores the late
+    // response instead), so these handles stay flushable after the switch.
+    const pendingA = httpMock.match('/api/event-sessions/session-1/seats/availability');
+    expect(pendingA.length).withContext('A baseline requests should be pending').toBeGreaterThan(0);
+
+    // --- A -> B while A's HTTP response is still delayed -------------------
+    await openShowtimePicker();
+    await clickSessionRadio(1);
+
+    expect(router.url).withContext('actual URL should carry session B').toContain('sessionId=session-2');
+    expect(seatComp().selectedSession()?.id).toBe('session-2');
+    expect(clients[0].subscription.unsubscribe)
+      .withContext('A topic subscription must be torn down')
+      .toHaveBeenCalled();
+    expect(clients.length).toBe(2);
+
+    // Settle B: component baseline, then the WS-side reconcile, mirroring
+    // production timing (see settleSession).
+    await flushAvailability('session-2', availabilityB);
+    await fireOnConnect(1);
+    await flushAvailability('session-2', availabilityB);
+
+    expect(seatStatus('seat-1')).withContext('B payload should render seat-1 HELD').toBe('HELD');
+    expect(seatStatus('seat-2')).withContext('B payload should render seat-2 AVAILABLE').toBe('AVAILABLE');
+    expect(seatDomStatus('seat-1')).withContext('rendered seat-1 should show B status').toBe('HELD');
+
+    // --- Late A HTTP response arrives AFTER the switch ----------------------
+    // availabilityA deliberately disagrees with B on seat-1 (AVAILABLE vs
+    // HELD): if the stale response mutated B state, seat-1 would flip.
+    pendingA.forEach((request) => {
+      expect(request.request.method).toBe('GET');
+      request.flush(availabilityA);
+    });
+    await stable();
+
+    expect(seatComp().selectedSession()?.id)
+      .withContext('late A HTTP must not move the selected session')
+      .toBe('session-2');
+    expect(seatStatus('seat-1')).withContext('late A HTTP must not mutate B seat-1').toBe('HELD');
+    expect(seatStatus('seat-2')).withContext('late A HTTP must not mutate B seat-2').toBe('AVAILABLE');
+    expect(seatDomStatus('seat-1'))
+      .withContext('rendered B seat-1 must survive the late A HTTP')
+      .toBe('HELD');
+    expect(seatDomStatus('seat-2'))
+      .withContext('rendered B seat-2 must survive the late A HTTP')
+      .toBe('AVAILABLE');
+
+    // --- B reconnect resubscribes B only + REST refresh reconciles ------------
+    const subscribesBefore = clients[1].subscribe.calls.count();
+    await fireOnConnect(1);
+    expect(clients[1].subscribe.calls.count()).toBe(subscribesBefore + 1);
+    expect(clients[1].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-2/seats',
+    );
+
+    await flushAvailability('session-2', availabilityB);
+    expect(seatStatus('seat-1')).toBe('HELD');
+    expect(seatStatus('seat-2')).toBe('AVAILABLE');
+    expect(seatDomStatus('seat-1')).toBe('HELD');
+
+    // No NEW session-1 traffic after the switch: the reconnect refreshed B
+    // only (match() returns pending requests; the stale A ones are flushed).
+    expect(httpMock.match('/api/event-sessions/session-1/seats/availability').length)
+      .withContext('reconnect must not re-request session-1 availability')
+      .toBe(0);
+  });
 });

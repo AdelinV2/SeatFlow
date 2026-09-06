@@ -232,6 +232,61 @@ class TicketServiceImplTest {
     }
 
     @Test
+    void shouldRenderPdfFromStoredSessionSnapshotNotLiveLookup() {
+        // P12-008 scenario G: a migrated/issued ticket renders its stored
+        // immutable showing snapshot even when the live event lookup disagrees
+        // (catalog edits must never rewrite an issued ticket's showing).
+        Ticket ticket = sampleTicket(TicketStatus.VALID, userId);
+        ticket.setEventSessionId(sessionId);
+        ticket.setSessionStartsAt(sessionStartsAt);
+        ticket.setSessionEndsAt(sessionEndsAt);
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(ticket));
+        Instant staleCatalogDate = Instant.parse("2026-11-01T19:00:00Z");
+        when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.of(
+                new EventSeatMapClientResponse(eventId, UUID.randomUUID(), "Concert",
+                        staleCatalogDate, "Sky Arena", 5000, 100L, List.of())));
+        when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
+                new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Concert",
+                        "CONCERT", staleCatalogDate, "ACTIVE", "http://banner")));
+        when(seatMapServiceClient.getVenueById(any())).thenReturn(Optional.of(
+                new VenueClientResponse(UUID.randomUUID(), "Sky Arena", "Main St", "Berlin", "DE", 5000)));
+        when(ticketMapper.toDetailResponse(any())).thenReturn(mock(TicketDetailResponse.class));
+
+        ticketService.generateTicketPdf(ticketId, userId, false);
+
+        ArgumentCaptor<PdfTicketData> captor = ArgumentCaptor.forClass(PdfTicketData.class);
+        verify(pdfTicketGeneratorService).generatePdf(captor.capture());
+        assertThat(captor.getValue().eventDate()).isEqualTo(sessionStartsAt);
+    }
+
+    @Test
+    void shouldFallBackToEnrichmentDateOnlyForPreMigrationTicketWithoutSnapshot() {
+        // P12-008 scenario G: the live-lookup fallback exists solely for
+        // pre-P12-004 rows whose snapshot columns are NULL (additive V5 left
+        // them NULL by design); any ticket WITH a snapshot must never take
+        // this path (see test above).
+        Ticket legacyTicket = sampleTicket(TicketStatus.VALID, userId);
+        assertThat(legacyTicket.getSessionStartsAt()).isNull();
+        when(ticketRepository.findById(ticketId)).thenReturn(Optional.of(legacyTicket));
+        Instant enrichmentDate = Instant.parse("2026-10-05T19:00:00Z");
+        when(eventServiceClient.getEventSeatMap(eventId)).thenReturn(Optional.of(
+                new EventSeatMapClientResponse(eventId, UUID.randomUUID(), "Concert",
+                        enrichmentDate, "Sky Arena", 5000, 100L, List.of())));
+        when(eventServiceClient.getEventById(eventId)).thenReturn(Optional.of(
+                new com.seatflow.ticket.client.dto.EventClientResponse(eventId, UUID.randomUUID(), "Concert",
+                        "CONCERT", enrichmentDate, "ACTIVE", "http://banner")));
+        when(seatMapServiceClient.getVenueById(any())).thenReturn(Optional.of(
+                new VenueClientResponse(UUID.randomUUID(), "Sky Arena", "Main St", "Berlin", "DE", 5000)));
+        when(ticketMapper.toDetailResponse(any())).thenReturn(mock(TicketDetailResponse.class));
+
+        ticketService.generateTicketPdf(ticketId, userId, false);
+
+        ArgumentCaptor<PdfTicketData> captor = ArgumentCaptor.forClass(PdfTicketData.class);
+        verify(pdfTicketGeneratorService).generatePdf(captor.capture());
+        assertThat(captor.getValue().eventDate()).isEqualTo(enrichmentDate);
+    }
+
+    @Test
     void shouldGetGuestTicketBundleByCode() {
         Ticket guestTicket1 = sampleTicket(TicketStatus.VALID, null);
         Ticket guestTicket2 = sampleTicket(TicketStatus.VALID, null);

@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -107,6 +109,12 @@ class NotificationServiceIntegrationTest {
 
     @MockitoBean
     private TicketServiceClient ticketServiceClient;
+
+    // Spy (not mock): the Kafka container still invokes the real listener,
+    // while the spy records invocations so a replayed duplicate can be proven
+    // consumed (not merely slow) before asserting single-log dedupe.
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    private com.seatflow.notification.messaging.consumer.TicketIssuedEventListener ticketIssuedEventListener;
 
     @Autowired
     private KafkaTemplate<String, Object> kafkaTemplate;
@@ -272,5 +280,111 @@ class NotificationServiceIntegrationTest {
                     assertThat(notificationLog.getRecipientEmail()).isEqualTo("e2e-res-held@example.com");
                     assertThat(notificationLog.getTemplateType()).isEqualTo(NotificationTemplateType.RESERVATION_HELD);
                 });
+    }
+
+    @Test
+    @DisplayName("P12-008 scenario F/A: TicketIssued renders the exact session-A showing and a replayed duplicate stays one SENT log")
+    void shouldRenderExactSessionAndDedupeReplayedTicketIssued() throws Exception {
+        UUID ticketId = UUID.randomUUID();
+        UUID reservationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        Instant startsA = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsA = Instant.parse("2026-10-05T21:00:00Z");
+        // Session B exists only as a leakage oracle: the rendered showing must
+        // never reference it.
+        Instant startsB = startsA.plusSeconds(86400);
+        String ticketCode = "SF-TKT-P12-008-A";
+
+        when(ticketServiceClient.fetchTicketPdf(ticketId)).thenReturn(new byte[]{0x25, 0x50, 0x44, 0x46});
+
+        TicketIssuedEvent event = new TicketIssuedEvent(
+                ticketId,
+                reservationId,
+                userId,
+                "session-a@example.com",
+                "Session A Guest",
+                sessionA,
+                eventId,
+                startsA,
+                endsA,
+                null,
+                seatId,
+                new BigDecimal("150.00"),
+                new BigDecimal("25.00"),
+                new BigDecimal("125.00"),
+                ticketCode,
+                "SF:QR:P12-008-A",
+                Instant.now()
+        );
+
+        EventEnvelope<TicketIssuedEvent> envelope = new EventEnvelope<>(
+                UUID.randomUUID().toString(),
+                "TicketIssued",
+                Instant.now(),
+                "corr-p12-008-a",
+                null,
+                ticketId.toString(),
+                1,
+                event
+        );
+
+        kafkaTemplate.send(EventTopics.TICKET_EVENTS, ticketId.toString(), envelope);
+
+        String expectedIdempotencyKey = "ticket-issued-" + ticketId;
+        String expectedShowing = com.seatflow.notification.service.impl.NotificationServiceImpl
+                .formatSessionInstant(startsA, null);
+        String forbiddenShowing = com.seatflow.notification.service.impl.NotificationServiceImpl
+                .formatSessionInstant(startsB, null);
+
+        await().atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> {
+                    Optional<NotificationLog> logOptional =
+                            notificationLogRepository.findByIdempotencyKey(expectedIdempotencyKey);
+                    assertThat(logOptional).isPresent();
+                    NotificationLog notificationLog = logOptional.get();
+                    assertThat(notificationLog.getStatus()).isEqualTo(NotificationStatus.SENT);
+                    assertThat(notificationLog.getTemplateType()).isEqualTo(NotificationTemplateType.TICKET_ISSUED);
+                    assertThat(notificationLog.getRenderedContent()).isNotBlank()
+                            .contains(ticketCode)
+                            .contains(expectedShowing)
+                            .doesNotContain(forbiddenShowing);
+                });
+
+        // Replay the identical TicketIssued envelope: the duplicate must be
+        // demonstrably consumed before asserting single-log dedupe. The dedupe
+        // path writes no new row, so no DB predicate can prove consumption —
+        // and a bare verify-timeout records listener ENTRY, before the
+        // transaction necessarily completes. The post-return latch below
+        // decrements only after callRealMethod returns, i.e. after the
+        // listener transaction commits or the idempotent early-return
+        // completes (P12-008 REV-003); row assertions after the latch
+        // therefore observe post-commit state by construction.
+        CountDownLatch duplicateConsumed = new CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            try {
+                return invocation.callRealMethod();
+            } finally {
+                duplicateConsumed.countDown();
+            }
+        }).when(ticketIssuedEventListener)
+                .handleTicketEvent(org.mockito.ArgumentMatchers.any());
+
+        kafkaTemplate.send(EventTopics.TICKET_EVENTS, ticketId.toString(), envelope);
+
+        assertThat(duplicateConsumed.await(10, TimeUnit.SECONDS))
+                .as("replayed TicketIssued demonstrably consumed before final assertions")
+                .isTrue();
+
+        long rowsForKey = notificationLogRepository.findAll().stream()
+                .filter(log -> expectedIdempotencyKey.equals(log.getIdempotencyKey()))
+                .count();
+        assertThat(rowsForKey).isEqualTo(1);
+        assertThat(notificationLogRepository.findByIdempotencyKey(expectedIdempotencyKey))
+                .isPresent()
+                .hasValueSatisfying(log -> assertThat(log.getStatus()).isEqualTo(NotificationStatus.SENT));
     }
 }

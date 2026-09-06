@@ -482,5 +482,47 @@ describe('WebSocketService', () => {
     expect(service.connectionStatus()).toBe('DISCONNECTED');
     expect(service.isConnected()).toBeFalse();
   });
+
+  it('should keep a reconnect pinned to session B and ignore the torn-down session A client (P12-008 I)', () => {
+    service.connectForSession('session-A');
+    configs[0].onConnect?.({} as never);
+    expect(clients[0].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-A/seats',
+    );
+
+    // A -> B switch: A subscription torn down, B subscribed + reconciled.
+    service.connectForSession('session-B');
+    expect(clients[0].subscription.unsubscribe).toHaveBeenCalledTimes(1);
+    configs[1].onConnect?.({} as never);
+    expect(clients[1].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-B/seats',
+    );
+    expect(seatStateService.reconcileAvailability).toHaveBeenCalledWith(
+      'session-B',
+      undefined,
+      undefined,
+    );
+
+    // Late onConnect from the retained (torn-down) A client must be ignored:
+    // no A resubscribe, no A REST reconcile — B UI stays authoritative.
+    const reconcilesBefore = seatStateService.reconcileAvailability.calls.count();
+    configs[0].onConnect?.({} as never);
+    expect(clients[0].subscribe.calls.count()).toBe(1);
+    expect(seatStateService.reconcileAvailability.calls.count()).toBe(reconcilesBefore);
+
+    // Genuine B reconnect re-subscribes B only and reconciles B again.
+    const bReconcilesBefore = seatStateService.reconcileAvailability.calls
+      .allArgs()
+      .filter((args) => args[0] === 'session-B').length;
+    configs[1].onConnect?.({} as never);
+    expect(clients[1].subscribe.calls.mostRecent().args[0]).toBe(
+      '/topic/sessions/session-B/seats',
+    );
+    expect(
+      seatStateService.reconcileAvailability.calls
+        .allArgs()
+        .filter((args) => args[0] === 'session-B').length,
+    ).toBe(bReconcilesBefore + 1);
+  });
 });
 
