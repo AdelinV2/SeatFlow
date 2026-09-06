@@ -3,8 +3,17 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { AdminAnalyticsApiService } from './admin-analytics-api.service';
+import {
+  HttpErrorResponse,
+  HttpHeaders,
+  HttpResponse,
+  provideHttpClient,
+} from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import {
+  AdminAnalyticsApiService,
+  resolveAnalyticsExportFilename,
+} from './admin-analytics-api.service';
 import { AnalyticsSummary, AnalyticsTimeSeries } from '../models/admin-analytics.model';
 import { PagedResult } from '../models/event.model';
 
@@ -120,6 +129,136 @@ describe('AdminAnalyticsApiService', () => {
     expect(req.request.params.has('currency')).toBeFalse();
     expect(req.request.params.has('from')).toBeFalse();
     req.flush(mock);
+  });
+
+  it('should call the event filter-options path with the date range unchanged', () => {
+    service.getEventFilterOptions({ from: '2026-09-05', to: '2026-09-06' }).subscribe((res) => {
+      expect(res.truncated).toBeFalse();
+      expect(res.totalProjected).toBe(0);
+    });
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/filter-options/events' && r.method === 'GET',
+    );
+    expect(req.request.params.get('from')).toBe('2026-09-05');
+    expect(req.request.params.get('to')).toBe('2026-09-06');
+    req.flush({ items: [], totalProjected: 0, truncated: false });
+  });
+
+  it('should call the session filter-options path with the optional event scope', () => {
+    service
+      .getSessionFilterOptions({ from: '2026-09-05', to: '2026-09-06', eventId: 'event-1' })
+      .subscribe();
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/filter-options/sessions' && r.method === 'GET',
+    );
+    expect(req.request.params.get('from')).toBe('2026-09-05');
+    expect(req.request.params.get('to')).toBe('2026-09-06');
+    expect(req.request.params.get('eventId')).toBe('event-1');
+    req.flush({ items: [], totalProjected: 0, truncated: false });
+  });
+
+  it('should request the CSV export as a Blob response with applied filters', () => {
+    service
+      .exportDailyCsv({ from: '2026-09-05', to: '2026-09-06', eventId: 'event-1' })
+      .subscribe((res) => {
+        expect(res.body instanceof Blob).toBeTrue();
+      });
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/export/daily.csv' && r.method === 'GET',
+    );
+    expect(req.request.responseType).toBe('blob');
+    expect(req.request.params.get('from')).toBe('2026-09-05');
+    expect(req.request.params.get('eventId')).toBe('event-1');
+    req.flush(new Blob(['row_type,metric_date\n'], { type: 'text/csv' }));
+  });
+
+  it('should decode a Blob JSON error envelope for CSV export failures', async () => {
+    // REV-003: the browser delivers the JSON error body as a Blob because the
+    // request uses responseType 'blob'; the service must restore the stable code.
+    const envelope = {
+      status: 400,
+      error: 'Bad Request',
+      errorCode: 'ANALYTICS_EXPORT_TOO_LARGE',
+      message: 'Analytics export matches 10001 rows, maximum is 10000.',
+      path: '/api/admin/analytics/export/daily.csv',
+      timestamp: '2026-09-06T12:00:00Z',
+    };
+    const pending = firstValueFrom(
+      service.exportDailyCsv({ from: '2026-09-05', to: '2026-09-06' }),
+    );
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/export/daily.csv' && r.method === 'GET',
+    );
+    req.flush(new Blob([JSON.stringify(envelope)], { type: 'application/json' }), {
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    try {
+      await pending;
+      fail('expected the CSV export to fail');
+    } catch (err: unknown) {
+      expect(err instanceof HttpErrorResponse).toBeTrue();
+      expect((err as HttpErrorResponse).status).toBe(400);
+      expect(
+        ((err as HttpErrorResponse).error as { errorCode?: string }).errorCode,
+      ).toBe('ANALYTICS_EXPORT_TOO_LARGE');
+    }
+  });
+
+  it('should pass through a malformed Blob export error body for a safe fallback', async () => {
+    const pending = firstValueFrom(
+      service.exportDailyCsv({ from: '2026-09-05', to: '2026-09-06' }),
+    );
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/export/daily.csv' && r.method === 'GET',
+    );
+    req.flush(new Blob(['<html>not json</html>'], { type: 'text/html' }), {
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    try {
+      await pending;
+      fail('expected the CSV export to fail');
+    } catch (err: unknown) {
+      expect(err instanceof HttpErrorResponse).toBeTrue();
+      expect((err as HttpErrorResponse).error instanceof Blob).toBeTrue();
+    }
+  });
+
+  describe('resolveAnalyticsExportFilename', () => {
+    function responseWith(header: string | null): HttpResponse<Blob> {
+      let headers = new HttpHeaders();
+      if (header !== null) {
+        headers = headers.set('Content-Disposition', header);
+      }
+      return new HttpResponse<Blob>({ body: new Blob(['x']), headers });
+    }
+
+    it('parses the quoted server-generated filename', () => {
+      expect(
+        resolveAnalyticsExportFilename(
+          responseWith('attachment; filename="seatflow-analytics-2026-09-05-2026-09-06.csv"'),
+          'fallback.csv',
+        ),
+      ).toBe('seatflow-analytics-2026-09-05-2026-09-06.csv');
+    });
+
+    it('falls back when the header is missing', () => {
+      expect(resolveAnalyticsExportFilename(responseWith(null), 'fallback.csv')).toBe(
+        'fallback.csv',
+      );
+    });
+
+    it('falls back for path-traversal filenames instead of trusting the header', () => {
+      expect(
+        resolveAnalyticsExportFilename(
+          responseWith('attachment; filename="../../evil.csv"'),
+          'fallback.csv',
+        ),
+      ).toBe('fallback.csv');
+    });
   });
 
   it('should call the exact session detail path', () => {

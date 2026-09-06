@@ -19,6 +19,9 @@ import com.seatflow.analytics.repository.EventSessionRevenueMetricRepository;
 import com.seatflow.analytics.service.AdminAnalyticsQueryService;
 import com.seatflow.analytics.web.dto.request.AnalyticsDateRange;
 import com.seatflow.analytics.web.dto.response.AnalyticsDailyPointResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsEventFilterOptionResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsFilterOptionsResponse;
+import com.seatflow.analytics.web.dto.response.AnalyticsSessionFilterOptionResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsSummaryResponse;
 import com.seatflow.analytics.web.dto.response.AnalyticsTimeSeriesResponse;
 import com.seatflow.analytics.web.dto.response.EventSessionAnalyticsResponse;
@@ -33,6 +36,7 @@ import com.seatflow.common.domain.exception.ValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -70,6 +74,12 @@ public class AdminAnalyticsQueryServiceImpl implements AdminAnalyticsQueryServic
 
     /** Maximum limit for top rankings. */
     public static final int MAX_TOP_LIMIT = 20;
+
+    /** Hard maximum of filter options returned per endpoint (TASK-P14-006 §6.1). */
+    public static final int MAX_FILTER_OPTIONS = 500;
+
+    /** Probe size that detects overflow without an unbounded fetch. */
+    public static final int FILTER_OPTIONS_PROBE = MAX_FILTER_OPTIONS + 1;
 
     private final AnalyticsAdminQueryRepository adminQueries;
     private final AnalyticsProjectionQueryRepository projectionQueries;
@@ -406,6 +416,67 @@ public class AdminAnalyticsQueryServiceImpl implements AdminAnalyticsQueryServic
                     metric.name(), value, effectiveCurrency));
         }
         return items;
+    }
+
+    // ------------------------------------------------------------------
+    // Filter options (TASK-P14-006 §6.1–§6.3)
+    // ------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public AnalyticsFilterOptionsResponse<AnalyticsEventFilterOptionResponse> getEventFilterOptions(
+            AnalyticsDateRange range) {
+        log.info("Admin analytics event filter options requested. from={}, to={}",
+                range.from(), range.to());
+        // REV-004: probe first under one REPEATABLE_READ snapshot. At most 500
+        // matches need no count query at all — the envelope is exact from the
+        // single probe by construction and can never silently truncate. The
+        // count runs only on overflow, where the probe independently forces
+        // truncated=true, so a concurrent projection commit in the window can
+        // never produce totalProjected=500 with truncated=false for 501 rows.
+        List<AnalyticsAdminQueryRepository.EventOptionRow> probe = adminQueries
+                .findEventOptions(range.from(), range.to(), FILTER_OPTIONS_PROBE);
+        if (probe.size() <= MAX_FILTER_OPTIONS) {
+            List<AnalyticsEventFilterOptionResponse> items = probe.stream()
+                    .map(row -> new AnalyticsEventFilterOptionResponse(
+                            row.eventId(), row.label(), row.firstStart()))
+                    .toList();
+            return AnalyticsFilterOptionsResponse.of(items, probe.size(), false);
+        }
+        long total = adminQueries.countEventOptions(range.from(), range.to());
+        List<AnalyticsEventFilterOptionResponse> items = probe.stream()
+                .limit(MAX_FILTER_OPTIONS)
+                .map(row -> new AnalyticsEventFilterOptionResponse(
+                        row.eventId(), row.label(), row.firstStart()))
+                .toList();
+        return AnalyticsFilterOptionsResponse.of(
+                items, Math.max(total, (long) probe.size()), true);
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public AnalyticsFilterOptionsResponse<AnalyticsSessionFilterOptionResponse> getSessionFilterOptions(
+            AnalyticsDateRange range, UUID eventId) {
+        log.info("Admin analytics session filter options requested. from={}, to={}, eventId={}",
+                range.from(), range.to(), eventId);
+        // REV-004: same probe-first protocol as event options (see above).
+        List<AnalyticsAdminQueryRepository.SessionOptionRow> probe = adminQueries
+                .findSessionOptions(range.from(), range.to(), eventId, FILTER_OPTIONS_PROBE);
+        if (probe.size() <= MAX_FILTER_OPTIONS) {
+            List<AnalyticsSessionFilterOptionResponse> items = probe.stream()
+                    .map(row -> new AnalyticsSessionFilterOptionResponse(
+                            row.eventSessionId(), row.eventId(), row.label(), row.startsAt()))
+                    .toList();
+            return AnalyticsFilterOptionsResponse.of(items, probe.size(), false);
+        }
+        long total = adminQueries.countSessionOptions(range.from(), range.to(), eventId);
+        List<AnalyticsSessionFilterOptionResponse> items = probe.stream()
+                .limit(MAX_FILTER_OPTIONS)
+                .map(row -> new AnalyticsSessionFilterOptionResponse(
+                        row.eventSessionId(), row.eventId(), row.label(), row.startsAt()))
+                .toList();
+        return AnalyticsFilterOptionsResponse.of(
+                items, Math.max(total, (long) probe.size()), true);
     }
 
     // ------------------------------------------------------------------

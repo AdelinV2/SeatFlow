@@ -162,3 +162,55 @@ export interface AnalyticsSessionQueryParams extends AnalyticsQueryParams {
   sort?: string;
   currency?: string;
 }
+
+export interface AnalyticsEventFilterOption {
+  eventId: string;
+  /** Analytics-owned title snapshot; null until a trusted lifecycle event provides it. */
+  label: string | null;
+  firstProjectedSessionStart: string | null;
+}
+
+export interface AnalyticsSessionFilterOption {
+  eventSessionId: string;
+  eventId: string;
+  /** Analytics-owned label snapshot; null until a trusted lifecycle event provides it. */
+  label: string | null;
+  startsAt: string | null;
+}
+
+/**
+ * Bounded filter-options envelope (TASK-P14-006 §6.1). At most 500 items;
+ * `truncated` tells the dashboard to warn instead of silently hiding options.
+ */
+export interface AnalyticsFilterOptions<T> {
+  items: T[];
+  totalProjected: number;
+  truncated: boolean;
+}
+
+export type AnalyticsEventFilterOptions = AnalyticsFilterOptions<AnalyticsEventFilterOption>;
+export type AnalyticsSessionFilterOptions =
+  AnalyticsFilterOptions<AnalyticsSessionFilterOption>;
+
+/**
+ * Currently applied dashboard filters (TASK-P14-006 §6.4). The dashboard keeps
+ * draft form state separate; CSV export and displayed results always use these
+ * applied values. Dates are UTC `YYYY-MM-DD` strings sent unchanged.
+ */
+export interface AnalyticsAppliedFilters {
+  fromDate: string;
+  toDate: string;
+  eventId: string | null;
+  eventSessionId: string | null;
+  trendMetric: AnalyticsMetric;
+  sessionPage: number;
+  sessionPageSize: number;
+}
+
+export const ANALYTICS_SESSION_PAGE_SIZES: readonly number[] = [10, 25, 50, 100];
+export const DEFAULT_ANALYTICS_PAGE_SIZE = 25;
+export const DEFAULT_ANALYTICS_TREND_METRIC: AnalyticsMetric = 'NET_REVENUE';
+export const ANALYTICS_FILTER_OPTIONS_TRUNCATED_MESSAGE =
+  'Showing first 500 options — narrow the date range to see more.';
+export const ANALYTICS_EXPORT_TOO_LARGE_MESSAGE =
+  'Export is too large (over 10,000 rows). Narrow the date range or filters and retry.';

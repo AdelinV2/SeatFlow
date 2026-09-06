@@ -9,8 +9,9 @@
         Analytics Dashboard
       </h2>
       <p class="analytics-dashboard__subtitle">
-        Event-driven projections for the default 30-day period. In-range listing rows are
-        range-bound sums; session details are lifetime values.
+        Event-driven projections for the selected UTC date range. In-range listing rows are
+        range-bound sums; session details are lifetime values. The session table scopes by
+        event; summary, trend, and CSV export also honor the selected session.
       </p>
     </div>
     @if (hasNonTestRevenue()) {
@@ -45,10 +46,109 @@
     Analytics are event-driven and eventually consistent — not real-time transactional truth.
     @if (freshnessText()) {
       <span>Last projected event: {{ freshnessText() }}</span>
-    } @else {
+    } @else if (freshnessReady()) {
       <span>No projected events yet</span>
+    } @else {
+      <span>Projection recency is unavailable while analytics load.</span>
     }
   </p>
+
+  <!-- Filters -->
+  <div class="analytics-dashboard__filters" data-testid="analytics-filters">
+    <div class="analytics-dashboard__filter-row">
+      <label class="analytics-dashboard__field">
+        <span class="analytics-dashboard__field-label">From (UTC)</span>
+        <input
+          type="date"
+          data-testid="filter-from"
+          [value]="draftFrom()"
+          (change)="onDraftFromChange($any($event.target).value)"
+        />
+      </label>
+      <label class="analytics-dashboard__field">
+        <span class="analytics-dashboard__field-label">To (UTC)</span>
+        <input
+          type="date"
+          data-testid="filter-to"
+          [value]="draftTo()"
+          (change)="onDraftToChange($any($event.target).value)"
+        />
+      </label>
+      <label class="analytics-dashboard__field">
+        <span class="analytics-dashboard__field-label">Event</span>
+        <select
+          data-testid="filter-event"
+          [value]="draftEventId() ?? ''"
+          (change)="onDraftEventChange($any($event.target).value || null)"
+        >
+          <option value="">All events</option>
+          @for (opt of eventOptions(); track opt.eventId) {
+            <option [value]="opt.eventId">{{ optionLabel(opt.label, opt.eventId) }}</option>
+          }
+        </select>
+      </label>
+      <label class="analytics-dashboard__field">
+        <span class="analytics-dashboard__field-label">Session</span>
+        <select
+          data-testid="filter-session"
+          [value]="draftSessionId() ?? ''"
+          [disabled]="sessionOptionsLoading()"
+          (change)="onDraftSessionChange($any($event.target).value || null)"
+        >
+          <option value="">All sessions</option>
+          @for (opt of sessionOptions(); track opt.eventSessionId) {
+            <option [value]="opt.eventSessionId">
+              {{ optionLabel(opt.label, opt.eventSessionId) }}
+            </option>
+          }
+        </select>
+      </label>
+    </div>
+    <div class="analytics-dashboard__filter-actions">
+      <button type="button" data-testid="apply-filters" (click)="applyFilters()">
+        Apply filters
+      </button>
+      <button type="button" data-testid="reset-filters" (click)="resetFilters()">
+        Reset
+      </button>
+      <button
+        type="button"
+        data-testid="export-csv"
+        (click)="exportCsv()"
+        [disabled]="exporting()"
+      >
+        Export CSV
+      </button>
+    </div>
+    @if (filterError()) {
+      <p class="analytics-dashboard__error" role="alert" data-testid="filter-error">
+        {{ filterError() }}
+      </p>
+    }
+    @if (eventOptionsTruncated() || sessionOptionsTruncated()) {
+      <p class="analytics-dashboard__warning" role="note" data-testid="options-truncated-warning">
+        {{ optionsTruncatedMessage }}
+      </p>
+    }
+    @if (filterOptionsError()) {
+      <p class="analytics-dashboard__error" role="alert" data-testid="filter-options-error">
+        Filter options are unavailable right now.
+        <button type="button" class="analytics-dashboard__retry" (click)="reloadFilterOptions()">
+          Retry options
+        </button>
+      </p>
+    }
+    @if (exporting()) {
+      <p class="analytics-dashboard__status" role="status" data-testid="export-progress">
+        Preparing CSV export…
+      </p>
+    }
+    @if (exportError()) {
+      <p class="analytics-dashboard__error" role="alert" data-testid="export-error">
+        {{ exportError() }}
+      </p>
+    }
+  </div>
 
   <!-- KPI summary -->
   <div class="analytics-dashboard__block" data-testid="summary-widget">
@@ -63,7 +163,27 @@
           </div>
         }
       </div>
-    } @else if (summaryState() === 'error') {
+    } @else if (summaryState() === 'refreshing') {
+      <div class="analytics-dashboard__grid" aria-busy="true" aria-label="Refreshing summary">
+        @for (i of [1,2,3,4,5,6]; track i) {
+          <div class="analytics-dashboard__card">
+            <app-skeleton-loader height="16px" width="55%" label="Refreshing KPI label" />
+            <app-skeleton-loader height="28px" width="40%" label="Refreshing KPI value" />
+            <app-skeleton-loader height="14px" width="70%" label="Refreshing KPI detail" />
+          </div>
+        }
+      </div>
+      <p class="analytics-dashboard__status" role="status" data-testid="summary-refreshing">
+        Refreshing analytics for the new filters…
+      </p>
+    } @else if (summaryState() === 'validation-error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="summary-validation-error">
+        <p>Analytics filters were rejected: {{ summaryErrorDetail() ?? 'Check the date range and filters, then retry.' }}</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadSummary()">
+          Retry summary
+        </button>
+      </div>
+    } @else if (summaryState() === 'unavailable') {
       <div class="analytics-dashboard__state" role="alert" data-testid="summary-error">
         <p>Analytics summary is unavailable right now.</p>
         <button type="button" class="analytics-dashboard__retry" (click)="loadSummary()">
@@ -156,7 +276,21 @@
       <div aria-busy="true" aria-label="Loading trend">
         <app-skeleton-loader height="220px" width="100%" label="Loading trend chart" />
       </div>
-    } @else if (trendState() === 'error') {
+    } @else if (trendState() === 'refreshing') {
+      <div aria-busy="true" aria-label="Refreshing trend">
+        <app-skeleton-loader height="220px" width="100%" label="Refreshing trend chart" />
+      </div>
+      <p class="analytics-dashboard__status" role="status" data-testid="trend-refreshing">
+        Refreshing trend for the new filters…
+      </p>
+    } @else if (trendState() === 'validation-error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="trend-validation-error">
+        <p>Trend filters were rejected: {{ trendErrorDetail() ?? 'Check the date range and filters, then retry.' }}</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadTrend()">
+          Retry trend
+        </button>
+      </div>
+    } @else if (trendState() === 'unavailable') {
       <div class="analytics-dashboard__state" role="alert" data-testid="trend-error">
         <p>Trend data is unavailable right now.</p>
         <button type="button" class="analytics-dashboard__retry" (click)="loadTrend()">
@@ -180,7 +314,21 @@
       <div class="analytics-dashboard__table-wrap" aria-busy="true" aria-label="Loading sessions">
         <app-skeleton-loader height="20px" width="100%" [lines]="5" label="Loading session rows" />
       </div>
-    } @else if (sessionsState() === 'error') {
+    } @else if (sessionsState() === 'refreshing') {
+      <div class="analytics-dashboard__table-wrap" aria-busy="true" aria-label="Refreshing sessions">
+        <app-skeleton-loader height="20px" width="100%" [lines]="5" label="Refreshing session rows" />
+      </div>
+      <p class="analytics-dashboard__status" role="status" data-testid="sessions-refreshing">
+        Refreshing sessions for the new filters…
+      </p>
+    } @else if (sessionsState() === 'validation-error') {
+      <div class="analytics-dashboard__state" role="alert" data-testid="sessions-validation-error">
+        <p>Session filters were rejected: {{ sessionsErrorDetail() ?? 'Check the date range and filters, then retry.' }}</p>
+        <button type="button" class="analytics-dashboard__retry" (click)="loadSessions()">
+          Retry sessions
+        </button>
+      </div>
+    } @else if (sessionsState() === 'unavailable') {
       <div class="analytics-dashboard__state" role="alert" data-testid="sessions-error">
         <p>Session analytics are unavailable right now. Summary and trend data above are unaffected.</p>
         <button type="button" class="analytics-dashboard__retry" (click)="loadSessions()">
@@ -192,6 +340,39 @@
         <p>No sessions in this period.</p>
       </div>
     } @else if (sessions()) {
+      <div class="analytics-dashboard__pagination" data-testid="sessions-pagination">
+        <button
+          type="button"
+          data-testid="page-prev"
+          (click)="goToPage(appliedFilters().sessionPage - 1)"
+          [disabled]="sessions()?.isFirst ?? true"
+        >
+          Previous
+        </button>
+        <span data-testid="page-info" role="status">
+          Page {{ appliedFilters().sessionPage + 1 }} of {{ sessions()?.totalPages }}
+        </span>
+        <button
+          type="button"
+          data-testid="page-next"
+          (click)="goToPage(appliedFilters().sessionPage + 1)"
+          [disabled]="sessions()?.isLast ?? true"
+        >
+          Next
+        </button>
+        <label class="analytics-dashboard__field analytics-dashboard__field--inline">
+          <span class="analytics-dashboard__field-label">Rows per page</span>
+          <select
+            data-testid="page-size"
+            [value]="appliedFilters().sessionPageSize"
+            (change)="changePageSize(+$any($event.target).value)"
+          >
+            @for (size of pageSizeOptions; track size) {
+              <option [value]="size">{{ size }}</option>
+            }
+          </select>
+        </label>
+      </div>
       <div class="analytics-dashboard__table-wrap">
         <table class="analytics-dashboard__table">
           <caption class="analytics-dashboard__sr-only">
