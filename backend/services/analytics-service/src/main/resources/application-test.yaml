@@ -12,6 +12,9 @@ spring:
       group-id: analytics-service-v1-test
       auto-offset-reset: earliest
       enable-auto-commit: false
+      isolation-level: read_committed
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   security:
     oauth2:
       resourceserver:
