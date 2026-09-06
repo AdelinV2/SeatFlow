@@ -1,8 +1,7 @@
 # Production-only health and resource overrides for the single e2-highmem-2 VM.
-# The production host has 2 vCPU / 16 GiB. Cold simultaneous JVM startup is
-# CPU-bound and several services have also exceeded their original cgroup memory
-# ceilings even while the host itself retained ample free RAM. Keep local Compose
-# defaults intentionally smaller/faster; these values apply only to production.
+# The production host has 2 vCPU / 16 GiB. Application startup is staged by
+# start-compose-release.sh, so services no longer need a 10-minute health grace
+# period to survive an all-at-once JVM cold-start thundering herd.
 
 services:
   kafka:
@@ -23,7 +22,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 180s
 
   api-gateway:
     mem_limit: 768m
@@ -31,7 +30,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 180s
 
   user-service:
     mem_limit: 768m
@@ -39,7 +38,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   seat-map-service:
     mem_limit: 768m
@@ -47,7 +46,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   event-service:
     mem_limit: 896m
@@ -55,7 +54,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 300s
 
   reservation-service:
     mem_limit: 896m
@@ -63,7 +62,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 300s
 
   payment-service:
     mem_limit: 768m
@@ -71,7 +70,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   ticket-service:
     mem_limit: 768m
@@ -79,7 +78,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   realtime-service:
     mem_limit: 768m
@@ -87,7 +86,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   notification-service:
     mem_limit: 768m
@@ -95,7 +94,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 240s
 
   tempo:
     # Tempo can temporarily spike during WAL replay and block compaction. The
