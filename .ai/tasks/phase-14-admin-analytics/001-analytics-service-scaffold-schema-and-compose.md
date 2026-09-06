@@ -17,7 +17,7 @@
 - **Verification Strength:** `Strong`
 - **Required Review Depth:** `Critical`
 - **Preferred Workflow:** `critical`
-- **Affected Critical Invariants:** `database-per-service isolation; analytics/write-path decoupling; additive migrations; admin-only boundary; observability; no PII replication`
+- **Affected Critical Invariants:** `database-per-service isolation; analytics/write-path decoupling; additive migrations; admin-only boundary; observability; no PII replication; multi-currency correctness`
 
 ---
 
@@ -41,7 +41,8 @@ The service is a disposable/rebuildable read model derived from durable domain e
 - [ ] Analytics identifiers such as `event_id`, `event_session_id`, `reservation_id`, `payment_id`, and `ticket_id` are opaque correlation IDs, not database foreign keys to another service.
 - [ ] Read-model storage contains no customer email, name, address, payment method details, JWT claims, or other PII merely for analytics.
 - [ ] Monetary values use integral **minor units** (`BIGINT`/Java `long`) plus ISO-style 3-letter currency; floating point is forbidden for money.
-- [ ] Different currencies are never combined into one total.
+- [ ] Different currencies are never combined into one financial aggregate.
+- [ ] **Currency-neutral operational counts are not keyed by currency.** Reservation/ticket/session counts must not be duplicated merely because one session has multiple currencies.
 - [ ] All source timestamps are stored as offset/UTC-capable timestamps (`TIMESTAMPTZ`); daily analytics buckets use the UTC calendar date unless a future product ADR explicitly changes that convention.
 - [ ] `processed_events` is created here as the idempotency boundary, but event processing behavior is implemented in P14-002.
 - [ ] Flyway owns schema creation/evolution. No Hibernate `create`/`update` schema generation in shared, Docker, or production profiles.
@@ -54,8 +55,10 @@ The service is a disposable/rebuildable read model derived from durable domain e
 - accidental query from analytics directly into `seatflow_payment` or `seatflow_reservation`;
 - business-service startup or checkout failure when analytics is unavailable;
 - duplicate-count-prone schema with no durable event identity;
-- precision loss from `double`/`DECIMAL` conversions of minor-unit money;
+- precision loss from `double`/floating arithmetic on money;
 - totals that silently mix RON/EUR/USD;
+- operational counts duplicated once per currency;
+- reservation metrics impossible to store because reservation currency is not present/needed;
 - PII copied into a dashboard read model;
 - mutable operational rows treated as analytics source of truth;
 - container starts locally but is absent from database bootstrap, production compose, migration scripts, or release verification;
@@ -151,8 +154,6 @@ For a brand-new analytics consumer group, use `auto-offset-reset=earliest` so av
 
 Purpose: durable EventEnvelope deduplication.
 
-Required columns:
-
 ```text
 event_id              VARCHAR(128) PRIMARY KEY
 event_type            VARCHAR(128) NOT NULL
@@ -163,7 +164,7 @@ occurred_at            TIMESTAMPTZ NOT NULL
 processed_at           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 ```
 
-Required indexes: `occurred_at`, `processed_at`, and optionally `(event_type, occurred_at)` if justified by operational queries.
+Indexes: `occurred_at`, `processed_at`, optionally `(event_type, occurred_at)` if justified by an actual operational query.
 
 #### `analytics_session_facts`
 
@@ -210,6 +211,7 @@ updated_at              TIMESTAMPTZ NOT NULL
 Rules:
 - `seat_count > 0`.
 - `quoted_total_minor >= 0` when present.
+- Currency/quote are optional analytics evidence only; currency-neutral reservation counts must not depend on them.
 - This is a correlation/read-model fact, not an authoritative reservation replica.
 
 #### `analytics_payment_facts`
@@ -220,10 +222,10 @@ One row per payment identity. It may exist before its reservation fact because K
 payment_id               UUID PRIMARY KEY
 reservation_id           UUID NOT NULL
 event_session_id         UUID NULL
-status                   VARCHAR(64) NOT NULL
-currency                 VARCHAR(3) NOT NULL
-completed_amount_minor   BIGINT NOT NULL DEFAULT 0
-refunded_amount_minor    BIGINT NOT NULL DEFAULT 0
+latest_status            VARCHAR(64) NULL
+currency                 VARCHAR(3) NULL
+completed_amount_minor   BIGINT NULL
+refunded_amount_minor    BIGINT NULL
 completed_at             TIMESTAMPTZ NULL
 failed_at                TIMESTAMPTZ NULL
 refunded_at              TIMESTAMPTZ NULL
@@ -232,10 +234,15 @@ updated_at               TIMESTAMPTZ NOT NULL
 ```
 
 Rules:
-- money columns `>= 0`;
-- `refunded_amount_minor <= completed_amount_minor` once both are known;
+- each money column is `>= 0` when present;
+- currency is required before a completed payment contributes to financial aggregates;
+- refund may be temporarily observed before completion during replay/reordering, so DB schema must not require `refunded_amount <= completed_amount` while completion is unknown;
+- once both are known, projection logic requires `refunded_amount_minor <= completed_amount_minor`; invalid source history is failed/parked, never clamped;
+- unresolved/incomplete payment facts do not contribute negative or mixed financial aggregates;
 - do not store card/customer/Stripe-secret data;
 - Stripe provider IDs are unnecessary unless a later debugging requirement is explicitly approved.
+
+`failed_at` represents failure evidence for that payment identity. Phase 14 counts distinct payment identities with failure evidence; it does not attempt to build a per-provider-attempt analytics model.
 
 #### `analytics_ticket_facts`
 
@@ -255,50 +262,83 @@ updated_at               TIMESTAMPTZ NOT NULL
 
 A ticket contributes at most one attendance unit regardless of repeated scans.
 
-#### `daily_sales_metrics`
+If the final P13 canonical revocation event is reservation-scoped and does not enumerate ticket IDs, P14-003 must add an additive `analytics_ticket_revocation_facts`/batch-correlation table in V2 rather than changing V1 or dropping the event. If P13 emits one canonical event per revoked ticket, no such table is required.
 
-Aggregate row by UTC date + event + session + currency.
+#### `daily_operational_metrics`
+
+Currency-neutral counts by UTC date + event + session.
+
+```text
+metric_date                 DATE NOT NULL
+event_id                    UUID NOT NULL
+event_session_id            UUID NOT NULL
+reservations_created        BIGINT NOT NULL DEFAULT 0
+reservations_confirmed      BIGINT NOT NULL DEFAULT 0
+reservations_expired        BIGINT NOT NULL DEFAULT 0
+payments_succeeded          BIGINT NOT NULL DEFAULT 0
+payments_with_failure       BIGINT NOT NULL DEFAULT 0
+refunds_completed           BIGINT NOT NULL DEFAULT 0
+tickets_issued              BIGINT NOT NULL DEFAULT 0
+tickets_revoked             BIGINT NOT NULL DEFAULT 0
+tickets_scanned             BIGINT NOT NULL DEFAULT 0
+updated_at                  TIMESTAMPTZ NOT NULL
+PRIMARY KEY (metric_date, event_id, event_session_id)
+```
+
+All counters have `CHECK >= 0` constraints.
+
+#### `daily_revenue_metrics`
+
+Currency-specific financial aggregate by UTC date + event + session + currency.
 
 ```text
 metric_date                 DATE NOT NULL
 event_id                    UUID NOT NULL
 event_session_id            UUID NOT NULL
 currency                    VARCHAR(3) NOT NULL
-reservations_created        BIGINT NOT NULL DEFAULT 0
-reservations_confirmed      BIGINT NOT NULL DEFAULT 0
-reservations_expired        BIGINT NOT NULL DEFAULT 0
 payments_succeeded          BIGINT NOT NULL DEFAULT 0
-payment_failures            BIGINT NOT NULL DEFAULT 0
 refunds_completed           BIGINT NOT NULL DEFAULT 0
-tickets_issued              BIGINT NOT NULL DEFAULT 0
-tickets_revoked             BIGINT NOT NULL DEFAULT 0
-tickets_scanned             BIGINT NOT NULL DEFAULT 0
 gross_revenue_minor         BIGINT NOT NULL DEFAULT 0
 refunded_revenue_minor      BIGINT NOT NULL DEFAULT 0
 updated_at                  TIMESTAMPTZ NOT NULL
 PRIMARY KEY (metric_date, event_id, event_session_id, currency)
 ```
 
-All counters and amounts have `CHECK >= 0` constraints.
+All counters/amounts have `CHECK >= 0`. `net_revenue_minor` is derived as gross minus refunded; do not duplicate it as mutable stored state unless a demonstrated query need justifies a generated column.
 
 #### `event_session_metrics`
 
-Lifetime/current aggregate per session + currency, rebuilt from analytics facts.
+Currency-neutral lifetime/current operational aggregate per session.
 
 ```text
-event_session_id            UUID NOT NULL
+event_session_id            UUID PRIMARY KEY
 event_id                    UUID NOT NULL
-currency                    VARCHAR(3) NOT NULL
 capacity_snapshot            INTEGER NULL
 reservations_created        BIGINT NOT NULL DEFAULT 0
 reservations_confirmed      BIGINT NOT NULL DEFAULT 0
 reservations_expired        BIGINT NOT NULL DEFAULT 0
 payments_succeeded          BIGINT NOT NULL DEFAULT 0
-payment_failures            BIGINT NOT NULL DEFAULT 0
+payments_with_failure       BIGINT NOT NULL DEFAULT 0
 refunds_completed           BIGINT NOT NULL DEFAULT 0
 tickets_issued              BIGINT NOT NULL DEFAULT 0
 tickets_revoked             BIGINT NOT NULL DEFAULT 0
 tickets_scanned             BIGINT NOT NULL DEFAULT 0
+last_projected_event_at     TIMESTAMPTZ NULL
+updated_at                  TIMESTAMPTZ NOT NULL
+```
+
+All counters are currency-neutral and must appear only once per session.
+
+#### `event_session_revenue_metrics`
+
+Currency-specific lifetime financial aggregate per session.
+
+```text
+event_session_id            UUID NOT NULL
+event_id                    UUID NOT NULL
+currency                    VARCHAR(3) NOT NULL
+payments_succeeded          BIGINT NOT NULL DEFAULT 0
+refunds_completed           BIGINT NOT NULL DEFAULT 0
 gross_revenue_minor         BIGINT NOT NULL DEFAULT 0
 refunded_revenue_minor      BIGINT NOT NULL DEFAULT 0
 last_projected_event_at     TIMESTAMPTZ NULL
@@ -308,7 +348,22 @@ PRIMARY KEY (event_session_id, currency)
 
 Never materialize a single mixed-currency row.
 
-### 6.4 Schema Design Rules
+### 6.4 Why Operational and Financial Aggregates Are Separate
+
+This split is mandatory.
+
+A session can theoretically contain successful payments in more than one currency. If reservation/ticket counts lived in `(session,currency)` rows, querying session totals could double-count the same reservation/ticket once per currency. Conversely, reservation creation events may not even need a currency.
+
+Therefore:
+
+```text
+operational counts -> no currency in primary key
+financial amounts  -> currency is part of primary key
+```
+
+P14-003 recomputes both independently from facts; P14-004 combines them into typed API DTOs without summing currencies.
+
+### 6.5 Schema Design Rules
 
 - Do not add foreign keys to IDs owned by another service.
 - Local relationships between analytics tables may use indexes rather than FK constraints when out-of-order delivery requires temporarily incomplete correlation.
@@ -316,7 +371,7 @@ Never materialize a single mixed-currency row.
 - Use additive Flyway migrations after V1. Never edit an applied migration once merged/deployed.
 - Category/section metrics are deliberately **not** in V1. Add them later only if final P12/P13 event payloads contain stable, non-PII dimensions; never infer them by cross-service lookup.
 
-### 6.5 Gateway and Security Boundary
+### 6.6 Gateway and Security Boundary
 
 Add an explicit API Gateway route:
 
@@ -328,7 +383,7 @@ Place it so it cannot be swallowed by another service's `/api/admin/...` matcher
 
 Create analytics-service security with the repository's shared JWT converter. Health/info behavior should follow sibling services. Any `/api/admin/analytics/**` handler introduced now or later must require `ROLE_ADMIN`; P14-004 adds endpoint-level tests.
 
-### 6.6 Runtime / Compose
+### 6.7 Runtime / Compose
 
 Add `analytics-service` with:
 
@@ -350,14 +405,15 @@ Analytics being unhealthy must **not** make any business service unhealthy throu
 1. Inventory current stateful service/bootstrap patterns and note any repo changes since task authoring.
 2. Add the Maven module and minimal application class/configuration.
 3. Add V1 schema exactly as an analytics-owned read model; validate constraints and indexes in PostgreSQL.
-4. Configure local/docker/prod/test profiles without schema auto-generation.
-5. Add Dockerfile and environment template.
-6. Add `seatflow_analytics` to local DB bootstrap and production migration mapping.
-7. Add analytics-service to service/prod Compose and release verification lists.
-8. Add the explicit API Gateway route and route test.
-9. Add health/Prometheus/OTel/Eureka integration using existing SeatFlow conventions.
-10. Prove that the service boots with an empty DB and that existing services boot/run with analytics stopped.
-11. Run backend/gateway tests and Compose validation.
+4. Verify operational counts are currency-neutral and financial aggregates are currency-keyed.
+5. Configure local/docker/prod/test profiles without schema auto-generation.
+6. Add Dockerfile and environment template.
+7. Add `seatflow_analytics` to local DB bootstrap and production migration mapping.
+8. Add analytics-service to service/prod Compose and release verification lists.
+9. Add the explicit API Gateway route and route test.
+10. Add health/Prometheus/OTel/Eureka integration using existing SeatFlow conventions.
+11. Prove that the service boots with an empty DB and that existing services boot/run with analytics stopped.
+12. Run backend/gateway tests and Compose validation.
 
 ---
 
@@ -378,7 +434,9 @@ Using PostgreSQL/Testcontainers, not H2:
 - [ ] duplicate `processed_events.event_id` is rejected.
 - [ ] negative counters/amounts are rejected by schema constraints.
 - [ ] `capacity_snapshot` accepts `NULL` but rejects negative values.
-- [ ] two currencies can coexist for the same session/date without a uniqueness collision.
+- [ ] operational metrics allow counts without any currency value.
+- [ ] two currencies can coexist for the same session/date in revenue tables without duplicating the one operational row.
+- [ ] provisional refund fact can exist before payment completion without forcing an invalid financial aggregate.
 - [ ] analytics tables contain no PII columns.
 
 ### 8.3 Gateway / Runtime
@@ -416,6 +474,8 @@ The reviewer must specifically inspect:
 
 - DB-per-service isolation and absence of cross-database access;
 - schema ability to tolerate out-of-order event correlation;
+- separation of operational counts from currency-keyed financial aggregates;
+- provisional payment/refund fact behavior;
 - money/currency safety;
 - no PII replication;
 - Flyway immutability/additivity;
@@ -429,7 +489,8 @@ The reviewer must specifically inspect:
 ## 11. Acceptance Criteria
 
 - [ ] `analytics-service` is a first-class Maven/Spring Boot service on `8089` with DB `seatflow_analytics`.
-- [ ] V1 read-model schema and constraints are present and PostgreSQL-tested.
+- [ ] V1 facts + separate operational/financial aggregate schema and constraints are PostgreSQL-tested.
+- [ ] A multi-currency session cannot duplicate reservation/ticket counts by schema design.
 - [ ] Analytics has no access to another service's database.
 - [ ] Gateway route exists without regressing existing routes.
 - [ ] Docker/local/prod/migration/release lists include analytics consistently.
@@ -443,5 +504,5 @@ The reviewer must specifically inspect:
 
 ```text
 Implement TASK-P14-001 using the SeatFlow autonomous orchestration workflow.
-Before writing code, re-read Phase 14 overview and ADR-013 and inventory current runtime/deployment patterns. Do not implement P14-002 projection semantics in this task.
+Before writing code, re-read Phase 14 overview and ADR-013 and inventory current runtime/deployment patterns. Keep operational counts currency-neutral and financial aggregates currency-keyed. Do not implement P14-002 projection semantics in this task.
 ```
