@@ -46,7 +46,8 @@ class RouteConfigurationTest {
                 .containsEntry("payment-service", URI.create("lb://payment-service"))
                 .containsEntry("ticket-service", URI.create("lb://ticket-service"))
                 .containsEntry("realtime-service", URI.create("lb://realtime-service"))
-                .containsEntry("notification-service", URI.create("lb://notification-service"));
+                .containsEntry("notification-service", URI.create("lb://notification-service"))
+                .containsEntry("analytics-service", URI.create("lb://analytics-service"));
     }
 
     @Test
@@ -128,6 +129,13 @@ class RouteConfigurationTest {
     void notificationServiceRoutePredicateMatches() {
         assertRouteMatches("notification-service", "/api/notifications");
         assertRouteMatches("notification-service", "/api/admin/notifications");
+    }
+
+    @Test
+    @DisplayName("Verify analytics-service route predicate matches admin analytics endpoints")
+    void analyticsServiceRoutePredicateMatches() {
+        assertRouteMatches("analytics-service", "/api/admin/analytics/kpis");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/revenue/daily");
     }
 
     private void assertRouteMatches(String expectedRouteId, String path) {

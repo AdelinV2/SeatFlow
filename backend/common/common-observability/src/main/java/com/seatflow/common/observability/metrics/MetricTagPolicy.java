@@ -57,7 +57,7 @@ public final class MetricTagPolicy {
     public static final Set<String> ALLOWED_SERVICES = Set.of(
             "reservation-service", "payment-service", "ticket-service",
             "user-service", "seat-map-service", "event-service",
-            "realtime-service", "notification-service",
+            "realtime-service", "notification-service", "analytics-service",
             "api-gateway", "eureka-server", "unknown"
     );
     public static final Set<String> ALLOWED_EVENT_TYPES = Set.of(
