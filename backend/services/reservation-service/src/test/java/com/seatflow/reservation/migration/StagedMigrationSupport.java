@@ -9,7 +9,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 
 /**
- * Staged-migration harness for reservation-service V8 verification.
+ * Staged-migration harness for reservation-service V8/V9 verification.
  *
  * <p>Spins up a throwaway database inside the running Testcontainers PostgreSQL,
  * applies the checked-in {@code V1..V7} scripts with Spring's {@code ScriptUtils}
@@ -38,6 +38,8 @@ public final class StagedMigrationSupport {
 
     private static final String V8 = "db/migration/V8__enforce_session_inventory_key.sql";
 
+    private static final String V9 = "db/migration/V9__enforce_session_not_null.sql";
+
     private StagedMigrationSupport() {
     }
 
@@ -63,6 +65,21 @@ public final class StagedMigrationSupport {
 
     public static void applyV8(FreshDatabase database) {
         executeWholeScript(database.jdbc(), V8);
+    }
+
+    /**
+     * P12-009: migrate a throwaway database through V1..V8 (NULLable session
+     * key + V8 gate passing requires zero NULLs before V8 applies, so callers
+     * must backfill first or start from a clean staged database).
+     */
+    public static FreshDatabase migrateToV8(PostgreSQLContainer<?> postgres, String dbName) {
+        FreshDatabase database = migrateToV7(postgres, dbName);
+        applyV8(database);
+        return database;
+    }
+
+    public static void applyV9(FreshDatabase database) {
+        executeWholeScript(database.jdbc(), V9);
     }
 
     public static void executeScript(JdbcTemplate jdbc, String classpathLocation) {

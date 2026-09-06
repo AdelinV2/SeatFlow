@@ -98,7 +98,8 @@ public class SessionInventoryBackfillService {
 
     /**
      * Verification gate: zero rows may remain with {@code event_session_id IS NULL}.
-     * NOT NULL constraints (post-P12-003) may only be added after this passes.
+     * V9 enforces the NOT NULL constraints; this gate remains the pre-migration
+     * proof that no orphan survives the backfill.
      */
     @Transactional(readOnly = true)
     public void verifyZeroNullSessions() {

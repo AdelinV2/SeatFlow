@@ -14,16 +14,12 @@ import java.util.Optional;
  * P12-007 (REV-004, option b): post-deploy data-quality alert for NULL
  * {@code event_session_id} rows.
  *
- * <p>V8 is a fail-closed migrate-time gate, not a {@code NOT NULL} constraint:
- * the hard constraint is deferred to tracked follow-up {@code TASK-P12-009}
- * because the backfill verification suites
- * ({@code SessionScopedInventoryIntegrationTest} orders 11-13) intentionally
- * persist legacy-NULL rows through JPA on the production migration chain to
- * verify {@link SessionInventoryBackfillService} itself. Adding the constraint
- * now would break those inserts; moving them to a staged pre-constraint schema
- * requires re-wiring Spring Data repositories against a second DataSource and
- * would split the single-database concurrency oracle, so the deferral is kept
- * and monitored instead.
+ * <p>V8 is a fail-closed migrate-time gate; the hard {@code NOT NULL} constraint
+ * landed as {@code V9} (TASK-P12-009). The backfill verification suites that
+ * intentionally persisted legacy-NULL rows through JPA now run on a staged
+ * pre-constraint schema
+ * ({@code SessionInventoryBackfillStagedSchemaTest}), so the live schema stays
+ * constrained.
  *
  * <p>This check is deliberately fail-open: it alerts (ERROR log) when orphans
  * exist but never blocks startup, because the backfill deployment step may

@@ -74,4 +74,17 @@ class LegacyBookingKeyRemovalContractTest {
         // Audit/display retention is explicit: event_id columns are never dropped here.
         assertThat(sql).doesNotContain("DROP COLUMN");
     }
+
+    @Test
+    @DisplayName("V9 promotes the session gate to NOT NULL on both inventory tables")
+    void v9MigrationEnforcesSessionNotNull() throws Exception {
+        Path migration = Path.of("src/main/resources/db/migration/V9__enforce_session_not_null.sql");
+        assertThat(Files.exists(migration)).isTrue();
+        String sql = Files.readString(migration);
+        assertThat(sql).contains("event_session_id IS NULL");
+        assertThat(sql).contains("run SessionInventoryBackfillService before V9");
+        assertThat(sql).contains("ALTER TABLE reservations ALTER COLUMN event_session_id SET NOT NULL");
+        assertThat(sql).contains("ALTER TABLE seat_holds ALTER COLUMN event_session_id SET NOT NULL");
+        assertThat(sql).doesNotContain("DROP COLUMN");
+    }
 }
