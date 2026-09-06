@@ -24,138 +24,153 @@
 
 ## 2. Objective
 
-Add the user-facing SeatFlow AI assistant as a discoverable Angular drawer/panel that renders conversation text plus structured Event/Session/Seat/Proposal/Reservation cards returned by `ai-service`.
+Add the SeatFlow AI assistant as a discoverable Angular drawer/panel that renders conversation text plus structured Event/Session/Seat/Proposal/Reservation cards returned by `ai-service`.
 
-The UI must make a clear distinction between:
+The UI must make these states visibly distinct:
 
-- an AI suggestion;
-- a server-side reservation proposal;
-- an actual confirmed 15-minute reservation;
-- normal checkout/payment.
+1. AI suggestion/search result;
+2. server-side reservation proposal — **seats not held**;
+3. actual Reservation Service 15-minute hold;
+4. normal checkout/payment.
 
-The frontend never calls Groq directly and never contains a Groq API key.
+Angular never calls Groq directly and never contains provider credentials.
 
 ---
 
 ## 3. Authentication Policy
 
-For Phase 15, the interactive assistant is authenticated-user only.
+Phase 15 interactive assistant is authenticated-user only.
 
-Rules:
-
-- authenticated USER may open/use the assistant;
-- logged-out/guest users do not receive state-changing AI capabilities;
-- recommended UI behavior for logged-out users: launcher may show a concise sign-in-required state or be hidden according to the existing design system;
-- do not implement a guest AI reservation flow in this task;
-- do not add frontend role tricks as authorization. Backend remains authoritative.
+- authenticated USER may chat and confirm proposals;
+- logged-out users cannot call chat/confirmation APIs;
+- launcher may be hidden while logged out or show a deterministic sign-in-required state consistent with current shell UX;
+- do not implement guest AI reservation/email-proof behavior;
+- frontend visibility is convenience only; backend auth remains authoritative.
 
 ---
 
-## 4. Entry Point and Layout
+## 4. Entry Point / Responsive Layout
 
-Add one discoverable assistant entry point consistent with the current SeatFlow shell. Recommended behavior:
+Reuse existing SeatFlow shell/design primitives.
 
-- desktop: floating or header assistant button opens a right-side drawer;
-- mobile/narrow widths: full-height/full-width sheet or responsive panel;
-- panel remains within application focus management and does not break existing navigation;
-- route changes may close or preserve the panel according to a deterministic documented policy.
+Recommended:
 
-Do not create a standalone fake ChatGPT clone page unless the existing layout makes a drawer technically unsuitable.
+- desktop: assistant launcher opens right-side drawer;
+- narrow/mobile: responsive full-height sheet/panel;
+- close action returns focus to launcher;
+- route changes use one deterministic policy: **keep the drawer open within authenticated SeatFlow navigation unless checkout/sign-out starts, where it closes**;
+- sign-out clears local assistant UI state.
 
-Required panel sections:
+Required sections:
 
 ```text
 Header
-- SeatFlow Assistant title
-- availability/disabled indicator
-- reset conversation action
-- close action
+- SeatFlow Assistant
+- availability indicator
+- Reset conversation
+- Close
 
-Conversation body
-- user messages
-- assistant messages
+Body
+- conversation messages
 - structured cards
-- loading/tool progress states
-- recoverable error states
+- activity/error states
 
 Composer
-- text input/textarea
-- send button
-- starter prompts when empty
+- message input
+- Send
+- starter prompts when thread empty
 ```
 
 ---
 
-## 5. Frontend API Layer
+## 5. Frontend API Service
 
-Create a dedicated service, for example:
+Create a dedicated typed service:
 
 ```text
 AiAssistantApiService
-- getStatus()
-- sendMessage(request)
-- confirmProposal(proposalId)
+- getStatus(): GET /api/ai/status
+- sendMessage(request): POST /api/ai/chat
+- resetConversation(id): DELETE /api/ai/conversations/{id}
+- confirmProposal(id): POST /api/ai/proposals/{id}/confirm
 ```
 
-All calls go through same-origin API Gateway routes under `/api/ai/**`.
+All requests are same-origin through API Gateway.
 
-Do not add `GROQ_API_KEY`, Groq base URL, model credentials, or direct `https://api.groq.com` calls anywhere in Angular.
+Use existing auth interceptor. Component/service code must never manually read/copy JWTs unless the existing frontend architecture already requires it.
 
-Use the existing auth interceptor/JWT mechanism rather than manually copying tokens into component code.
+Forbidden in frontend source/config/bundle:
+
+- `GROQ_API_KEY`;
+- Groq Authorization header;
+- direct `api.groq.com` request;
+- backend system prompt;
+- server proposal internals beyond returned public DTO.
 
 ---
 
-## 6. Typed Frontend Contracts
+## 6. Typed Contracts
 
-Mirror backend response contracts with explicit discriminated unions.
-
-Recommended types:
+Use strict interfaces/discriminated unions, no `any` for authoritative data.
 
 ```text
 AssistantState
-AssistantMessageDto
+AssistantChatRequest/Response
 AssistantCard =
-  | EventAssistantCard
-  | SessionAssistantCard
-  | SeatSetAssistantCard
-  | ReservationProposalAssistantCard
-  | ReservationCreatedAssistantCard
-  | InfoAssistantCard
+  EVENT
+  | SESSION
+  | SEAT_SET
+  | RESERVATION_PROPOSAL
+  | RESERVATION_CREATED
+  | INFO
 AssistantError
+AiFeatureStatus
 ```
 
 Rules:
 
-- unknown future card types fail gracefully as unsupported informational content;
-- never use `any` for authoritative reservation/proposal data;
-- money arrives as minor units + currency and is formatted with an explicit utility;
-- timestamps are parsed/displayed using existing timezone conventions;
-- `expiresAt` for a real reservation is rendered from backend data, not calculated as `now + 15m`.
+- unknown future card type -> safe unsupported/info rendering;
+- money = minor units + currency, formatted centrally;
+- timestamp/timezone uses existing SeatFlow date utilities;
+- real hold countdown uses returned `expiresAt`, never `Date.now()+15m`;
+- never infer seat adjacency from labels/prose; use backend `contiguous` boolean only.
 
 ---
 
-## 7. Conversation UX
+## 7. Conversation Lifecycle
 
-### 7.1 Starter prompts
+Frontend thread is presentation state, not authorization state.
 
-Examples only; they are UI convenience, not hardcoded business behavior:
+Exact Phase 15 policy:
+
+- keep thread + `conversationId` in Angular memory for current SPA lifetime;
+- do **not** persist raw conversation content or active proposal IDs to `localStorage`;
+- full browser refresh starts a new conversation;
+- `Reset conversation` calls `DELETE /api/ai/conversations/{conversationId}`, then clears UI only after success or safe not-found/expired reconciliation;
+- reset invalidates unconfirmed proposal server-side through P15-005 integration;
+- reset never cancels a real reservation already created;
+- sign-out clears local assistant state immediately;
+- stale proposal cards remain visibly disabled if backend returns expired/superseded state.
+
+---
+
+## 8. Conversation UX
+
+Starter prompts are normal user messages, for example:
 
 - “Find events this weekend.”
 - “Find two seats together for Hamlet under 250 RON.”
-- “Show me the best seats close to the stage.”
+- “Show the best seats close to the stage.”
 
-Starter prompts call the same chat endpoint as typed user text.
+Message rendering:
 
-### 7.2 Message rendering
+- plain text by default or existing sanitized markdown primitive only;
+- no unsanitized `[innerHTML]`;
+- no raw tool JSON;
+- no provider/system reasoning;
+- no stack traces/internal hostnames.
 
-- render model text as plain text or sanitized supported markdown using existing safe application patterns;
-- do not use unsanitized `innerHTML`;
-- do not render hidden reasoning/chain-of-thought/provider payloads;
-- preserve readable line breaks without interpreting arbitrary HTML/script.
-
-### 7.3 Loading states
-
-Show user-friendly activity, for example:
+Activity states may say:
 
 ```text
 Searching events…
@@ -164,102 +179,83 @@ Checking live seat availability…
 Comparing seat options…
 ```
 
-Do not expose internal method names, service hostnames, raw JSON, traces, or tool arguments containing IDs unless they are normal user-facing identifiers.
+They must not expose internal tool payloads.
 
 ---
 
-## 8. Structured Cards
+## 9. Structured Cards
 
-### 8.1 Event card
+### 9.1 Event
 
-Display public event summary and a normal navigation action to the Event Detail route.
+Display public event metadata + navigation to existing Event Detail route.
 
-### 8.2 Session card
+### 9.2 Session
 
-Display start/end time/status and an action to view the normal session/event flow when appropriate.
+Display exact date/time/status + normal navigation to the event/session flow.
 
-### 8.3 Seat-set card
+### 9.3 Seat set
 
 Display:
 
 - section;
 - row/seat labels;
 - quantity;
-- total formatted price;
-- currency;
-- `Seats together` only when backend `contiguous=true`;
-- deterministic recommendation reasons from backend.
+- total price/currency;
+- `Seats together` only if `contiguous=true`;
+- deterministic backend reasons.
 
-Never infer adjacency from the text response.
-
-### 8.4 Reservation proposal card
-
-This is the most security-sensitive UI state.
+### 9.4 Reservation proposal
 
 Display prominently:
 
-- event/session date/time;
+- event/session;
 - exact seats;
 - exact total/currency snapshot;
-- notice that seats are **not held yet**;
+- statement: **“These seats are not held yet.”**
 - `Confirm reservation` button;
-- cancel/dismiss/new-search action.
+- `Find different seats`/dismiss action.
 
-The Confirm button calls only:
+Confirm action sends **only proposal ID in URL**, no seat IDs/session/price body.
 
-```text
-POST /api/ai/proposals/{proposalId}/confirm
-```
+While confirm is in flight:
 
-It must not send editable seat IDs or price.
+- disable confirm control;
+- show one progress state;
+- prevent keyboard/double-click duplicate UI requests where possible;
+- backend idempotency remains authoritative.
 
-Disable the button while request is in flight to prevent accidental double click; backend idempotency remains required regardless.
+Typing `yes`, `confirm`, or `book it` in composer never calls confirmation endpoint automatically. It may receive a response re-presenting the card.
 
-### 8.5 Reservation-created card
+### 9.5 Reservation created
 
-After authoritative success display:
+Only after authoritative confirm success display:
 
-- reservation ID only if useful;
-- exact seats;
-- authoritative hold expiration;
-- countdown derived from `expiresAt`;
-- `Continue to checkout` action routing to the existing checkout flow.
+- confirmed hold state;
+- seats;
+- authoritative total/currency;
+- countdown from `expiresAt`;
+- `Continue to checkout` route into existing flow.
 
-Do not show “reserved” before this backend result is received.
-
----
-
-## 9. Stale / Conflict UX
-
-Handle explicit backend states rather than generic failure banners.
-
-Required examples:
-
-### `STALE_PROPOSAL` / `SEATS_NO_LONGER_AVAILABLE`
-
-Show:
-
-> These seats changed before confirmation. Ask the assistant for fresh options.
-
-Do not auto-confirm replacements.
-
-### `PRICE_CHANGED`
-
-Show that pricing changed and require a new proposal/confirmation.
-
-### `PROPOSAL_EXPIRED`
-
-Disable old confirmation card and offer fresh search/recommendation.
-
-### `RESERVATION_RESULT_UNKNOWN_RETRY_SAFE`
-
-Do not claim failure or success. Offer the backend-defined safe retry/reconciliation action; never create a new proposal automatically.
+Never render `Reserved` from model prose alone.
 
 ---
 
-## 10. Provider/Feature Failure UX
+## 10. Conflict / Staleness UX
 
-Map stable backend errors:
+Handle codes explicitly:
+
+- `PROPOSAL_EXPIRED` -> disable card, offer fresh recommendation.
+- `PROPOSAL_SUPERSEDED` -> disable old card.
+- `SEATS_NO_LONGER_AVAILABLE`/`STALE_PROPOSAL` -> no auto-substitution; request fresh options.
+- `PRICE_CHANGED` -> show pricing changed; require new proposal/confirmation.
+- `RESERVATION_CONFLICT` -> same no-substitution policy.
+- `RESERVATION_RESULT_UNKNOWN_RETRY_SAFE` -> do not claim success/failure; expose backend-approved retry/reconcile action only.
+
+---
+
+## 11. Provider / Feature Failure UX
+
+Map backend states:
 
 ```text
 AI_DISABLED
@@ -270,100 +266,84 @@ AI_PROVIDER_UNAVAILABLE
 AI_MODEL_UNAVAILABLE
 ```
 
-Behavior:
+- disabled/misconfigured -> assistant unavailable, rest of app normal;
+- rate-limited -> temporary unavailable/retry-later message, no account quota details;
+- provider timeout/outage -> bounded retry action;
+- model unavailable -> configuration/unavailable message, no raw provider payload;
+- do not continuously poll/retry provider.
 
-- disabled/misconfigured -> assistant unavailable message; rest of SeatFlow remains normal;
-- rate limited -> explain temporarily unavailable without showing account/quota secrets;
-- timeout/provider unavailable -> retry action with bounded UX;
-- model unavailable -> generic configuration/unavailable state, no raw model-provider payload.
-
-Do not continuously poll/retry Groq through the backend.
-
----
-
-## 11. Conversation Lifecycle
-
-Frontend conversation history is UI state only.
-
-Recommended Phase 15 policy:
-
-- keep current conversation in Angular memory while the application session/page is active;
-- store only `conversationId` in component/application state as needed;
-- a full page reload may start a fresh conversation;
-- Reset action clears UI thread and requests/causes backend conversation reset if such endpoint is implemented;
-- never use `localStorage` for raw AI conversation content in this phase;
-- do not restore stale proposal confirmation after reload.
-
-If the existing app has a safe session-state abstraction, it may be reused, but proposal authority remains server-side.
+`GET /api/ai/status` should be lazy on first launcher open or otherwise non-blocking; AI status must not delay normal app bootstrap.
 
 ---
 
-## 12. Accessibility Requirements
+## 12. Accessibility
 
-- launcher has accessible name;
-- drawer has correct dialog/region semantics consistent with component library;
-- keyboard focus moves into the opened panel and returns to launcher on close;
-- Escape behavior is predictable unless a confirmation request is actively blocking;
-- composer usable by keyboard; Enter/Shift+Enter behavior documented;
-- loading state announced with non-disruptive live region;
-- error state is readable by screen readers;
-- buttons have text/aria labels, not icon-only ambiguity;
-- contrast/spacing follow existing design tokens.
+- launcher accessible name;
+- proper drawer/dialog semantics based on existing component primitive;
+- focus moves into drawer and returns on close;
+- Escape behavior predictable;
+- Enter sends, Shift+Enter inserts newline (unless current app has documented opposite convention);
+- async state announced with polite live region;
+- errors readable by screen reader;
+- no icon-only ambiguous critical actions;
+- confirmation card wording remains explicit without relying on color.
 
 ---
 
-## 13. Responsive / Performance Requirements
+## 13. Performance / Bounds
 
-- assistant must not block initial application bootstrap on a Groq call;
-- status request may be lazy/on first open;
-- do not load huge chat libraries for basic rendering;
-- list rendering should remain bounded because backend conversation response is bounded;
-- no uncontrolled scroll growth/layout shifts;
-- on mobile, composer remains visible above virtual keyboard where practical.
+- respect backend 2000-character max input and add matching client validation;
+- prevent sending while identical request already in flight for same composer turn;
+- no giant third-party chat UI library solely for message bubbles;
+- virtual scrolling unnecessary unless bounded response/thread still exceeds practical DOM size;
+- maintain composer usability on narrow/mobile viewport;
+- no full seat inventory rendering inside assistant when backend already returns ranked candidates.
 
 ---
 
 ## 14. Expected File Inventory
 
-Use the existing Angular feature organization. Likely additions:
+Use current Angular feature organization and shared UI primitives. Likely:
 
-- `[NEW]` AI assistant feature folder under `frontend/src/app/features/...`;
-- `[NEW]` assistant API service;
-- `[NEW]` typed AI models;
-- `[NEW]` drawer/container component;
-- `[NEW]` message list/message bubble components as justified;
+- `[NEW]` AI assistant feature directory;
+- `[NEW]` typed model file(s);
+- `[NEW]` `AiAssistantApiService`;
+- `[NEW]` drawer/container;
+- `[NEW]` message list/bubble if justified;
 - `[NEW]` event/session/seat/proposal/reservation card components;
-- `[NEW]` price/date formatting helper only if not already reusable;
-- `[MODIFY]` authenticated application shell/header/layout to expose the launcher;
+- `[MODIFY]` authenticated app shell/header/layout for launcher;
 - `[NEW]` component/service/integration tests.
 
-Before adding components, inventory current shared card/button/dialog/drawer primitives and reuse them instead of duplicating design-system controls.
+Before creating components, inventory existing button/card/drawer/dialog/spinner/date/money utilities and reuse them.
 
 ---
 
 ## 15. Tests
 
-Mandatory frontend tests:
+Mandatory:
 
-1. no Groq URL/key/model secret appears in frontend configuration/service code.
-2. logged-out user cannot execute assistant chat/confirmation.
-3. status `DISABLED/MISCONFIGURED` renders unavailable state without affecting app shell.
-4. starter prompt sends normal chat request.
-5. structured seat card renders backend `contiguous` truth exactly.
-6. proposal card says seats are not held yet.
-7. Confirm sends only proposal ID and does not send seat IDs/price.
-8. confirm button disables while request is pending.
-9. stale/expired proposal disables confirmation and requests fresh proposal.
-10. successful reservation uses backend `expiresAt` for countdown.
-11. checkout action navigates to existing checkout flow.
-12. typed chat “yes” alone does not call confirmation endpoint.
-13. raw HTML/script in assistant text is not executed.
-14. rate-limit/provider failures render safe user messages.
-15. unknown card type fails gracefully.
-16. keyboard/focus behavior for drawer passes focused accessibility tests.
-17. responsive smoke test for desktop + narrow viewport.
+1. frontend contains no Groq key/direct provider URL call.
+2. logged-out user cannot call chat/confirm.
+3. disabled/misconfigured status renders unavailable state without breaking shell.
+4. starter prompt sends standard chat request.
+5. 2001-char input blocked client-side; backend remains final validator.
+6. seat card uses backend `contiguous` exactly.
+7. proposal card says seats not held.
+8. confirm sends POST to proposal-ID endpoint with no seat/price payload.
+9. confirm button disabled during request.
+10. typed `yes` does not call confirm endpoint.
+11. expired/superseded/stale/price-changed card behavior is safe.
+12. reservation card/countdown uses backend `expiresAt`.
+13. checkout navigation uses existing route.
+14. reset calls DELETE endpoint, clears UI, and never invokes reservation cancellation.
+15. sign-out clears thread state.
+16. raw HTML/script from assistant text is not executed.
+17. rate-limit/provider failure messages are safe.
+18. unknown card type fails gracefully.
+19. keyboard/focus/accessibility behavior passes focused tests.
+20. desktop + narrow viewport integration smoke.
 
-Add a focused integration test that walks mocked responses through:
+Add mocked integration flow:
 
 ```text
 chat -> seat proposal -> explicit confirm -> reservation-created card -> checkout navigation
@@ -373,22 +353,22 @@ chat -> seat proposal -> explicit confirm -> reservation-created card -> checkou
 
 ## 16. Acceptance Criteria
 
-- [ ] Assistant is discoverable and consistent with SeatFlow UI.
-- [ ] Frontend communicates only with `ai-service` via gateway.
-- [ ] No provider secret/direct Groq call exists in browser code.
-- [ ] Conversation, errors and structured cards use typed contracts.
-- [ ] Proposal vs reservation vs checkout states are visually unambiguous.
-- [ ] Only explicit Confirm action calls proposal confirmation endpoint.
-- [ ] Stale/price-change/conflict states never auto-substitute and auto-confirm seats.
-- [ ] Real reservation countdown uses authoritative `expiresAt`.
-- [ ] Provider outages do not impair normal SeatFlow UI.
-- [ ] Accessibility/security tests pass.
+- [ ] Assistant is discoverable and responsive.
+- [ ] Frontend calls only SeatFlow `/api/ai/**`, never Groq.
+- [ ] Typed contracts are used for all authoritative card/state data.
+- [ ] Proposal/reservation/payment states cannot be confused visually or programmatically.
+- [ ] Only explicit button/action calls confirmation endpoint.
+- [ ] Reset lifecycle is exact and server-coordinated.
+- [ ] Stale/conflict/price changes never auto-substitute/confirm.
+- [ ] Reservation countdown uses authoritative expiry.
+- [ ] Provider outage does not impair normal SeatFlow UI.
+- [ ] Security/accessibility/responsive tests pass.
 
 ---
 
 ## 17. Verification
 
-Run the repo's current frontend checks. At minimum:
+Run current repo frontend checks, at minimum:
 
 ```bash
 cd frontend
@@ -396,6 +376,4 @@ npm test -- --watch=false
 npm run build
 ```
 
-Run lint if configured in `package.json`, plus the focused integration tests added by this task.
-
-A real Groq key is not required for frontend automated tests.
+Run lint if configured. Real Groq access is not required for automated frontend tests.
