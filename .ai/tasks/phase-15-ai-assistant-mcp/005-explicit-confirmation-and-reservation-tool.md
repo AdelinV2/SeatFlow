@@ -1,4 +1,4 @@
-# TASK-P15-005: Implement Explicit Confirmation and Reservation Tool Boundary
+# TASK-P15-005: Implement Reservation Lookup, Explicit Confirmation, and Reservation Tool Boundary
 
 ## 1. Task Metadata
 
@@ -18,28 +18,78 @@
 - **Verification Strength:** `Strong`
 - **Required Review Depth:** `Critical`
 - **Preferred Workflow:** `critical`
-- **Affected Critical Invariants:** `explicit human confirmation; zero autonomous purchase; authorization; idempotency; session isolation; live revalidation; 10-seat limit; 15-minute hold; no double booking`
+- **Affected Critical Invariants:** `explicit human confirmation; zero autonomous purchase; reservation ownership; idempotency; session isolation; live revalidation; 10-seat limit; 15-minute hold; no double booking`
 
 ---
 
 ## 2. Objective
 
-Add the only Phase 15 state-changing AI capability: creation of a normal SeatFlow reservation hold after the authenticated user explicitly confirms one exact server-side proposal.
+Complete the Reservation Service integration for Phase 15 by adding:
 
-This task must make it technically impossible for an ordinary model-generated tool call or free-form chat message to bypass the confirmation boundary.
+1. the authorization-safe read-only `getReservation` tool; and
+2. the only state-changing AI capability: creation of a normal SeatFlow reservation hold after the authenticated user explicitly confirms one exact server-side proposal.
+
+This task must make it technically impossible for ordinary model-generated tool calls or free-form chat text to bypass the confirmation boundary.
 
 Payment remains completely outside the AI tool set.
 
 ---
 
-## 3. Authoritative Confirmation Flow
+## 3. `getReservation` Read-Only Tool
 
-Use a dedicated application endpoint/action rather than treating model prose as authorization.
+Add `getReservation` to the ordinary chat read-only allow-list only after this task implements an ownership-safe Reservation Service client.
 
-Recommended flow:
+Request:
 
 ```text
-/chat -> findBestSeats -> server proposal
+GetReservationRequest
+- reservationId: UUID
+```
+
+Result must be compact/customer-safe:
+
+```text
+ReservationToolResult
+- reservationId
+- eventId
+- eventSessionId
+- status
+- expiresAt
+- totalAmount / currency using canonical representation
+- seats[] display summary
+- session start metadata when already present in the public reservation response
+```
+
+Rules:
+
+- downstream call uses the authenticated user's JWT;
+- Reservation Service remains authoritative for ownership/access;
+- AI Service must not switch to an internal privileged identity after `403`;
+- do not expose customer email/name unless the normal authenticated customer response requires it for the user-facing result; prefer omission;
+- do not expose guest proof headers, internal provider IDs, payment tokens, or audit internals;
+- `404/403` returns safe tool error, never a guessed reservation.
+
+After implementation, P15 ordinary chat allow-list is exactly:
+
+```text
+searchEvents
+getEvent
+getEventSessions
+getAvailableSeats
+findBestSeats
+getReservation
+```
+
+`createReservation` remains absent from ordinary chat.
+
+---
+
+## 4. Authoritative Confirmation Flow
+
+Use a dedicated application endpoint/action, never model prose, as authorization.
+
+```text
+/chat -> findBestSeats -> secure server proposal
                  |
                  v
        CONFIRMATION_REQUIRED
@@ -51,55 +101,56 @@ Recommended flow:
                  v
 POST /api/ai/proposals/{proposalId}/confirm
                  |
-     validate proposal ownership/TTL
+      owner/status/TTL validation
                  |
-     re-read live availability + price
+      live availability + price revalidation
                  |
-     exact proposal still valid?
-        /                     \
-      no                       yes
-      |                         |
- STALE_PROPOSAL          createReservation
-                                |
-                        Reservation Service
-                                |
-                        normal 15-minute hold
-                                |
-                     RESERVATION_CREATED
-                                |
-                     normal checkout link
+        exact proposal still valid?
+        /                       \
+      no                         yes
+      |                           |
+ STALE_PROPOSAL            Reservation Service
+                                  |
+                           normal 15-minute hold
+                                  |
+                         RESERVATION_CREATED
+                                  |
+                          normal checkout
 ```
 
-A chat message such as `yes`, `confirm`, or `book it` **must not directly create a reservation**. It may cause the assistant to re-present the confirmation card, but the state-changing request requires the dedicated confirmation action carrying the server-issued proposal ID.
+A chat message such as `yes`, `confirm`, `book it`, or an LLM tool-call attempt must **not** directly create a reservation. It may cause the UI to re-present the explicit confirmation card.
 
 ---
 
-## 4. Secure Proposal Store
+## 5. Secure Proposal Store
 
-Phase 15 does not introduce a persistent AI database. Use a bounded server-side proposal store appropriate for the current single-runtime portfolio deployment.
+No persistent AI database is introduced.
 
-Recommended implementation:
+Use an application-owned bounded in-memory proposal store for the current single-instance portfolio deployment.
 
-- application-owned in-memory `ProposalStore`;
-- random UUID/opaque proposal ID;
-- bound to authenticated subject/user ID and conversation ID;
-- explicit creation timestamp and short expiration timestamp;
-- bounded max entries + scheduled/lazy cleanup;
-- one active proposal per conversation by default;
-- consumed/superseded proposals cannot be reused.
+Required defaults:
 
-Required proposal fields:
+```text
+AI_PROPOSAL_TTL=5m
+AI_MAX_ACTIVE_PROPOSALS=500
+```
+
+Both are configurable with validation/safe upper bounds.
+
+Proposal record:
 
 ```text
 ReservationProposal
-- proposalId
+- proposalId: UUID/opaque random ID
 - conversationId
 - ownerSubject
 - eventId
 - eventSessionId
-- seatIds[]                 // exact stable IDs
+- seatIds[]
 - seat display snapshot[]
-- pricingTierIds[]?         // when current booking API needs them
+- pricingTierIds[]?           // only if current booking contract requires them
+- maxTotalPriceMinor?         // original hard constraint if supplied
+- selected category/strategy? // only constraints needed for revalidation
 - totalPriceMinor
 - currency
 - createdAt
@@ -108,123 +159,110 @@ ReservationProposal
 - serverIdempotencyKey
 ```
 
-Do not store raw JWT, Groq key, payment token, card data, or model chain-of-thought.
+Rules:
 
-A service restart may invalidate proposals; this is acceptable. The UI must ask the user to request a fresh proposal instead of reconstructing authorization from chat text.
+- one active proposal per conversation; a new one supersedes the old one;
+- cleanup expired entries lazily and/or with bounded scheduled cleanup;
+- when max entries is reached, apply deterministic safe eviction/rejection; never evict another user's active proposal in a way that could transfer IDs/ownership;
+- raw JWT, Groq key, card/payment token, chain-of-thought and complete prompt history are forbidden fields;
+- process restart invalidates proposals safely.
 
----
-
-## 5. Proposal TTL
-
-Use a short confirmation TTL independent of the 15-minute reservation hold.
-
-Recommended default:
-
-```text
-AI_PROPOSAL_TTL=5m
-```
-
-The exact value is configurable but must be bounded and shorter than or equal to a reasonable conversational window.
-
-Important distinction:
-
-- proposal TTL = how long a recommendation may be confirmed;
-- reservation TTL = the existing authoritative 15-minute hold created only after successful reservation.
-
-Never display the proposal TTL as if seats are held.
+The 5-minute proposal TTL is **not** a seat hold. Seats remain free until Reservation Service creates the normal 15-minute hold.
 
 ---
 
 ## 6. Confirmation Authorization
 
-Before any state-changing call:
+Before any state-changing downstream call:
 
-1. requester is authenticated;
+1. requester is authenticated USER;
 2. requester owns the proposal;
-3. conversation ID/subject association is valid;
-4. proposal status is `ACTIVE`;
+3. proposal conversation belongs to same requester;
+4. proposal is `ACTIVE`;
 5. proposal has not expired;
-6. proposal has not been superseded/consumed;
-7. exact seat IDs/session/price snapshot are server-side values; client cannot replace them in confirmation request.
+6. proposal is not superseded/consumed;
+7. exact seat/session/price values come from server-side proposal storage;
+8. confirmation request contains no client-editable seat IDs or price.
 
-Confirmation request should contain no editable seat list or price. Prefer:
+Preferred endpoint:
 
 ```text
 POST /api/ai/proposals/{proposalId}/confirm
-body: empty or { expectedVersion/proposalToken if explicitly needed }
+body: empty
 ```
 
-Never trust a client body like `{seatIds:[...], price:...}` for this boundary.
+Do not accept `{ seatIds, sessionId, price }` in confirmation body.
+
+Use repo's anti-enumeration policy for not-found/forbidden proposal IDs consistently.
 
 ---
 
-## 7. Live Revalidation Before Reservation
+## 7. Live Revalidation Immediately Before Reservation
 
-A proposal is not a lock. Immediately before calling Reservation Service:
+A proposal is stale-prone by design. Revalidate synchronously:
 
-1. re-fetch current session state/bookability if required;
-2. re-fetch current seat availability;
-3. confirm every proposed seat is still `AVAILABLE` and active;
-4. re-resolve current pricing using the same pricing-tier/category semantics as P15-003;
-5. recompute total in minor units;
-6. require same currency;
-7. require quantity still `1..10`;
-8. verify the current exact proposal still satisfies the user's originally stored hard constraints (budget/category where stored);
-9. if price or seat availability changed, return `STALE_PROPOSAL` and require a fresh proposal.
+1. session still exists and is bookable;
+2. exact proposed seats still exist/active;
+3. all proposed seats are currently `AVAILABLE` in Reservation Service;
+4. quantity remains `1..10`;
+5. current pricing resolves using the exact same P15-003 rules;
+6. all selected prices use same currency;
+7. recomputed total exactly equals stored proposal total; if not, return `PRICE_CHANGED`;
+8. stored hard constraints (budget/category where applicable) still pass;
+9. no seat substitution occurs silently.
 
-Do not silently substitute different seats during confirmation. Seat substitution requires a new visible proposal and a new explicit confirmation.
+If any seat or price changes, require a **new proposal + new explicit confirmation**.
 
 ---
 
-## 8. Reservation Service Call
+## 8. Reservation Service Client
 
-Implement the state-changing operation as application-owned code, not an unrestricted LLM tool available to normal chat.
+Extend/add one dedicated `ReservationServiceClient` used for both:
 
-The logical capability may still be named `createReservation`, but it is invoked only from the confirmed proposal handler.
+- `getReservation` read-only lookup; and
+- confirmed reservation creation.
 
-Call the current canonical Reservation Service API through Eureka/LoadBalancer and propagate:
+Use Eureka/LoadBalancer, existing RestClient timeout/circuit-breaker conventions, user JWT and `X-Correlation-Id` propagation.
 
-- authenticated user's Bearer JWT;
-- `X-Correlation-Id`;
+For reservation creation send only server-derived values:
+
 - exact `eventSessionId`;
-- exact server-side proposed seat IDs;
-- server-derived price inputs if the current Reservation API still requires `seatPrices`;
-- server-generated idempotency key.
+- exact proposed seat IDs;
+- server-derived prices if the current canonical Reservation API still requires `seatPrices`;
+- server-generated idempotency key;
+- authenticated identity via JWT, not client/model-provided user ID.
 
-If pricing-tier selection requires a follow-up current API call, use the existing canonical reservation-pricing endpoint only after the hold is created and preserve error/rollback semantics defined by Reservation Service. Prefer existing atomic contracts when available; do not create a new cross-service transaction in AI Service.
+If current reservation pricing requires a tier-selection follow-up endpoint, use the existing canonical flow and preserve Reservation Service semantics. Do not invent an AI-owned distributed transaction.
 
-The Reservation Service remains authoritative for:
+Reservation Service remains authoritative for:
 
-- user/session ownership;
 - 10-seat rule;
-- 15-minute expiry;
-- concurrency/double-booking prevention;
+- 15-minute expiration;
+- concurrency/double booking;
+- ownership;
 - idempotency;
 - reservation status.
-
-AI Service must not reproduce or weaken those guarantees.
 
 ---
 
 ## 9. Idempotency
 
-Generate one server-side idempotency key when the proposal is created, not on every confirmation retry.
+Generate the idempotency key when the secure proposal is created and reuse it for every retry of that proposal.
 
 Rules:
 
-- repeated confirm requests for the same active proposal must resolve to the same reservation result where Reservation Service's idempotency contract allows;
-- browser retry/network duplicate must not create two holds;
-- proposal should move to `CONSUMED` only after a successful reservation result is known;
-- if response is lost after downstream success, retry with the same idempotency key and reconcile from Reservation Service rather than generating a new key;
-- definitive validation/stale failures leave no reservation and transition proposal appropriately.
-
-Add tests for the ambiguous timeout-after-submit case.
+- double-click/network duplicate -> same idempotency key;
+- never generate a new key merely because the first confirmation response timed out;
+- proposal becomes `CONSUMED` only after success is authoritatively known;
+- timeout-after-submit is `RESERVATION_RESULT_UNKNOWN_RETRY_SAFE`; retry/reconcile with same key;
+- definitive stale/validation failure does not call Reservation Service;
+- repeated confirmation after known success returns/reconciles the same reservation result rather than creating a new hold.
 
 ---
 
 ## 10. Failure Contract
 
-Canonical confirmation errors:
+Canonical codes:
 
 ```text
 PROPOSAL_NOT_FOUND
@@ -243,107 +281,122 @@ RESERVATION_RESULT_UNKNOWN_RETRY_SAFE
 
 Rules:
 
-- `409` seat conflict -> no alternative seat auto-substitution;
-- price changed -> show fresh price only through a new proposal;
-- downstream timeout after request may have been accepted -> preserve idempotency key and return retry-safe state;
-- never tell the user a reservation exists unless authoritative Reservation Service response/reconciliation confirms it.
+- conflict -> never auto-substitute seats;
+- price changed -> never auto-accept new price;
+- downstream timeout after submit -> do not claim success/failure until reconciled;
+- raw Reservation Service/internal exception body is not returned to Groq/client.
 
 ---
 
-## 11. Successful Response
+## 11. Successful Result
 
-On success return a structured result based on Reservation Service data:
+Return structured Reservation Service truth:
 
 ```text
 ReservationCreatedCard
 - reservationId
 - eventSessionId
-- seatIds / display labels
-- totalAmount (authoritative reservation response)
-- currency when available
+- seat IDs/display labels
+- authoritative total amount/currency
 - reservationStatus
-- expiresAt               // authoritative 15-minute hold expiry
-- checkoutUrl/route       // normal SeatFlow route, not provider URL invented by model
+- expiresAt
+- checkoutRoute
 ```
 
-The assistant may add concise prose, but the card is authoritative.
+Use Reservation Service `expiresAt`; never calculate `now + 15m` in AI Service or Angular.
 
-Do not expose a payment tool. The user must continue through the existing checkout UI.
+`checkoutRoute` is generated by application routing rules, not LLM text.
+
+No payment tool exists.
 
 ---
 
 ## 12. Guest Policy
 
-Phase 15 state-changing reservation confirmation is authenticated-user only unless a later explicit task/ADR adds a secure guest identity/proof contract.
+Phase 15 state-changing AI flow is authenticated-user only.
 
-Do not copy the normal guest email-proof flow into the AI agent casually. Guest AI, if enabled in UI, remains read-only.
-
-This avoids asking the LLM to process/store guest identity evidence.
+Do not reproduce the normal guest email-proof workflow inside the model context. If a guest assistant is exposed later, it remains read-only until a separate secure contract/ADR explicitly expands scope.
 
 ---
 
-## 13. Expected File Inventory
+## 13. Conversation Reset Interaction
+
+Integrate with P15-004:
+
+- resetting a conversation supersedes/removes its ACTIVE proposal;
+- resetting does **not** cancel an already-created Reservation Service reservation;
+- after a successful reservation, conversation may retain the reservation-created card/result while the proposal itself is consumed;
+- process restart means proposal IDs are invalid; a fresh recommendation is required.
+
+---
+
+## 14. Expected File Inventory
 
 Create/adapt under `backend/services/ai-service`:
 
+- `[NEW/MODIFY]` `client/ReservationServiceClient.java`
+- `[NEW]` read-only reservation tool request/result DTOs;
+- `[NEW]` `tool/ReservationLookupTools.java` or equivalent;
 - `[NEW]` `proposal/ReservationProposal.java`
 - `[NEW]` `proposal/ProposalStatus.java`
 - `[NEW]` `proposal/ProposalStore.java`
-- `[NEW]` bounded in-memory implementation + cleanup policy;
+- `[NEW]` bounded in-memory store implementation + cleanup;
 - `[NEW]` `service/ProposalService.java`
-- `[NEW]` `client/ReservationServiceClient.java`
 - `[NEW]` `service/ConfirmedReservationService.java`
-- `[NEW]` `api/ReservationProposalController.java` or integrate safely with existing assistant controller;
-- `[NEW]` confirmation/result DTOs;
-- `[MODIFY]` orchestration from P15-004 to create secure stored proposals and return IDs;
-- `[NEW]` focused concurrency/idempotency/security tests.
+- `[NEW]` proposal confirmation controller/DTOs;
+- `[MODIFY]` P15-004 allow-list to include `getReservation` only;
+- `[MODIFY]` conversation reset to clear active proposal;
+- `[NEW]` concurrency/idempotency/security tests.
 
-Do not add a database, payment client, or ADMIN tool.
+No DB/payment/admin tool.
 
 ---
 
-## 14. Tests
+## 15. Tests
 
 Mandatory tests:
 
-1. valid owner + active proposal + unchanged live state -> exactly one reservation call.
-2. another user confirming proposal -> 403/no downstream call.
-3. expired/superseded/consumed proposal -> no downstream call.
-4. free-form chat `yes` cannot call Reservation Service.
-5. client cannot alter seat IDs/price because confirmation body does not accept them.
-6. one seat becomes held after proposal -> stale/conflict, no substitution.
-7. price changes by one minor unit -> stale proposal/new confirmation required.
-8. session becomes unbookable -> no reservation call.
-9. quantity >10 is impossible at proposal boundary and rechecked defensively.
-10. duplicate confirm requests reuse same idempotency key.
-11. timeout-after-submit retry uses same key and reconciles safely.
-12. successful result uses Reservation Service `expiresAt`, not AI-calculated 15 minutes.
-13. no payment endpoint/tool can be reached from this flow.
-14. proposal store is bounded and cleans expired entries.
-15. service restart/lost proposal requires new proposal rather than trusting chat history.
-16. JWT/API key never appears in proposal storage or returned DTO.
+1. `getReservation` propagates USER JWT and returns only authorized reservation data.
+2. `getReservation` 403/404 never retries with privileged identity.
+3. ordinary chat allow-list now has exactly six read-only tools and still no `createReservation`.
+4. valid owner + active proposal + unchanged live state -> exactly one reservation call.
+5. another user cannot confirm proposal.
+6. expired/superseded/consumed proposal -> no downstream write.
+7. typed chat `yes` cannot call Reservation Service.
+8. confirm request cannot alter seat IDs/price.
+9. one proposed seat becomes unavailable -> stale/conflict, no substitution.
+10. current price changes by one minor unit -> `PRICE_CHANGED`, fresh proposal required.
+11. session becomes unbookable -> no reservation call.
+12. duplicate confirm calls reuse identical idempotency key.
+13. timeout-after-submit retry uses same key and reconciles.
+14. success uses authoritative Reservation Service `expiresAt`.
+15. no payment endpoint/tool can be reached.
+16. proposal TTL 5m and max 500 default limits are enforced/configurable.
+17. reset removes active proposal but does not cancel real hold.
+18. process restart/lost proposal cannot be reconstructed from client/chat fields.
+19. secrets/JWT are absent from proposal storage/result/log assertions.
 
-Use mocked downstream services in CI; add integration tests against Reservation Service contracts where practical.
-
----
-
-## 15. Acceptance Criteria
-
-- [ ] Only a dedicated explicit confirmation action can trigger reservation creation.
-- [ ] Ordinary LLM/chat tool set still contains no state-changing reservation tool.
-- [ ] Proposal is server-side, owner-bound, exact, TTL-bounded and non-editable by client.
-- [ ] Availability and pricing are revalidated immediately before state change.
-- [ ] Changed seats/price require a new proposal and new confirmation.
-- [ ] Reservation Service remains authoritative for concurrency, idempotency and 15-minute hold.
-- [ ] Duplicate confirmation cannot create duplicate holds.
-- [ ] Success returns authoritative reservation ID/status/expiry.
-- [ ] Payment remains completely manual/outside AI control.
-- [ ] Guest state-changing flow is not introduced implicitly.
-- [ ] Critical failure and ambiguous-timeout paths are test-covered.
+CI uses downstream mocks; live Groq not required.
 
 ---
 
-## 16. Verification
+## 16. Acceptance Criteria
+
+- [ ] `getReservation` exists as ownership-safe read-only tool.
+- [ ] Ordinary chat exposes exactly six approved read-only tools.
+- [ ] `createReservation` is not model-callable from ordinary chat.
+- [ ] Only dedicated explicit confirmation can trigger a reservation write.
+- [ ] Proposal is server-side, exact, owner-bound, 5-minute TTL, bounded, non-editable by client.
+- [ ] Availability/session/pricing are revalidated immediately before write.
+- [ ] Changed seats/price always require fresh proposal and fresh confirmation.
+- [ ] Idempotency handles double-click/network retry/ambiguous timeout safely.
+- [ ] Reservation Service remains authoritative for the actual hold and `expiresAt`.
+- [ ] Payment remains manual/outside AI.
+- [ ] Guest state-changing AI flow is not introduced.
+
+---
+
+## 17. Verification
 
 ```bash
 cd backend
@@ -351,10 +404,10 @@ mvn -pl services/ai-service -am test
 mvn verify
 ```
 
-Manual end-to-end validation after a Groq key exists:
+Manual live path after Groq key configuration:
 
 ```text
-ask for seats -> proposal card -> click explicit confirm -> reservation created -> normal checkout
+ask -> proposal -> click explicit confirm -> one 15-minute hold -> normal checkout
 ```
 
-Verify that typing `yes` without the explicit confirmation action does not create a hold.
+Also verify that chat text `yes` without the explicit confirmation action produces no reservation write.
