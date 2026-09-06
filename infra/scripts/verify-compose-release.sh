@@ -20,7 +20,7 @@ compose=(docker compose
 required_services=(
   postgres redis kafka eureka-server api-gateway
   user-service seat-map-service event-service reservation-service
-  payment-service ticket-service realtime-service notification-service frontend
+  payment-service ticket-service realtime-service notification-service analytics-service frontend
   otel-collector prometheus kafka-exporter grafana tempo loki promtail
 )
 
@@ -60,7 +60,7 @@ printf '%s' "${gateway_health}" | jq -e '.status == "UP"' >/dev/null
 eureka_apps=$("${compose[@]}" exec -T eureka-server \
   wget -qO- --header='Accept: application/json' http://127.0.0.1:8761/eureka/apps)
 printf '%s' "${eureka_apps}" | jq -e \
-  '(.applications.application // []) | length >= 9' >/dev/null
+  '(.applications.application // []) | length >= 10' >/dev/null
 
 frontend_status=$("${compose[@]}" exec -T frontend \
   wget -qSO /dev/null http://127.0.0.1:8080/health 2>&1 \

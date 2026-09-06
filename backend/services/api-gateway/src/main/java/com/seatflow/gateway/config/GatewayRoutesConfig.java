@@ -97,6 +97,12 @@ public class GatewayRoutesConfig {
                         .path("/api/notifications/**", "/api/admin/notifications/**")
                         .uri("lb://notification-service"))
 
+                // 9. Analytics Service (ADMIN-only read model; Stripe Test Mode / Demo data).
+                // Placed after notification-service so no broader /api/admin/** matcher swallows it.
+                .route("analytics-service", r -> r
+                        .path("/api/admin/analytics/**")
+                        .uri("lb://analytics-service"))
+
                 .build();
     }
 }

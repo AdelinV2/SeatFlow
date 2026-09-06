@@ -115,8 +115,8 @@ foreach ($line in ($allText -split "`r?`n")) {
 
 $prodCompose = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docker-compose.prod.yml') -Raw
 $flywayDisabledCount = ([regex]::Matches($prodCompose, 'SPRING_FLYWAY_ENABLED:\s*"false"')).Count
-if ($flywayDisabledCount -ne 7) {
-    throw "Expected Flyway startup to be disabled for exactly seven database-backed services; found $flywayDisabledCount."
+if ($flywayDisabledCount -ne 8) {
+    throw "Expected Flyway startup to be disabled for exactly eight database-backed services; found $flywayDisabledCount."
 }
 
 Write-Host 'SeatFlow CD workflow contract checks passed.'
