@@ -17,7 +17,7 @@
 - **Verification Strength:** `Strong`
 - **Required Review Depth:** `Critical for export/security; standard for UI`
 - **Preferred Workflow:** `full`
-- **Affected Critical Invariants:** `bounded analytics queries; ADMIN-only export; CSV injection safety; no PII; filter consistency; request-race safety; eventual-consistency disclosure`
+- **Affected Critical Invariants:** `bounded analytics queries; ADMIN-only export; CSV injection safety; aggregate-grain correctness; no PII; filter consistency; request-race safety; eventual-consistency disclosure`
 
 ---
 
@@ -29,11 +29,11 @@ Make the Phase 14 dashboard practical for admin use by adding:
 - projected event and event-session filters sourced from analytics itself;
 - session table pagination controls;
 - selectable trend metric;
-- bounded server-side CSV export of daily analytics rows;
+- bounded server-side CSV export that preserves the split between currency-neutral operations and currency-specific finance;
 - robust filter-specific loading/empty/error/unavailable states;
-- a documented, offline projection rebuild/replay procedure rather than a dangerous public "rebuild analytics" endpoint.
+- a documented offline projection rebuild/replay procedure instead of a destructive HTTP endpoint.
 
-This task must preserve the core Phase 14 isolation rule: dashboard filtering/export never causes synchronous reads from operational service databases/APIs.
+Dashboard filtering/export must never cause synchronous reads from operational service databases/APIs.
 
 ---
 
@@ -41,37 +41,39 @@ This task must preserve the core Phase 14 isolation rule: dashboard filtering/ex
 
 ### 3.1 Invariants
 
-- [ ] Filter-option endpoints and export endpoints are ADMIN-only server-side.
-- [ ] Date filtering uses the same UTC, inclusive, maximum-366-day semantics as P14-004.
-- [ ] Frontend never interprets local-midnight timestamps as API date boundaries; it sends date-only `YYYY-MM-DD` values.
-- [ ] Changing event filter clears an incompatible selected session before issuing filtered data requests.
-- [ ] Applying any filter resets server pagination to page 0.
+- [ ] Filter-option and export endpoints are ADMIN-only server-side.
+- [ ] Date filtering uses P14-004 UTC, inclusive, maximum-366-day semantics.
+- [ ] Frontend sends date-only `YYYY-MM-DD`; browser timezone conversion must not shift boundaries.
+- [ ] Changing event filter clears an incompatible selected session before filtered data requests.
+- [ ] Applying filters resets server pagination to page 0.
 - [ ] Older/slower HTTP responses cannot overwrite a newer filter selection.
-- [ ] Filter options come from analytics read-model dimensions/facts, not Event Service fanout.
-- [ ] Missing projected labels remain usable via IDs.
+- [ ] Filter options come from analytics facts, not Event Service fanout.
+- [ ] Missing labels fall back to IDs.
+- [ ] Filter-option responses are explicitly bounded and report truncation; no hidden truncation.
 - [ ] CSV is generated server-side from bounded analytics queries and contains no PII.
-- [ ] CSV cells derived from text snapshots are protected against spreadsheet formula injection.
+- [ ] CSV text snapshots are protected against spreadsheet formula injection.
 - [ ] CSV uses deterministic UTF-8/RFC-4180-style quoting and stable columns.
-- [ ] Export never silently truncates results; an oversized export fails with a stable error.
-- [ ] Export preserves currency as a dedicated column and money in integer minor units.
-- [ ] Dashboard never calls a destructive/reset/replay endpoint. Projection rebuild is an operator procedure while the consumer is stopped.
-- [ ] "Last projected event" is not mislabeled as exact Kafka lag or guaranteed freshness.
-- [ ] Network/unavailable state is visually distinct from a valid zero/empty result.
+- [ ] CSV keeps operational rows currency-neutral and financial rows currency-specific; it never repeats operational counts once per currency.
+- [ ] Export never silently truncates results; oversized export fails with a stable error.
+- [ ] Dashboard has no destructive reset/replay endpoint. Rebuild is an operator procedure with consumers stopped.
+- [ ] "Last projected event" is not mislabeled as exact Kafka lag.
+- [ ] Network/unavailable state is distinct from valid zero/empty data.
 
 ### 3.2 Failure Modes to Prevent
 
-- stale request for Event A overwrites later Event B results;
+- late Event A request overwrites Event B result;
 - session B remains selected after switching to Event A;
-- date filter off by one day because browser timezone converts midnight;
-- downloading millions of unbounded rows;
-- CSV title beginning `=HYPERLINK(...)` executes as spreadsheet formula;
-- multi-currency revenue loses currency identity in CSV;
-- filter dropdown calls Event Service and creates hidden coupling;
-- successful empty filter result rendered as `Analytics service unavailable`;
-- failed request leaves previous figures visible without any stale/error indication;
-- frontend generates CSV from only current page and presents it as full export;
-- admin rebuild endpoint can truncate production analytics by accidental click;
-- group-offset reset occurs while consumers are active and produces undefined rebuild state.
+- date off by one due local timezone;
+- filter endpoint silently returns first N values without telling UI;
+- CSV repeats reservation/ticket counts on RON and EUR revenue rows;
+- CSV title beginning `=HYPERLINK(...)` executes in spreadsheet;
+- CSV loses currency identity;
+- unbounded export;
+- successful empty result rendered as service unavailable;
+- failed refresh leaves old figures looking like they match new filters;
+- frontend exports only current page but labels it full export;
+- rebuild endpoint/automatic reset can truncate analytics accidentally;
+- consumer offsets reset while consumers active.
 
 ---
 
@@ -79,93 +81,121 @@ This task must preserve the core Phase 14 isolation rule: dashboard filtering/ex
 
 - P14-004 REST contracts complete.
 - P14-005 default dashboard complete.
-- P14-003 facts include safe projected event/session display metadata where available.
-- Existing common error/security conventions remain authoritative.
+- P14-003 facts include projected event/session metadata where available.
+- Existing common-domain error/security conventions remain authoritative.
 
 ---
 
 ## 5. Exact File Inventory
 
-### 5.1 Backend expected changes
+### Backend
 
-- `[MODIFY]` `.../web/controller/AdminAnalyticsController.java`
-- `[MODIFY]` analytics query service/repositories
+- `[MODIFY]` analytics admin controller/query service/repositories
 - `[NEW]` `.../web/dto/response/AnalyticsEventFilterOptionResponse.java`
 - `[NEW]` `.../web/dto/response/AnalyticsSessionFilterOptionResponse.java`
+- `[NEW]` `.../web/dto/response/AnalyticsFilterOptionsResponse.java`
 - `[NEW]` `.../service/AnalyticsCsvExportService.java`
-- `[NEW]` `.../service/impl/AnalyticsCsvExportServiceImpl.java` if interface/impl convention is retained
+- `[NEW]` service implementation if current convention uses one
 - `[NEW]` `.../web/csv/AnalyticsCsvWriter.java` or equivalent focused utility
 - `[NEW/MODIFY]` controller/service/security/export tests
-- `[NEW]` `backend/services/analytics-service/README.md` if the service does not already have operational documentation; include rebuild/replay runbook there
+- `[NEW]` `backend/services/analytics-service/README.md` if absent; include rebuild/replay runbook
 
-### 5.2 Frontend expected changes
+### Frontend
 
 - `[MODIFY]` `frontend/src/app/models/admin-analytics.model.ts`
 - `[MODIFY]` `frontend/src/app/services/admin-analytics-api.service.ts`
-- `[MODIFY]` `frontend/src/app/services/admin-analytics-api.service.spec.ts`
-- `[MODIFY]` analytics dashboard TS/HTML/SCSS/spec from P14-005
-- `[NEW]` focused filter/export child component only if the dashboard becomes materially clearer by separation; do not split purely for ceremony
+- `[MODIFY]` API service spec
+- `[MODIFY]` P14-005 analytics dashboard TS/HTML/SCSS/spec
+- `[NEW]` a focused filter/export child only if it materially improves maintainability; do not split for ceremony
 
 ---
 
 ## 6. Technical Specifications & Contracts
 
-### 6.1 Event Filter Options
+### 6.1 Bounded Filter-Options Envelope
 
-Add:
+Both filter endpoints return:
+
+```json
+{
+  "items": [],
+  "totalProjected": 0,
+  "truncated": false
+}
+```
+
+Hard maximum returned items:
+
+```text
+500
+```
+
+Behavior when more than 500 match:
+
+- query deterministic first 501 to detect overflow;
+- return first 500 sorted items;
+- `totalProjected` is exact only if query computes it efficiently; otherwise use a separate bounded count query because 500 is small. Do not fake the value;
+- `truncated=true`;
+- frontend displays `Showing first 500 options — narrow the date range to see more.`
+
+No silent truncation and no unbounded dropdown.
+
+### 6.2 Event Filter Options
 
 ```http
 GET /api/admin/analytics/filter-options/events?from=YYYY-MM-DD&to=YYYY-MM-DD
 ```
 
-Response sorted deterministically by safe display label then ID:
+Item:
 
 ```json
-[
-  {
-    "eventId": "...",
-    "label": "Concert title",
-    "firstProjectedSessionStart": "2026-09-10T18:00:00Z"
-  }
-]
+{
+  "eventId": "...",
+  "label": "Concert title",
+  "firstProjectedSessionStart": "2026-09-10T18:00:00Z"
+}
+```
+
+Sort:
+
+```text
+COALESCE(label, '') ASC, eventId ASC
 ```
 
 Rules:
 
-- only events represented in analytics facts within/relevant to selected range;
-- `label` may be null if no event snapshot exists;
-- frontend fallback is shortened/stable ID;
-- no live Event Service query;
-- cap option count at a documented reasonable bound (e.g. 500) and fail/indicate truncation explicitly if exceeded rather than returning an unbounded list. Prefer a backend hard maximum with tests.
+- only projected events relevant to selected range;
+- label nullable;
+- no Event Service query.
 
-### 6.2 Session Filter Options
-
-Add:
+### 6.3 Session Filter Options
 
 ```http
 GET /api/admin/analytics/filter-options/sessions?from=YYYY-MM-DD&to=YYYY-MM-DD&eventId=<optional UUID>
 ```
 
-Response:
+Item:
 
 ```json
-[
-  {
-    "eventSessionId": "...",
-    "eventId": "...",
-    "label": "Evening show",
-    "startsAt": "2026-09-10T18:00:00Z"
-  }
-]
+{
+  "eventSessionId": "...",
+  "eventId": "...",
+  "label": "Evening show",
+  "startsAt": "2026-09-10T18:00:00Z"
+}
 ```
 
-Sort by `startsAt ASC NULLS LAST`, then `eventSessionId ASC`.
+Sort:
 
-If `eventId` is selected, only sessions for that projected event are returned. Unknown event filter returns `200 []`.
+```text
+startsAt ASC NULLS LAST, eventSessionId ASC
+```
 
-### 6.3 Filter Application Model
+Unknown projected event -> `200` with empty envelope.
 
-Frontend fields:
+### 6.4 Frontend Applied-Filter Model
+
+Fields:
 
 ```text
 fromDate
@@ -177,74 +207,65 @@ sessionPage
 sessionPageSize
 ```
 
-Baseline UX:
+UX:
 
-- initialize explicit date controls to the same backend default 30-day UTC date range;
-- use an injectable date/clock utility in tests rather than hardcoded current dates;
-- provide `Apply filters` and `Reset` actions; do not issue a full dashboard refresh on every individual date keystroke;
-- selecting Event A refreshes session options and clears a selected session that is not in A;
-- selecting a session may imply/set its event only if the option includes a matching eventId and the behavior is explicit/tested;
-- `Reset` returns to 30-day range, no event/session filter, page 0, default trend metric;
-- filter state remains inside dashboard unless the product already has a consistent query-param state pattern. Do not invent partial URL persistence in this task.
+- initialize visible date controls to same 30-day UTC default;
+- use a testable date/clock utility;
+- `Apply filters` performs dashboard refresh; do not refresh on each date keystroke;
+- changing event refreshes session options and clears incompatible selected session;
+- selecting a session may set its event only if that behavior is explicit and tested; default preference is keep event/session consistency from selected option;
+- `Reset` -> 30-day default, no event/session, page 0, default metric;
+- keep draft form state separate from currently applied filters so CSV and displayed results always correspond to applied filters;
+- no new partial URL-query persistence unless existing project convention already provides it.
 
-### 6.4 Request-Race / Cancellation Behavior
+### 6.5 Request Race / Cancellation
 
-Create one filter state stream/signal and use cancellable request composition (`switchMap`, Angular signal resource pattern, or equivalent supported pattern).
+Use `switchMap`, Angular resource/signal cancellation, or equivalent supported pattern.
 
-Required behavior:
+Required:
 
 ```text
-apply Filter A -> request A starts
-apply Filter B -> request B starts
-request B completes
-request A completes later
-UI must still show B
+A starts -> B starts -> B completes -> A completes late -> UI remains B
 ```
 
-Do not solve this with arbitrary `setTimeout` or by ignoring errors globally.
+Each widget response must be associated with active applied-filter state. No arbitrary timeout solution.
 
-Independent widgets may still load separately, but each widget must bind response to the active filter version/state.
+### 6.6 Session Pagination
 
-### 6.5 Session Pagination
-
-Use P14-004 server pagination.
-
+- server pagination only;
 - default 25;
-- allowed page sizes: `10, 25, 50, 100` only if backend max remains 100;
-- page changes reload only session table, not summary/time series unless shared state implementation makes an equivalent efficient request unavoidable;
-- filter change resets page 0;
-- never fetch all pages client-side to paginate locally.
+- UI page-size options `10,25,50,100`;
+- filter change -> page 0;
+- page change should reload session table only when current component architecture separates calls;
+- never fetch all pages client-side.
 
-### 6.6 Trend Metric Selector
+### 6.7 Trend Metric Selector
 
-Expose only metrics implemented by P14-004.
-
-Recommended UI options:
+Expose only P14-004 implemented metrics:
 
 ```text
-Net revenue
-Gross revenue
-Tickets issued
-Tickets scanned
-Reservations created
-Successful payments
+NET_REVENUE
+GROSS_REVENUE
+TICKETS_ISSUED
+TICKETS_SCANNED
+RESERVATIONS_CREATED
+PAYMENTS_SUCCEEDED
 ```
 
-For money metrics with multiple currencies, use separate series or a clearly selected currency. Do not stack/add them into one value.
+For money metrics, preserve separate currency series or require a clear currency selection. Never stack/add currencies into a total.
 
-### 6.7 CSV Export Endpoint
-
-Add:
+### 6.8 CSV Export Endpoint
 
 ```http
 GET /api/admin/analytics/export/daily.csv?from=...&to=...&eventId=...&eventSessionId=...
 ```
 
-Why daily rows: `daily_sales_metrics` already has a stable `(date,event,session,currency)` grain, so counts and money can be exported without repeating session-level counts across arbitrary currency rows.
+The export is a **long-form union** of two aggregate grains. It uses `row_type` so operational counts are never duplicated by currency.
 
-CSV columns in exact stable order:
+Exact stable columns:
 
 ```text
+row_type
 metric_date
 event_id
 event_session_id
@@ -254,12 +275,14 @@ currency
 reservations_created
 reservations_confirmed
 reservations_expired
-payments_succeeded
-payment_failures
-refunds_completed
+operational_payments_succeeded
+payments_with_failure
+operational_refunds_completed
 tickets_issued
 tickets_revoked
 tickets_scanned
+financial_payments_succeeded
+financial_refunds_completed
 gross_revenue_minor
 refunded_revenue_minor
 net_revenue_minor
@@ -267,170 +290,223 @@ stripe_test_mode
 last_projected_event_at
 ```
 
-Rules:
+#### `row_type=OPERATIONS`
 
-- one row per daily aggregate grain;
-- money remains integer minor units;
-- `stripe_test_mode` is literal `true` for Phase 14 financial rows;
-- no email/name/address/user ID/payment method/raw provider secret;
-- deterministic order: `metric_date ASC, event_id ASC, event_session_id ASC, currency ASC`;
-- same date/filter validation as P14-004;
-- maximum export rows: `10_000` (or a smaller explicit reviewed constant). Query one extra row to detect overflow and return a stable `ANALYTICS_EXPORT_TOO_LARGE` error; never silently truncate;
-- content type `text/csv; charset=UTF-8`;
-- `Content-Disposition: attachment; filename="seatflow-analytics-<from>-<to>.csv"` with server-generated safe filename;
-- do not accept a client-supplied filename/path;
-- write/stream rows without building an unbounded giant string.
+One row per matching `daily_operational_metrics` grain.
 
-### 6.8 CSV Escaping and Formula-Injection Protection
+- `currency` empty;
+- operational count columns populated;
+- financial payment/refund/money columns empty;
+- `stripe_test_mode` empty because the row itself contains no money.
 
-Implement one tested CSV writer/escaping policy.
+#### `row_type=REVENUE`
 
-For every text cell (`event_title`, `session_label`, and any future text field):
+One row per matching `daily_revenue_metrics` grain.
 
-1. normalize null -> empty cell;
-2. protect formula-leading content after leading whitespace according to policy. Cells whose first meaningful character is one of `=`, `+`, `-`, `@` must be prefixed with a single quote `'` before CSV escaping;
-3. escape `"` as `""`;
-4. quote any field containing comma, quote, CR, or LF;
-5. preserve UTF-8 text;
-6. never write raw CR/LF in an unquoted field.
+- `currency` required;
+- operational count columns empty;
+- `financial_payments_succeeded`, `financial_refunds_completed`, gross/refunded/net populated;
+- `stripe_test_mode=true`.
 
-IDs/numeric/date fields are generated from typed server values and not user-provided free text.
+This prevents a spreadsheet user from accidentally summing the same reservation/ticket counts once for RON and again for EUR.
 
-Add explicit tests with titles such as:
+`event_title`/`session_label` come from analytics session facts and may be empty. No source-service lookup.
+
+### 6.9 CSV Bounds / Ordering / Headers
+
+Maximum total exported rows across both row types:
+
+```text
+10_000
+```
+
+Implementation:
+
+- count/detect total matching union size before streaming or query `10_001` through a safe combined approach;
+- `10_000` accepted;
+- `10_001+` -> `ANALYTICS_EXPORT_TOO_LARGE`, no partial file;
+- never silently truncate.
+
+Stable ordering:
+
+```text
+metric_date ASC,
+event_id ASC,
+event_session_id ASC,
+row_type OPERATIONS before REVENUE,
+currency ASC NULLS FIRST
+```
+
+HTTP:
+
+```text
+Content-Type: text/csv; charset=UTF-8
+Content-Disposition: attachment; filename="seatflow-analytics-<from>-<to>.csv"
+```
+
+Filename is server-generated from validated dates; client cannot supply path/name.
+
+### 6.10 CSV Escaping / Formula Injection
+
+For text snapshot cells only (`event_title`, `session_label`, any future user-controllable text):
+
+1. null -> empty;
+2. inspect first non-whitespace character;
+3. if `=`, `+`, `-`, or `@`, prefix the cell value with single quote `'`;
+4. escape `"` as `""`;
+5. quote fields containing comma, quote, CR, or LF;
+6. preserve UTF-8;
+7. never emit raw CR/LF unquoted.
+
+Typed UUID/date/numeric values are emitted from typed server values, not passed through arbitrary text.
+
+Required malicious/edge fixtures:
 
 ```text
 =HYPERLINK("https://example.invalid")
 +SUM(1,1)
 @cmd
+-1+2
 Normal, title
 Title "quoted"
 multiline\nname
 ```
 
-### 6.9 Frontend Export
+### 6.11 Frontend Export
 
-`AdminAnalyticsApiService.exportDailyCsv(filters)` should request a `Blob` and trigger download using the same safe object-URL cleanup pattern already used for ticket PDFs.
+`AdminAnalyticsApiService.exportDailyCsv(appliedFilters)` requests `Blob`.
 
-UI:
+- button `Export CSV`;
+- uses currently **applied** filters, not draft edits;
+- disabled while export request active;
+- follow existing ticket-PDF object URL creation/revocation pattern;
+- safe fallback filename if trusted header cannot be parsed;
+- export error stays in dashboard;
+- `ANALYTICS_EXPORT_TOO_LARGE` tells admin to narrow range/filters;
+- do not build CSV from current table page.
 
-- button text `Export CSV`;
-- disabled while exporting;
-- export uses **currently applied** filters, not uncommitted form edits;
-- filename may use trusted `Content-Disposition` if parsing is safe, otherwise frontend uses a fixed safe fallback;
-- export error shows concise message and does not navigate away;
-- do not generate CSV from currently visible table page.
+### 6.12 Operational UX States
 
-### 6.10 Operational UX States
+Distinguish:
 
-Distinguish at least:
+1. **Initial loading** — no prior analytics content.
+2. **Refreshing filters** — prior content may remain only with explicit refreshing indicator; never claim it matches new draft/applied filter before response.
+3. **Valid empty** — successful request, no projected data.
+4. **Analytics unavailable** — network/gateway 5xx -> concise unavailable + retry.
+5. **Unauthorized/forbidden** — use existing auth behavior, not empty state.
+6. **Validation error** — client prevents obvious invalid dates but backend remains authoritative.
+7. **No projection freshness** — service works, no relevant event processed yet.
+8. **Projection recency** — show last projected event; do not call it Kafka lag/staleness based solely on age.
+9. **Filter options truncated** — show 500-item warning and encourage narrower date range.
+10. **Export too large** — narrow filters/range.
 
-1. **Initial loading** — no prior data yet.
-2. **Refreshing filters** — keep prior content only if clearly marked as refreshing; do not present it as matching the new filters before response completes.
-3. **Valid empty result** — request succeeded but selected range/filter has no projected data.
-4. **Analytics unavailable** — network/gateway `5xx` or connection failure; show `Analytics temporarily unavailable` with retry.
-5. **Unauthorized/forbidden** — follow existing global auth behavior; do not mislabel as empty analytics.
-6. **Validation error** — show date/filter validation and do not issue request when preventable client-side; still handle backend rejection.
-7. **No projection freshness** — service works but has not processed a relevant event yet.
-8. **Projection recency** — show `Last projected event ...`; do not automatically label it "Kafka lag" or "stale" based solely on wall-clock age.
-9. **Export too large** — explain that user must narrow filters/date range.
+### 6.13 Projection Rebuild / Replay Runbook
 
-### 6.11 Projection Rebuild / Replay Runbook
+No HTTP reset/rebuild endpoint.
 
-Do **not** add an HTTP endpoint that truncates analytics or resets Kafka offsets.
-
-Document a controlled operator procedure in analytics-service README. It must require analytics consumers to be stopped before offset reset.
-
-Conceptual procedure:
+Document controlled operator procedure:
 
 ```text
-1. Stop analytics-service instances.
-2. Confirm no analytics-service-v1 consumer is active.
-3. Truncate only seatflow_analytics read-model tables, including processed_events, in a documented FK-safe/order-safe transaction or recreate the analytics DB.
-4. Reset analytics-service-v1 offsets for the subscribed reservation/payment/ticket/event topics to earliest retained offsets using Kafka admin tooling.
+1. Stop every analytics-service instance.
+2. Confirm analytics-service-v1 consumer group has no active analytics member.
+3. Clear/recreate only seatflow_analytics read-model tables, including processed_events, using documented safe ordering/transaction.
+4. Reset analytics-service-v1 offsets for reservation/payment/ticket/event topics to earliest retained offsets with Kafka admin tooling.
 5. Restart analytics-service.
-6. Observe consumer errors/lag/processed metrics until replay settles.
-7. Verify representative dashboard totals against deterministic fixtures/known source events.
+6. Observe consumer failure/DLQ/processed/lag metrics until replay settles.
+7. Verify representative dashboard totals against known event fixtures.
 ```
 
 Warnings:
 
-- Kafka can rebuild only retained history; it is not guaranteed to reconstruct domain state older than retention.
-- Never query operational DBs as an undocumented fallback backfill.
-- Changing group ID to force replay is an explicit operator decision and must not happen on every deploy.
-- Do not reset offsets while consumers are active.
-- Production execution requires normal operational approval/backup practices; README is a technical runbook, not an automatic startup action.
+- Kafka rebuilds only retained history;
+- no undocumented source-DB backfill;
+- group ID changes are explicit operator decisions, never normal deploy behavior;
+- never reset offsets while consumers active;
+- production requires normal operational approval/backup practices;
+- rebuild is never automatic at application startup.
 
 ---
 
 ## 7. Step-by-Step Implementation Sequence
 
-1. Add backend event/session filter-option queries/endpoints with bounds and ADMIN security.
-2. Add daily CSV export query and stable DTO/projection.
-3. Implement tested CSV escaping/formula-injection protection and row-limit detection.
-4. Add backend tests for auth, bounds, multi-currency, CSV headers/order/escaping/overflow.
-5. Extend frontend models/API service for filter options and Blob export.
-6. Implement applied-filter state, date controls, event/session dependency behavior, metric selector, and reset.
-7. Implement cancellable/race-safe widget refresh.
+1. Add bounded event/session filter-option queries/endpoints/envelope.
+2. Add long-form OPERATIONS/REVENUE CSV query contract with row bound.
+3. Implement tested CSV escaping/formula protection.
+4. Add backend auth/bounds/grain/header/order/escaping/overflow tests.
+5. Extend frontend types/API for options + Blob export.
+6. Implement draft vs applied filters, UTC dates, event/session consistency, metric selector, reset.
+7. Implement cancellable/race-safe refresh.
 8. Add session pagination controls.
-9. Add export button and error/oversize behavior.
-10. Implement distinct loading/refresh/empty/unavailable/validation/freshness states.
-11. Add offline rebuild/replay README runbook.
-12. Run backend/frontend tests and manually test rapid filter switching plus malicious CSV text fixtures.
+9. Add export and explicit error/oversize behavior.
+10. Add truncated-options warning and distinct operational states.
+11. Add offline rebuild README runbook.
+12. Run backend/frontend tests and manual rapid-switch/malicious-CSV verification.
 
 ---
 
 ## 8. Test Requirements
 
-### 8.1 Backend Filter Options
+### 8.1 Filter Options
 
-- [ ] event/session options are ADMIN-only;
-- [ ] date range follows P14-004 validation;
-- [ ] eventId limits session options;
-- [ ] unknown projected event returns empty list;
-- [ ] label may be null without failure;
-- [ ] deterministic ordering;
-- [ ] option-count bound enforced.
+- [ ] ADMIN-only;
+- [ ] same date validation as P14-004;
+- [ ] eventId scopes sessions;
+- [ ] unknown event -> empty envelope;
+- [ ] labels nullable;
+- [ ] deterministic sorting;
+- [ ] <=500 -> `truncated=false`;
+- [ ] 501 -> 500 items + `truncated=true` + correct totalProjected.
 
-### 8.2 CSV
+### 8.2 CSV Grain / Currency
+
+Fixture same session with RON + EUR:
+
+- [ ] exactly one OPERATIONS row for the operational date grain;
+- [ ] exactly two REVENUE rows when both currencies contribute on same date;
+- [ ] reservation/ticket counts appear only in OPERATIONS row;
+- [ ] money appears only in REVENUE rows;
+- [ ] no mixed-currency total;
+- [ ] Test Mode true only on revenue rows.
+
+### 8.3 CSV Security / Bounds
 
 - [ ] exact header order;
-- [ ] exact deterministic row order;
-- [ ] all monetary fields are integer minor units + currency;
-- [ ] `stripe_test_mode=true` present;
-- [ ] no PII columns;
-- [ ] comma/quote/newline escaped correctly;
+- [ ] deterministic row order;
+- [ ] no PII;
+- [ ] comma/quote/newline escaped;
 - [ ] formula-leading text neutralized;
-- [ ] 10,000 rows accepted if that is configured max;
-- [ ] 10,001 detected/rejected without silent truncation;
-- [ ] non-admin cannot export;
-- [ ] two currencies remain separate rows.
+- [ ] 10,000 total rows accepted;
+- [ ] 10,001 rejected with no partial body/file;
+- [ ] non-admin denied.
 
-### 8.3 Frontend Filters
+### 8.4 Frontend Filters / Races
 
-- [ ] reset returns exact default filter state;
-- [ ] filter apply resets session page;
-- [ ] changing event clears incompatible session;
-- [ ] date-only strings sent without timezone conversion;
-- [ ] rapid A -> B filter change cannot end displaying late A response;
-- [ ] page change does not unnecessarily reload unrelated widgets where implementation separates them.
+- [ ] reset exact default;
+- [ ] apply resets page;
+- [ ] event change clears incompatible session;
+- [ ] date-only strings sent unchanged by timezone;
+- [ ] A -> B rapid filter change cannot end displaying A;
+- [ ] options truncated warning shown;
+- [ ] page changes do not fetch all rows locally.
 
-### 8.4 Frontend Operational States
+### 8.5 Frontend Operational / Export States
 
-- [ ] successful empty != API error;
-- [ ] 5xx shows unavailable + retry;
-- [ ] backend validation shows actionable filter error;
-- [ ] no freshness shows `No projected events yet`;
-- [ ] recency is not labeled exact Kafka lag;
-- [ ] export too large prompts filter narrowing;
-- [ ] export button cannot start duplicate concurrent downloads.
+- [ ] successful empty != error;
+- [ ] 5xx unavailable + retry;
+- [ ] backend validation actionable;
+- [ ] no freshness -> `No projected events yet`;
+- [ ] recency not labeled exact Kafka lag;
+- [ ] export too large -> narrow filters message;
+- [ ] export button prevents duplicate concurrent downloads;
+- [ ] export uses applied rather than draft filters.
 
-### 8.5 Rebuild Runbook Review
+### 8.6 Rebuild Runbook
 
-- [ ] explicitly stops consumers before offset reset;
-- [ ] resets only analytics consumer group/topics;
-- [ ] warns about Kafka retention;
-- [ ] does not suggest cross-database backfill;
-- [ ] no automatic/destructive startup rebuild behavior added.
+- [ ] stops consumers before offset reset;
+- [ ] resets only analytics group/topics;
+- [ ] warns about retention;
+- [ ] forbids cross-database backfill;
+- [ ] no automatic/destructive startup behavior.
 
 ---
 
@@ -448,27 +524,31 @@ npm run build
 Manual verification:
 
 ```text
-rapidly apply two different filters and confirm latest wins
-switch event with a selected session and confirm session resets
-export CSV with comma/quote/newline/formula-like event titles
+rapidly apply A then B filters; B must remain visible
+switch event with selected session; session resets
+force >500 filter options; truncation warning appears
+export same-session RON+EUR fixture; counts appear only in OPERATIONS row
+export malicious comma/quote/newline/formula labels
 attempt export as non-admin
-attempt export beyond row limit
-simulate analytics 5xx and distinguish from valid empty data
+attempt >10,000 export
+simulate analytics 5xx vs valid empty data
 ```
 
 ---
 
 ## 10. Independent Review Focus
 
-Review must prioritize:
+Prioritize:
 
-- CSV injection/escaping and absence of PII;
-- ADMIN security on export/filter options;
-- bounded export and no silent truncation;
-- date/timezone consistency;
-- frontend response-race handling;
-- event/session filter dependency correctness;
-- no operational-service fanout;
+- aggregate grain in CSV;
+- CSV injection/escaping/no PII;
+- ADMIN security;
+- export bounds/no partial truncation;
+- filter-option explicit truncation;
+- UTC/date consistency;
+- response-race handling;
+- event/session dependency correctness;
+- no source-service fanout;
 - honest freshness wording;
 - rebuild runbook safety.
 
@@ -476,13 +556,13 @@ Review must prioritize:
 
 ## 11. Acceptance Criteria
 
-- [ ] Admin can filter analytics by UTC date range, projected event, and projected session.
-- [ ] Session pagination and trend metric selection work without unbounded client loads.
-- [ ] Filter HTTP races cannot show results for an older selection.
-- [ ] CSV export is server-side, bounded, deterministic, currency-safe, PII-free, and formula-injection protected.
-- [ ] Loading/refresh/empty/unavailable/validation/freshness/export-too-large states are distinct.
-- [ ] No destructive analytics rebuild endpoint exists.
-- [ ] Offline replay/rebuild procedure is documented safely.
+- [ ] Admin can filter by UTC date range, projected event/session.
+- [ ] Filter options are bounded with explicit truncation metadata.
+- [ ] Session pagination/trend selection use server data without unbounded loads.
+- [ ] Filter HTTP races cannot show older selection.
+- [ ] CSV is server-side, bounded, deterministic, PII-free, formula-safe, and preserves operational-vs-financial grain.
+- [ ] Loading/refresh/empty/unavailable/validation/freshness/truncated/export-too-large states are distinct.
+- [ ] No destructive rebuild endpoint exists; offline replay procedure is documented.
 - [ ] Backend/frontend tests and independent export/security review pass.
 
 ---
@@ -491,5 +571,5 @@ Review must prioritize:
 
 ```text
 Implement TASK-P14-006 using the SeatFlow autonomous orchestration workflow.
-Treat filter race-safety, date semantics, CSV injection protection, export bounds, and rebuild safety as acceptance-critical requirements.
+Treat filter race-safety, UTC date semantics, explicit option bounds, CSV aggregate grain, injection protection, export limits, and rebuild safety as acceptance-critical.
 ```
