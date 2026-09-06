@@ -23,6 +23,13 @@ if [[ ! -f ${previous_file} ]]; then
   exit 1
 fi
 
+runtime_tag=$(awk -F= '$1 == "SEATFLOW_IMAGE_TAG" { print $2; exit }' "${runtime_file}")
+if [[ ${runtime_tag} =~ ^[0-9a-f]{40}$ && -f ${deployment_dir}/migrations-${runtime_tag}.started ]]; then
+  echo "Rollback refused: migration work started for runtime image ${runtime_tag}." >&2
+  echo "The database may no longer be compatible with the previous image set; use a forward fix." >&2
+  exit 42
+fi
+
 # Metadata is written only by deploy-compose-release.sh and contains no secrets.
 # shellcheck disable=SC1090
 source "${previous_file}"
@@ -38,17 +45,7 @@ awk -v tag="${SEATFLOW_IMAGE_TAG}" \
   "${runtime_file}" > "${temp_runtime}"
 install -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"
 
-compose=(docker compose
-  -f "${seatflow_root}/docker-compose.yml"
-  -f "${seatflow_root}/docker-compose.services.yml"
-  -f "${seatflow_root}/docker-compose.monitoring.yml"
-  -f "${seatflow_root}/docker-compose.prod.yml"
-  -f "${seatflow_root}/docker-compose.prod-health.yml"
-  --env-file "${runtime_file}")
-
-"${compose[@]}" config --quiet
-"${compose[@]}" pull
-"${compose[@]}" up -d --remove-orphans
+"${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}"
 "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}" "${smoke_url}"
 install -o root -g root -m 0600 "${previous_file}" "${current_file}"
-echo "Restored previous immutable application image set; database schema was not changed"
+echo "Restored previous immutable application image set only after proving no migration stage started"
