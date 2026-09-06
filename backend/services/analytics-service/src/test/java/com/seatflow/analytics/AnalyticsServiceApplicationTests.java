@@ -53,21 +53,21 @@ class AnalyticsServiceApplicationTests {
     }
 
     @Test
-    @DisplayName("V1 analytics read-model migration applies exactly once")
+    @DisplayName("Analytics read-model migrations apply exactly once each")
     void flywayMigrationsAppliedSuccessfully() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
-        assertThat(versions).containsExactly("1");
+        assertThat(versions).containsExactly("1", "2");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true);
+        assertThat(successes).containsExactly(true, true);
     }
 
     @Test
-    @DisplayName("All V1 analytics tables exist")
+    @DisplayName("All analytics tables exist, including V2 batch-revocation facts")
     void allReadModelTablesExist() {
         List<String> tables = jdbcTemplate.queryForList(
                 """
@@ -81,6 +81,7 @@ class AnalyticsServiceApplicationTests {
                 "analytics_reservation_facts",
                 "analytics_payment_facts",
                 "analytics_ticket_facts",
+                "analytics_ticket_revocation_facts",
                 "daily_operational_metrics",
                 "daily_revenue_metrics",
                 "event_session_metrics",
@@ -225,6 +226,7 @@ class AnalyticsServiceApplicationTests {
                   AND table_name IN (
                     'analytics_session_facts', 'analytics_reservation_facts',
                     'analytics_payment_facts', 'analytics_ticket_facts',
+                    'analytics_ticket_revocation_facts',
                     'daily_operational_metrics', 'daily_revenue_metrics',
                     'event_session_metrics', 'event_session_revenue_metrics',
                     'processed_events')
@@ -247,9 +249,9 @@ class AnalyticsServiceApplicationTests {
                   AND conrelid::regclass::text IN (
                     'processed_events', 'analytics_session_facts',
                     'analytics_reservation_facts', 'analytics_payment_facts',
-                    'analytics_ticket_facts', 'daily_operational_metrics',
-                    'daily_revenue_metrics', 'event_session_metrics',
-                    'event_session_revenue_metrics')
+                    'analytics_ticket_facts', 'analytics_ticket_revocation_facts',
+                    'daily_operational_metrics', 'daily_revenue_metrics',
+                    'event_session_metrics', 'event_session_revenue_metrics')
                 """, Integer.class);
 
         assertThat(fkCount).isZero();

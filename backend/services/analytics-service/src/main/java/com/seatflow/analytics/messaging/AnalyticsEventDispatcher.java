@@ -35,11 +35,15 @@ import java.util.regex.Pattern;
  * <p>Verified gaps (no producer changes made — analytics derives correlation from events):
  * <ul>
  *   <li>P13 refund/revocation has no implementation (only {@code 000-phase-overview.md}); no
- *       {@code PaymentRefunded}, {@code ReservationRefunded}, or ticket-revocation event exists.
- *       Those names stay unsupported until a real producer lands; they are ignored, never guessed.</li>
+ *       {@code PaymentRefunded}, {@code ReservationRefunded}, or ticket-revocation producer
+ *       exists yet. TASK-P14-003 owns their projection semantics: the eventTypes are allowlisted
+ *       with strict validation so tests and future producers converge on one contract instead of
+ *       guessing at consumption time. They are ignored until produced, never guessed.</li>
  *   <li>Ticket scanning is synchronous REST only ({@code TicketServiceImpl.validateTicket} writes
  *       {@code TicketValidation} rows, no outbox). No {@code TicketScanned}/{@code TicketValidated}
- *       Kafka event exists; scan projections wait for a real producer contract.</li>
+ *       Kafka event exists; TASK-P14-003 allowlists both accepted-scan names with the same
+ *       first-scan-wins projection so the first real producer contract binds without a
+ *       dispatcher change.</li>
  *   <li>{@code EventSessionServiceImpl} publishes no Kafka events; there is no session-lifecycle
  *       topic event. Session correlation comes from the {@code eventSessionId} snapshot already
  *       present on reservation/payment/ticket payloads plus {@code EVENT_*} parent-event metadata.
@@ -59,16 +63,22 @@ public class AnalyticsEventDispatcher {
     private static final Pattern CURRENCY_PATTERN = Pattern.compile("^[A-Z]{3}$");
 
     /**
-     * Canonical analytics eventTypes verified against implemented producers.
+     * Canonical analytics eventTypes: verified producer contracts plus P14-003-owned
+     * refund/revocation/scan names (strictly validated; bound by tests until producers land).
      */
     public static final Set<String> SUPPORTED_EVENT_TYPES = Set.of(
             "ReservationHeldEvent",
             "ReservationConfirmedEvent",
             "ReservationExpiredEvent",
             "ReservationCancelledEvent",
+            "ReservationRefunded",
             "PaymentCompleted",
             "PaymentFailed",
+            "PaymentRefunded",
             "TicketIssued",
+            "TicketRevoked",
+            "TicketScanned",
+            "TicketValidated",
             "EVENT_CREATED",
             "EVENT_PUBLISHED",
             "EVENT_CANCELLED",
@@ -158,12 +168,12 @@ public class AnalyticsEventDispatcher {
                 requireUuid(payload, "eventId", eventId, eventType);
                 requireUuid(payload, "paymentId", eventId, eventType);
             }
-            case "ReservationExpiredEvent", "ReservationCancelledEvent" -> {
+            case "ReservationExpiredEvent", "ReservationCancelledEvent", "ReservationRefunded" -> {
                 requireUuid(payload, "reservationId", eventId, eventType);
                 requireUuid(payload, "eventSessionId", eventId, eventType);
                 requireUuid(payload, "eventId", eventId, eventType);
             }
-            case "PaymentCompleted" -> {
+            case "PaymentCompleted", "PaymentRefunded" -> {
                 requireUuid(payload, "paymentId", eventId, eventType);
                 requireUuid(payload, "reservationId", eventId, eventType);
                 requireNonNegativeMoney(payload, "amount", eventId, eventType);
@@ -172,10 +182,40 @@ public class AnalyticsEventDispatcher {
             case "PaymentFailed" -> {
                 requireUuid(payload, "paymentId", eventId, eventType);
                 requireUuid(payload, "reservationId", eventId, eventType);
+                optionalUuid(payload, "eventSessionId", eventId, eventType);
+                optionalUuid(payload, "eventId", eventId, eventType);
             }
             case "TicketIssued" -> {
                 requireUuid(payload, "ticketId", eventId, eventType);
                 requireUuid(payload, "reservationId", eventId, eventType);
+                optionalUuid(payload, "eventSessionId", eventId, eventType);
+                optionalUuid(payload, "eventId", eventId, eventType);
+            }
+            case "TicketRevoked" -> {
+                // Per-ticket (ticketId) or reservation-scoped (reservationId without ticket IDs);
+                // at least one identity is required so the event is never silently dropped.
+                String ticketId = payload.path("ticketId").asText(null);
+                String reservationId = payload.path("reservationId").asText(null);
+                boolean hasTicket = ticketId != null && !ticketId.isBlank();
+                boolean hasReservation = reservationId != null && !reservationId.isBlank();
+                if (!hasTicket && !hasReservation) {
+                    throw new AnalyticsEventValidationException(eventId, eventType,
+                            "Analytics event " + eventType + " requires ticketId or reservationId");
+                }
+                if (hasTicket) {
+                    requireUuid(payload, "ticketId", eventId, eventType);
+                }
+                if (hasReservation) {
+                    requireUuid(payload, "reservationId", eventId, eventType);
+                }
+                optionalUuid(payload, "eventSessionId", eventId, eventType);
+                optionalUuid(payload, "eventId", eventId, eventType);
+            }
+            case "TicketScanned", "TicketValidated" -> {
+                requireUuid(payload, "ticketId", eventId, eventType);
+                optionalUuid(payload, "reservationId", eventId, eventType);
+                optionalUuid(payload, "eventSessionId", eventId, eventType);
+                optionalUuid(payload, "eventId", eventId, eventType);
             }
             case "EVENT_CREATED", "EVENT_PUBLISHED", "EVENT_CANCELLED", "EVENT_COMPLETED" -> {
                 requireUuid(payload, "eventId", eventId, eventType);
@@ -207,11 +247,23 @@ public class AnalyticsEventDispatcher {
         }
     }
 
-    private static void requireUuid(JsonNode payload, String field, String eventId, String eventType) {
-        String value = payload.path(field).asText(null);
+    private static void requireUuid(JsonNode payload, String field, String eventId, String eventType) {        String value = payload.path(field).asText(null);
         if (value == null || value.isBlank()) {
             throw new AnalyticsEventValidationException(eventId, eventType,
                     "Analytics event " + eventType + " requires field: " + field);
+        }
+        try {
+            java.util.UUID.fromString(value);
+        } catch (IllegalArgumentException ex) {
+            throw new AnalyticsEventValidationException(eventId, eventType,
+                    "Analytics event " + eventType + " field " + field + " must be a UUID", ex);
+        }
+    }
+
+    private static void optionalUuid(JsonNode payload, String field, String eventId, String eventType) {
+        String value = payload.path(field).asText(null);
+        if (value == null || value.isBlank()) {
+            return;
         }
         try {
             java.util.UUID.fromString(value);

@@ -25,11 +25,21 @@ class AnalyticsEventDispatcherTest {
     void unknownEventTypesAreUnsupported() {
         assertThat(dispatcher.isSupported("UserRegistered")).isFalse();
         assertThat(dispatcher.isSupported("SeatStatusUpdated")).isFalse();
-        assertThat(dispatcher.isSupported("PaymentRefunded")).isFalse();
-        assertThat(dispatcher.isSupported("TicketScanned")).isFalse();
+        assertThat(dispatcher.isSupported("PaymentAuthorized")).isFalse();
+        assertThat(dispatcher.isSupported("TicketPrinted")).isFalse();
         assertThat(dispatcher.isSupported(null)).isFalse();
         assertThat(dispatcher.isSupported("")).isFalse();
         assertThat(dispatcher.handlerFor("UserRegistered")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("P14-003 refund/revocation/scan contracts are supported")
+    void refundRevocationScanContractsAreSupported() {
+        assertThat(dispatcher.isSupported("ReservationRefunded")).isTrue();
+        assertThat(dispatcher.isSupported("PaymentRefunded")).isTrue();
+        assertThat(dispatcher.isSupported("TicketRevoked")).isTrue();
+        assertThat(dispatcher.isSupported("TicketScanned")).isTrue();
+        assertThat(dispatcher.isSupported("TicketValidated")).isTrue();
     }
 
     @Test
@@ -174,8 +184,9 @@ class AnalyticsEventDispatcherTest {
     void dispatcherExposesContractMatrix() {
         assertThat(dispatcher.supportedEventTypes()).containsExactlyInAnyOrder(
                 "ReservationHeldEvent", "ReservationConfirmedEvent",
-                "ReservationExpiredEvent", "ReservationCancelledEvent",
-                "PaymentCompleted", "PaymentFailed", "TicketIssued",
+                "ReservationExpiredEvent", "ReservationCancelledEvent", "ReservationRefunded",
+                "PaymentCompleted", "PaymentFailed", "PaymentRefunded",
+                "TicketIssued", "TicketRevoked", "TicketScanned", "TicketValidated",
                 "EVENT_CREATED", "EVENT_PUBLISHED", "EVENT_CANCELLED", "EVENT_COMPLETED");
     }
 

@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.seatflow.analytics.messaging.ConsumerRecordMetadata;
 import com.seatflow.analytics.messaging.ProjectionHandler;
 import com.seatflow.analytics.projection.AnalyticsProjectionReconciler;
-import com.seatflow.analytics.projection.PaymentProjectionHandler;
 import com.seatflow.analytics.projection.ProjectionImpact;
 import com.seatflow.analytics.projection.ProjectionPayloads;
+import com.seatflow.analytics.projection.ReservationProjectionHandler;
 import com.seatflow.common.events.EventEnvelope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,34 +17,32 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Payment-failed projection: failure evidence preserved independently of later success
- * (TASK-P14-003). Failure alone never reduces gross revenue.
+ * Reservation-refunded projection (P13 canonical completed-refund semantic, TASK-P14-003).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PaymentFailedProjectionHandler implements ProjectionHandler {
+public class ReservationRefundedProjectionHandler implements ProjectionHandler {
 
-    private final PaymentProjectionHandler payments;
+    private final ReservationProjectionHandler reservations;
     private final AnalyticsProjectionReconciler reconciler;
 
     @Override
     public Set<String> eventTypes() {
-        return Set.of("PaymentFailed");
+        return Set.of("ReservationRefunded");
     }
 
     @Override
     public void project(EventEnvelope<JsonNode> envelope, ConsumerRecordMetadata metadata) {
         JsonNode payload = envelope.payload();
-        UUID paymentId = ProjectionPayloads.uuid(payload, "paymentId");
         UUID reservationId = ProjectionPayloads.uuid(payload, "reservationId");
-        UUID eventSessionId = ProjectionPayloads.optionalUuid(payload, "eventSessionId");
-        UUID eventId = ProjectionPayloads.optionalUuid(payload, "eventId");
+        UUID eventId = ProjectionPayloads.uuid(payload, "eventId");
+        UUID eventSessionId = ProjectionPayloads.uuid(payload, "eventSessionId");
         Instant occurredAt = ProjectionPayloads.factTime(envelope);
         ProjectionImpact impact =
-                payments.onFailed(paymentId, reservationId, eventSessionId, eventId, occurredAt);
+                reservations.onRefunded(reservationId, eventId, eventSessionId, occurredAt);
         reconciler.reconcile(impact, occurredAt);
-        log.info("Projected PaymentFailed. eventId={} paymentId={} reservationId={}",
-                envelope.eventId(), paymentId, reservationId);
+        log.info("Projected ReservationRefunded. eventId={} reservationId={} eventSessionId={}",
+                envelope.eventId(), reservationId, eventSessionId);
     }
 }
