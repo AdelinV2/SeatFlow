@@ -94,7 +94,7 @@ The service is a disposable/rebuildable read model derived from durable domain e
 - `[NEW]` `backend/services/analytics-service/src/main/resources/application-docker.yaml`
 - `[NEW]` `backend/services/analytics-service/src/main/resources/application-prod.yaml`
 - `[NEW]` `backend/services/analytics-service/src/main/resources/application-test.yaml`
-- `[NEW]` `backend/services/analytics-service/src/main/resources/logback-spring.xml` or the exact shared logging pattern used by sibling services
+- `[NEW]` `backend/services/analytics-service/src/main/resources/logback-spring.xml`
 - `[NEW]` `backend/services/analytics-service/src/main/resources/db/migration/V1__create_analytics_read_model.sql`
 - `[NEW]` `backend/services/analytics-service/src/test/java/com/seatflow/analytics/AnalyticsServiceApplicationTests.java`
 
@@ -130,9 +130,9 @@ Mirror the dependency versions and parent hierarchy of existing services. At min
 - Eureka client;
 - Actuator + Micrometer/Prometheus;
 - OpenTelemetry instrumentation already used by sibling services;
-- `common-events`, `common-security`, and `common-exception` only where their APIs are actually required.
+- repository common modules `common-domain`, `common-events`, `common-observability`, and `common-security` only where their APIs are actually required.
 
-Do not duplicate shared JWT role conversion or event-envelope definitions inside analytics-service.
+Do not duplicate shared JWT role conversion, observability primitives, common error/domain contracts, or event-envelope definitions inside analytics-service.
 
 ### 6.2 Application Identity and Port
 
