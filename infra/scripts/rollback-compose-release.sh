@@ -45,6 +45,16 @@ awk -v tag="${SEATFLOW_IMAGE_TAG}" \
   "${runtime_file}" > "${temp_runtime}"
 install -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"
 
+compose=(docker compose
+  -f "${seatflow_root}/docker-compose.yml"
+  -f "${seatflow_root}/docker-compose.services.yml"
+  -f "${seatflow_root}/docker-compose.monitoring.yml"
+  -f "${seatflow_root}/docker-compose.prod.yml"
+  -f "${seatflow_root}/docker-compose.prod-health.yml"
+  --env-file "${runtime_file}")
+"${compose[@]}" config --quiet
+"${compose[@]}" pull
+
 "${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}"
 "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}" "${smoke_url}"
 install -o root -g root -m 0600 "${previous_file}" "${current_file}"
