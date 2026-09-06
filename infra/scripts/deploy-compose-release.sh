@@ -22,6 +22,7 @@ seatflow_root=/opt/seatflow
 deployment_dir=${seatflow_root}/deployment
 runtime_file=/run/seatflow/runtime.env
 metadata_url=http://metadata.google.internal/computeMetadata/v1
+migration_started_file=${deployment_dir}/migrations-${image_tag}.started
 
 if [[ ! ${image_tag} =~ ^[0-9a-f]{40}$ ]]; then
   echo "Image tag must be a full immutable Git SHA" >&2
@@ -54,8 +55,6 @@ if [[ -d ${release_root}/infra/systemd ]]; then
     /etc/systemd/system/seatflow-prometheus-token-refresh.timer
   systemctl daemon-reload
   systemctl enable --now seatflow-prometheus-token-refresh.timer
-  # Generate the first short-lived metrics JWT inline so safe diagnostics are
-  # visible to the deployment runner. The systemd timer owns later refreshes.
   "${seatflow_root}/infra/scripts/refresh-prometheus-token.sh" \
     "${project_id}" /run/seatflow/prometheus-scrape-token
 fi
@@ -94,13 +93,16 @@ rollout() {
   "${compose[@]}" pull
   "${seatflow_root}/infra/scripts/run-production-migrations.sh" \
     "${seatflow_root}" "${image_tag}"
-  "${compose[@]}" up -d --remove-orphans
+  "${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}"
   "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}"
 }
 
 if ! rollout; then
   echo "Release verification failed" >&2
-  if [[ -f ${deployment_dir}/previous.env ]]; then
+  if [[ -f ${migration_started_file} ]]; then
+    echo "Automatic rollback blocked: production migration work started for ${image_tag}." >&2
+    echo "Database state may be forward-only; diagnose and deploy a forward fix instead of booting an older image set." >&2
+  elif [[ -f ${deployment_dir}/previous.env ]]; then
     "${seatflow_root}/infra/scripts/rollback-compose-release.sh" "${seatflow_root}" || true
   fi
   exit 1
