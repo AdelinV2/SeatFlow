@@ -13,7 +13,7 @@ describe('EventCardComponent', () => {
     description: 'Electrifying electronic synthwave music show',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/banner.jpg',
-    eventDate: '2026-10-15T20:00:00Z',
+    nextSessionStartsAt: '2026-10-15T20:00:00Z',
     venueName: 'Metropolis Arena',
     minPrice: 50,
     maxPrice: 150,
@@ -73,3 +73,4 @@ describe('EventCardComponent', () => {
     expect(component.displayBannerUrl()).toBe(component.defaultBanner);
   });
 });
+

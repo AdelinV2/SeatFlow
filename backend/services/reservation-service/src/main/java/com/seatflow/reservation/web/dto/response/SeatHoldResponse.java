@@ -10,6 +10,7 @@ import java.util.UUID;
 public record SeatHoldResponse(
 
         UUID id,
+        @Schema(description = "Authoritative event session (inventory partition)") UUID eventSessionId,
         UUID seatId,
         SeatHoldStatus status,
         BigDecimal price,

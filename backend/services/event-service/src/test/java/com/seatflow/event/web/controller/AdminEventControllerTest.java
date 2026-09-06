@@ -54,13 +54,13 @@ class AdminEventControllerTest {
 
     private static String validCreateBody() {
         return String.format(
-                "{\"venueId\":\"%s\",\"title\":\"Hamlet\",\"description\":\"A play\",\"category\":\"OTHER\",\"eventDate\":\"2027-05-01T19:30:00Z\"}",
+                "{\"venueId\":\"%s\",\"title\":\"Hamlet\",\"description\":\"A play\",\"category\":\"OTHER\"}",
                 UUID.randomUUID());
     }
 
     private static EventDetailResponse sampleDetail(UUID id) {
         return new EventDetailResponse(id, UUID.randomUUID(), "Hamlet", "desc", EventCategory.OTHER, null,
-                Instant.now(), EventStatus.DRAFT, List.of(), Instant.now(), Instant.now());
+                EventStatus.DRAFT, List.of(), List.of(), Instant.now(), Instant.now());
     }
 
     @Test

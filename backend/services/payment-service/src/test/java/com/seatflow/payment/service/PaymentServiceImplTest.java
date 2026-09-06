@@ -75,9 +75,12 @@ class PaymentServiceImplTest {
 
     private final UUID reservationId = UUID.randomUUID();
     private final UUID reservationEventId = UUID.randomUUID();
+    private final UUID reservationSessionId = UUID.randomUUID();
     private final UUID reservationUserId = UUID.randomUUID();
     private final String idempotencyKey = "idem-key-001";
     private final BigDecimal amount = new BigDecimal("120.00");
+    private final Instant sessionStartsAt = Instant.parse("2026-10-05T19:00:00Z");
+    private final Instant sessionEndsAt = Instant.parse("2026-10-05T21:00:00Z");
 
     @BeforeEach
     void setUp() {
@@ -92,7 +95,8 @@ class PaymentServiceImplTest {
         when(paymentMapper.toResponse(any(Payment.class)))
                 .thenReturn(new com.seatflow.payment.web.dto.response.PaymentResponse(
                         UUID.randomUUID(), reservationId, reservationUserId, "cust@example.com",
-                        reservationEventId, "pi_123", amount, BigDecimal.ZERO, amount, "USD", PaymentStatus.INITIATED, null,
+                        reservationEventId, reservationSessionId, sessionStartsAt, sessionEndsAt, null,
+                        "pi_123", amount, BigDecimal.ZERO, amount, "USD", PaymentStatus.INITIATED, null,
                         Instant.now(), Instant.now()));
     }
 
@@ -102,8 +106,9 @@ class PaymentServiceImplTest {
 
     private ReservationClientResponse pendingReservation(UUID userId) {
         return new ReservationClientResponse(
-                reservationId, reservationEventId, userId, "cust@example.com",
-                "PENDING", Instant.now().plusSeconds(900), amount, 2, List.of(), Instant.now());
+                reservationId, reservationSessionId, reservationEventId, userId, "cust@example.com",
+                "PENDING", Instant.now().plusSeconds(900), amount, 2,
+                sessionStartsAt, sessionEndsAt, null, List.of(), Instant.now());
     }
 
     private Payment paymentWith(UUID id, PaymentStatus status) {
@@ -132,8 +137,9 @@ class PaymentServiceImplTest {
     void createPaymentIntentUsesHeldSeatPricesWhenStoredReservationTotalIsInflated() {
         UUID seatId = UUID.randomUUID();
         ReservationClientResponse legacyReservation = new ReservationClientResponse(
-                reservationId, reservationEventId, reservationUserId, "cust@example.com",
+                reservationId, reservationSessionId, reservationEventId, reservationUserId, "cust@example.com",
                 "PENDING", Instant.now().plusSeconds(900), new BigDecimal("4040.00"), 1,
+                sessionStartsAt, sessionEndsAt, null,
                 List.of(new SeatHoldClientDto(UUID.randomUUID(), seatId, "HELD", new BigDecimal("20.00"))),
                 Instant.now());
         when(reservationServiceClient.getReservation(reservationId)).thenReturn(legacyReservation);
@@ -180,8 +186,9 @@ class PaymentServiceImplTest {
     @Test
     void createPaymentIntentRejectsExpiredReservation() {
         ReservationClientResponse expired = new ReservationClientResponse(
-                reservationId, reservationEventId, reservationUserId, "cust@example.com",
-                "PENDING", Instant.now().minusSeconds(60), amount, 2, List.of(), Instant.now());
+                reservationId, reservationSessionId, reservationEventId, reservationUserId, "cust@example.com",
+                "PENDING", Instant.now().minusSeconds(60), amount, 2,
+                sessionStartsAt, sessionEndsAt, null, List.of(), Instant.now());
         when(reservationServiceClient.getReservation(reservationId)).thenReturn(expired);
 
         assertThatThrownBy(() -> service.createPaymentIntent(request(), reservationUserId))
@@ -193,8 +200,9 @@ class PaymentServiceImplTest {
     @Test
     void createPaymentIntentRejectsNonPendingReservation() {
         ReservationClientResponse confirmed = new ReservationClientResponse(
-                reservationId, reservationEventId, reservationUserId, "cust@example.com",
-                "CONFIRMED", Instant.now().plusSeconds(900), amount, 2, List.of(), Instant.now());
+                reservationId, reservationSessionId, reservationEventId, reservationUserId, "cust@example.com",
+                "CONFIRMED", Instant.now().plusSeconds(900), amount, 2,
+                sessionStartsAt, sessionEndsAt, null, List.of(), Instant.now());
         when(reservationServiceClient.getReservation(reservationId)).thenReturn(confirmed);
 
         assertThatThrownBy(() -> service.createPaymentIntent(request(), reservationUserId))
@@ -239,8 +247,9 @@ class PaymentServiceImplTest {
                 .status(PaymentStatus.INITIATED)
                 .build();
         ReservationClientResponse repricedReservation = new ReservationClientResponse(
-                reservationId, reservationEventId, reservationUserId, "cust@example.com",
+                reservationId, reservationSessionId, reservationEventId, reservationUserId, "cust@example.com",
                 "PENDING", Instant.now().plusSeconds(900), new BigDecimal("100.00"), 1,
+                sessionStartsAt, sessionEndsAt, null,
                 List.of(new SeatHoldClientDto(UUID.randomUUID(), seatId, "HELD", new BigDecimal("100.00"))),
                 Instant.now());
         when(paymentRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.of(existing));
@@ -362,6 +371,37 @@ class PaymentServiceImplTest {
 
         assertThat(updated).isEqualTo(3);
         verify(paymentRepository, times(1)).updateUserIdForCustomerEmail(eq(userId), eq(customerEmail), any(Instant.class));
+    }
+
+    @Test
+    void createPaymentIntentPersistsSessionSnapshotFromTrustedReservationState() {
+        when(reservationServiceClient.getReservation(reservationId)).thenReturn(pendingReservation(reservationUserId));
+        Payment saved = paymentWith(UUID.randomUUID(), PaymentStatus.INITIATED);
+        when(paymentRepository.saveAndFlush(any(Payment.class))).thenReturn(saved);
+
+        // The checkout request carries reservation identity only: no session fields
+        // exist for the client to substitute.
+        assertThat(CreatePaymentIntentRequest.class.getRecordComponents())
+                .extracting(java.lang.reflect.RecordComponent::getName)
+                .containsExactlyInAnyOrder("reservationId", "idempotencyKey");
+
+        service.createPaymentIntent(request(), reservationUserId);
+
+        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentRepository).saveAndFlush(paymentCaptor.capture());
+        Payment persisted = paymentCaptor.getValue();
+        assertThat(persisted.getEventSessionId()).isEqualTo(reservationSessionId);
+        assertThat(persisted.getSessionStartsAt()).isEqualTo(sessionStartsAt);
+        assertThat(persisted.getSessionEndsAt()).isEqualTo(sessionEndsAt);
+        assertThat(persisted.getEventId()).isEqualTo(reservationEventId);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Map<String, String>> metadataCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(stripePaymentGateway).createPaymentIntent(
+                any(), eq("USD"), eq(idempotencyKey), metadataCaptor.capture(), eq("cust@example.com"));
+        assertThat(metadataCaptor.getValue())
+                .containsEntry("reservationId", reservationId.toString())
+                .containsEntry("eventSessionId", reservationSessionId.toString());
     }
 
     @Test

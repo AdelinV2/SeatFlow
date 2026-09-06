@@ -53,8 +53,8 @@ public class PaymentCompletedEventListener {
         PaymentCompletedEvent payload = objectMapper.convertValue(envelope.payload(), PaymentCompletedEvent.class);
         UUID paymentId = payload.paymentId();
 
-        log.info("Received PaymentCompleted event. paymentId={}, reservationId={}, amount={}",
-                paymentId, payload.reservationId(), payload.amount());
+        log.info("Received PaymentCompleted event. paymentId={}, reservationId={}, eventSessionId={}, amount={}",
+                paymentId, payload.reservationId(), payload.eventSessionId(), payload.amount());
 
         // 1. Strict Idempotency Check
         if (ticketRepository.existsByPaymentId(paymentId)) {
@@ -62,9 +62,44 @@ public class PaymentCompletedEventListener {
             return;
         }
 
-        // 2. Fetch reservation details from reservation-service
+        // 2. Session cutover guard (P12-004): a missing eventSessionId is malformed
+        // after cutover. Reject/park the message (throw -> retry/DLT) and NEVER
+        // infer the showing from eventId.
+        if (payload.eventSessionId() == null) {
+            log.warn("Rejecting PaymentCompleted without eventSessionId. paymentId={}, reservationId={}, eventId={}: parking for inspection, never inferring session from eventId",
+                    paymentId, payload.reservationId(), payload.eventId());
+            throw new IllegalStateException("PaymentCompleted missing required eventSessionId for payment: "
+                    + paymentId);
+        }
+
+        // 3. Fetch reservation details from reservation-service
         ReservationClientResponse reservation = reservationServiceClient.getReservationById(payload.reservationId(), payload.customerEmail())
                 .orElseThrow(() -> new IllegalStateException("Reservation not found for payment: " + payload.reservationId()));
+
+        // 4. Session cross-check (P12-004): the payment event and the stored
+        // reservation must agree on the exact showing. Session B must never leak
+        // onto a session-A ticket. Mismatch is rejected, never reconciled.
+        if (reservation.eventSessionId() == null) {
+            log.warn("Rejecting PaymentCompleted: stored reservation has no eventSessionId. paymentId={}, reservationId={}",
+                    paymentId, payload.reservationId());
+            throw new IllegalStateException("Stored reservation missing eventSessionId for payment: " + paymentId);
+        }
+        if (!payload.eventSessionId().equals(reservation.eventSessionId())) {
+            log.warn("Rejecting PaymentCompleted: session mismatch. paymentId={}, payloadSessionId={}, reservationSessionId={}",
+                    paymentId, payload.eventSessionId(), reservation.eventSessionId());
+            throw new IllegalStateException("PaymentCompleted eventSessionId does not match stored reservation session for payment: "
+                    + paymentId);
+        }
+
+        // 5. Effective immutable snapshot: payload times first (captured at payment
+        // time from trusted state), reservation snapshot as fallback. Both refer to
+        // the same verified session above, so they cannot describe different showings.
+        java.time.Instant sessionStartsAt = payload.sessionStartsAt() != null
+                ? payload.sessionStartsAt() : reservation.sessionStartsAt();
+        java.time.Instant sessionEndsAt = payload.sessionEndsAt() != null
+                ? payload.sessionEndsAt() : reservation.sessionEndsAt();
+        String sessionTimezone = payload.sessionTimezone() != null
+                ? payload.sessionTimezone() : reservation.sessionTimezone();
 
         List<ReservationClientResponse.HeldSeatClientDto> seats = reservation.seats();
         if (seats == null || seats.isEmpty()) {
@@ -113,7 +148,11 @@ public class PaymentCompletedEventListener {
                 payload.userId(),
                 payload.customerEmail(),
                 payload.customerEmail(),
+                payload.eventSessionId(),
                 payload.eventId(),
+                sessionStartsAt,
+                sessionEndsAt,
+                sessionTimezone,
                 ticketItems,
                 payload.currency()
         );
@@ -129,6 +168,7 @@ public class PaymentCompletedEventListener {
             throw ex;
         }
 
-        log.info("Digital tickets issued successfully for paymentId={}, seatCount={}", paymentId, seatCount);
+        log.info("Digital tickets issued successfully for paymentId={}, eventSessionId={}, seatCount={}",
+                paymentId, payload.eventSessionId(), seatCount);
     }
 }

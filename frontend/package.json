@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:session-flow": "ng test --watch=false --browsers=ChromeHeadless --include=**/seat-selection/*.spec.ts"
   },
   "private": true,
   "packageManager": "npm@11.4.2",

@@ -9,10 +9,13 @@ import com.seatflow.common.observability.handler.GlobalExceptionHandler;
 import com.seatflow.event.client.SeatMapClientUnavailableException;
 import com.seatflow.event.config.SecurityConfig;
 import com.seatflow.event.model.enums.EventCategory;
+import com.seatflow.event.model.enums.EventSessionStatus;
 import com.seatflow.event.model.enums.EventStatus;
 import com.seatflow.event.service.EventService;
+import com.seatflow.event.service.EventSessionService;
 import com.seatflow.event.web.dto.response.EventDetailResponse;
 import com.seatflow.event.web.dto.response.EventSeatMapResponse;
+import com.seatflow.event.web.dto.response.EventSessionResponse;
 import com.seatflow.event.web.dto.response.EventSummaryResponse;
 import com.seatflow.event.web.dto.response.PricingTierResponse;
 import com.seatflow.event.web.dto.response.SeatMapSectionResponse;
@@ -50,6 +53,9 @@ class EventControllerTest {
     private EventService eventService;
 
     @MockitoBean
+    private EventSessionService eventSessionService;
+
+    @MockitoBean
     private JwtDecoder jwtDecoder;
 
     @MockitoBean
@@ -69,7 +75,7 @@ class EventControllerTest {
     void getEvent_unauthenticated_returns200() throws Exception {
         UUID eventId = UUID.randomUUID();
         EventDetailResponse response = new EventDetailResponse(eventId, UUID.randomUUID(), "Hamlet", "desc",
-                EventCategory.OTHER, null, Instant.now(), EventStatus.PUBLISHED, List.of(), Instant.now(), Instant.now());
+                EventCategory.OTHER, null, EventStatus.PUBLISHED, List.of(), List.of(), Instant.now(), Instant.now());
         when(eventService.getPublishedEvent(eventId)).thenReturn(response);
 
         mockMvc.perform(get("/api/events/{id}", eventId))
@@ -94,9 +100,8 @@ class EventControllerTest {
         UUID seatId = UUID.randomUUID();
         UUID elementId = UUID.randomUUID();
         UUID tierId = UUID.randomUUID();
-        Instant eventDate = Instant.parse("2030-06-15T19:30:00Z");
         EventSeatMapResponse response = new EventSeatMapResponse(eventId, venueId, "Hamlet", "PUBLISHED",
-                eventDate, "Grand Hall", 500, 10L,
+                "Grand Hall", 500, 10L,
                 List.of(new SeatMapSectionResponse(sectionId, "Orchestra", 5, 10, true,
                         new BigDecimal("10.5"), new BigDecimal("20.25"),
                         new BigDecimal("440"), new BigDecimal("220"), new BigDecimal("15.5"), 3,
@@ -122,7 +127,6 @@ class EventControllerTest {
         assertThat(tree.get("venueId").asText()).isEqualTo(venueId.toString());
         assertThat(tree.get("eventTitle").asText()).isEqualTo("Hamlet");
         assertThat(tree.get("status").asText()).isEqualTo("PUBLISHED");
-        assertThat(Instant.parse(tree.get("eventDate").asText())).isEqualTo(eventDate);
         assertThat(tree.get("venueName").asText()).isEqualTo("Grand Hall");
         assertThat(tree.get("venueCapacity").asInt()).isEqualTo(500);
         assertThat(tree.get("totalConfiguredSeats").asLong()).isEqualTo(10L);
@@ -183,6 +187,31 @@ class EventControllerTest {
 
         mockMvc.perform(get("/api/events/{id}/seat-map", eventId))
                 .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void listSessions_unauthenticated_returns200() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        when(eventSessionService.listSessionsForCustomer(eventId)).thenReturn(List.of(
+                new EventSessionResponse(sessionId, eventId,
+                        Instant.parse("2027-05-01T19:30:00Z"), Instant.parse("2027-05-01T21:30:00Z"),
+                        null, null, EventSessionStatus.SCHEDULED, null, Instant.now(), Instant.now())));
+
+        mockMvc.perform(get("/api/events/{id}/sessions", eventId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(sessionId.toString()))
+                .andExpect(jsonPath("$[0].eventId").value(eventId.toString()));
+    }
+
+    @Test
+    void listSessions_draftEvent_returns404() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        when(eventSessionService.listSessionsForCustomer(eventId))
+                .thenThrow(new ResourceNotFoundException("Event", eventId));
+
+        mockMvc.perform(get("/api/events/{id}/sessions", eventId))
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -57,12 +57,13 @@ class ReservationServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY installed_rank ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2", "3", "4", "5");
+                // P12-007: V8 is the fail-closed session-integrity gate.
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
 
         List<Boolean> successes = jdbcTemplate.queryForList(
                 "SELECT success FROM flyway_schema_history ORDER BY installed_rank ASC", Boolean.class);
 
-        assertThat(successes).containsExactly(true, true, true, true, true);
+        assertThat(successes).containsExactly(true, true, true, true, true, true, true, true);
     }
 
     @Test
@@ -79,20 +80,34 @@ class ReservationServiceApplicationTests {
                         "chk_res_seat_count",
                         "uq_reservations_idempotency_key");
 
-        // Partial unique index (Zero Double-Booking guarantee) is a plain index, not a pg_constraint row.
+        // Session-scoped partial unique index (Zero Double-Booking guarantee per session) is a plain index, not a pg_constraint row.
         List<String> indexNames = jdbcTemplate.queryForList(
                 """
                 SELECT indexname
                 FROM pg_indexes
                 WHERE indexname IN (
-                    'uq_active_seat_hold',
+                    'uq_active_seat_hold_session',
                     'idx_seat_holds_pricing_tier_id',
                     'idx_seat_holds_held_status')
                 """, String.class);
 
         assertThat(indexNames).containsExactlyInAnyOrder(
-                "uq_active_seat_hold",
+                "uq_active_seat_hold_session",
                 "idx_seat_holds_pricing_tier_id",
                 "idx_seat_holds_held_status");
+
+        // P12-004 immutable session schedule snapshot columns.
+        List<String> snapshotColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'reservations'
+                  AND column_name IN ('session_starts_at', 'session_ends_at', 'session_timezone')
+                """, String.class);
+
+        assertThat(snapshotColumns).containsExactlyInAnyOrder(
+                "session_starts_at",
+                "session_ends_at",
+                "session_timezone");
     }
 }

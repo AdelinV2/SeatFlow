@@ -89,7 +89,7 @@ class RedisPubSubFanOutIntegrationTest {
     }
 
     private SeatStatusUpdateMessage payload(SeatStatus status) {
-        return SeatStatusUpdateMessage.of(UUID.randomUUID(), List.of(UUID.randomUUID()), status,
+        return SeatStatusUpdateMessage.of(UUID.randomUUID(), UUID.randomUUID(), List.of(UUID.randomUUID()), status,
                 status == SeatStatus.HELD ? Instant.now().plusSeconds(900) : null);
     }
 

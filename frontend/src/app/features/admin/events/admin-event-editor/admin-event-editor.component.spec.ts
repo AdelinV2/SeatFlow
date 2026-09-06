@@ -25,7 +25,6 @@ describe('AdminEventEditorComponent', () => {
     description: 'A spectacular concert experience with orchestral symphony.',
     category: 'CONCERT',
     bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819',
-    eventDate: '2026-11-20T20:00:00Z',
     status: 'DRAFT',
     pricingTiers: [],
     createdAt: '2026-08-29T10:00:00Z',
@@ -120,7 +119,6 @@ describe('AdminEventEditorComponent', () => {
       title: 'Neon Symphony Live',
       category: 'CONCERT',
       venueId: 'ven-1',
-      eventDate: '2026-11-20T20:00',
       description: 'A spectacular concert experience with live music.',
       bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819',
     });
@@ -151,7 +149,6 @@ describe('AdminEventEditorComponent', () => {
       title: 'Neon Symphony Live',
       category: 'CONCERT',
       venueId: 'ven-1',
-      eventDate: '2026-11-20T20:00',
       description: 'A spectacular concert experience with live music.',
       bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819',
     });

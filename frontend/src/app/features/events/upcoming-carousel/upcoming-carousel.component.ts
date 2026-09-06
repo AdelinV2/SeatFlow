@@ -16,11 +16,12 @@ import { RouterLink } from '@angular/router';
 import { EventSummary } from '../../../models/event.model';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { MarkdownExcerptPipe } from '../../../shared/pipes/markdown-format.pipe';
 
 @Component({
   selector: 'app-upcoming-carousel',
   standalone: true,
-  imports: [CommonModule, RouterLink, CurrencyFormatPipe, DateFormatPipe],
+  imports: [CommonModule, RouterLink, CurrencyFormatPipe, DateFormatPipe, MarkdownExcerptPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './upcoming-carousel.component.html',
   styleUrl: './upcoming-carousel.component.scss',
@@ -49,7 +50,7 @@ export class UpcomingEventsCarouselComponent implements OnInit {
       description: 'The definitive electronic music visual experience with laser projection and surround sound.',
       category: 'CONCERT',
       bannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80',
-      eventDate: '2026-09-18T20:00:00Z',
+      nextSessionStartsAt: '2026-09-18T20:00:00Z',
       venueName: 'Grand Arena',
       minPrice: 65,
       maxPrice: 220,
@@ -62,7 +63,7 @@ export class UpcomingEventsCarouselComponent implements OnInit {
       description: 'A breathtaking modern adaptation of Shakespeare’s magnum opus with international cast.',
       category: 'THEATRE',
       bannerUrl: 'https://images.unsplash.com/photo-1507676184212-d03ab07a01bf?auto=format&fit=crop&w=1600&q=80',
-      eventDate: '2026-09-24T19:30:00Z',
+      nextSessionStartsAt: '2026-09-24T19:30:00Z',
       venueName: 'National Opera Hall',
       minPrice: 45,
       maxPrice: 160,
@@ -75,7 +76,7 @@ export class UpcomingEventsCarouselComponent implements OnInit {
       description: 'Full 100-piece philharmonic orchestra and 80-voice choir performing the Ode to Joy.',
       category: 'SYMPHONY',
       bannerUrl: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?auto=format&fit=crop&w=1600&q=80',
-      eventDate: '2026-10-02T19:00:00Z',
+      nextSessionStartsAt: '2026-10-02T19:00:00Z',
       venueName: 'Symphony Hall',
       minPrice: 50,
       maxPrice: 190,
@@ -88,7 +89,7 @@ export class UpcomingEventsCarouselComponent implements OnInit {
       description: 'Top-tier comedians from London, New York and Berlin performing an uncensored comedy special.',
       category: 'COMEDY',
       bannerUrl: 'https://images.unsplash.com/photo-1585699324551-f6c309eedeca?auto=format&fit=crop&w=1600&q=80',
-      eventDate: '2026-10-10T21:00:00Z',
+      nextSessionStartsAt: '2026-10-10T21:00:00Z',
       venueName: 'Comedy Underground',
       minPrice: 35,
       maxPrice: 85,
@@ -198,3 +199,4 @@ export class UpcomingEventsCarouselComponent implements OnInit {
     }
   }
 }
+

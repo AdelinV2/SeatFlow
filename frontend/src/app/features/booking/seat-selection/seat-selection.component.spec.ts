@@ -1,9 +1,10 @@
-import { signal } from '@angular/core';
+import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { UserContextService } from '../../../core/auth/user-context.service';
+import { EventDetail, EventSession } from '../../../models/event.model';
 import { EventSeatMapResponse, Seat } from '../../../models/seat.model';
 import { EventApiService } from '../../../services/event-api.service';
 import {
@@ -21,19 +22,71 @@ describe('SeatSelectionComponent', () => {
   let component: SeatSelectionComponent;
   let router: Router;
   let seatSignal: ReturnType<typeof signal<Seat[]>>;
+  let seatLoading: WritableSignal<boolean>;
+  let seatAvailabilityError: WritableSignal<boolean>;
+  let pendingAvailabilitySettlements: (() => void)[];
+  let pendingAvailabilityErrors: (() => void)[];
   let reservationApi: jasmine.SpyObj<ReservationApiService>;
+  let eventApi: jasmine.SpyObj<EventApiService>;
+  let seatState: {
+    seats: ReturnType<WritableSignal<Seat[]>['asReadonly']>;
+    isLoading: ReturnType<WritableSignal<boolean>['asReadonly']>;
+    availabilityError: ReturnType<WritableSignal<boolean>['asReadonly']>;
+    setSeats: jasmine.Spy;
+    reconcileAvailability: jasmine.Spy;
+    clearSeats: jasmine.Spy;
+  };
   let webSocketService: {
     connectionStatus: ReturnType<typeof signal<ConnectionStatus>>;
-    connectForEvent: jasmine.Spy;
+    connectForSession: jasmine.Spy;
     disconnect: jasmine.Spy;
   };
   let snackBar: jasmine.SpyObj<MatSnackBar>;
+
+  const mockSessions: EventSession[] = [
+    {
+      id: 'session-1',
+      eventId: 'event-1',
+      startsAt: '2026-10-10T18:00:00Z',
+      endsAt: '2026-10-10T20:00:00Z',
+      status: 'SCHEDULED',
+      timezone: 'Europe/Bucharest',
+    },
+    {
+      id: 'session-2',
+      eventId: 'event-1',
+      startsAt: '2026-10-11T18:00:00Z',
+      endsAt: '2026-10-11T20:00:00Z',
+      status: 'SCHEDULED',
+      timezone: 'Europe/Bucharest',
+    },
+  ];
+
+  const mockEventDetail: EventDetail = {
+    id: 'event-1',
+    venueId: 'venue-1',
+    title: 'Live at SeatFlow',
+    description: 'A great show',
+    category: 'CONCERT',
+    bannerUrl: 'https://example.com/concert.jpg',
+    status: 'PUBLISHED',
+    pricingTiers: [
+      {
+        id: 'tier-1',
+        sectionId: 'section-1',
+        categoryName: 'Standard',
+        price: 42.5,
+        currency: 'EUR',
+      },
+    ],
+    sessions: mockSessions,
+    createdAt: '2026-08-01T10:00:00Z',
+  };
 
   const response: EventSeatMapResponse = {
     eventId: 'event-1',
     venueId: 'venue-1',
     eventTitle: 'Live at SeatFlow',
-    eventDate: '2026-10-10T18:00:00Z',
     venueName: 'Main Hall',
     venueCapacity: 100,
     totalConfiguredSeats: 11,
@@ -66,13 +119,26 @@ describe('SeatSelectionComponent', () => {
 
   beforeEach(async () => {
     seatSignal = signal<Seat[]>([]);
-    const eventApi = jasmine.createSpyObj<EventApiService>('EventApiService', ['getEventSeatMap']);
+    seatLoading = signal(false);
+    seatAvailabilityError = signal(false);
+    pendingAvailabilitySettlements = [];
+    pendingAvailabilityErrors = [];
+    eventApi = jasmine.createSpyObj<EventApiService>('EventApiService', [
+      'getEventById',
+      'getEventSessions',
+      'getEventSeatMap',
+    ]);
+    eventApi.getEventById.and.returnValue(of(mockEventDetail));
+    eventApi.getEventSessions.and.returnValue(of(mockSessions));
     eventApi.getEventSeatMap.and.returnValue(of(response));
+
     reservationApi = jasmine.createSpyObj<ReservationApiService>('ReservationApiService', [
       'createReservation',
+      'cancelReservation',
     ]);
     const reservation: ReservationResponse = {
       id: 'reservation-1',
+      eventSessionId: 'session-1',
       eventId: 'event-1',
       status: 'PENDING',
       expiresAt: '2026-10-10T18:15:00Z',
@@ -80,20 +146,56 @@ describe('SeatSelectionComponent', () => {
       seats: [],
     };
     reservationApi.createReservation.and.returnValue(of(reservation));
+    reservationApi.cancelReservation.and.returnValue(of(undefined));
+
     webSocketService = {
       connectionStatus: signal<ConnectionStatus>('DISCONNECTED'),
-      connectForEvent: jasmine.createSpy('connectForEvent'),
+      connectForSession: jasmine.createSpy('connectForSession'),
       disconnect: jasmine.createSpy('disconnect'),
     };
+
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
-    const seatStateService = {
-      seats: seatSignal,
-      setSeats: jasmine
-        .createSpy('setSeats')
-        .and.callFake((seats: Seat[]) => seatSignal.set(seats)),
+    const seatStateValue = {
+      seats: seatSignal.asReadonly(),
+      isLoading: seatLoading.asReadonly(),
+      availabilityError: seatAvailabilityError.asReadonly(),
+      setSeats: jasmine.createSpy('setSeats').and.callFake((seats: Seat[]) => {
+        seatSignal.set(seats);
+        seatAvailabilityError.set(false);
+      }),
+      applySeatStatusUpdate: jasmine.createSpy('applySeatStatusUpdate'),
+      // Deterministic deferred availability: marks loading, clears the error
+      // flag at attempt start (mirroring SeatStateService), and captures both
+      // the onSettled and onError callbacks so tests settle or fail B's REST
+      // baseline explicitly.
+      reconcileAvailability: jasmine.createSpy('reconcileAvailability').and.callFake((...args: unknown[]) => {
+        seatLoading.set(true);
+        seatAvailabilityError.set(false);
+        const onSettled = args[3] as (() => void) | undefined;
+        const onError = args[4] as (() => void) | undefined;
+        if (typeof onSettled === 'function') {
+          pendingAvailabilitySettlements.push(onSettled);
+        }
+        if (typeof onError === 'function') {
+          pendingAvailabilityErrors.push(onError);
+        }
+        if (typeof onSettled !== 'function' && typeof onError !== 'function') {
+          seatLoading.set(false);
+        }
+      }),
+      clearSeats: jasmine.createSpy('clearSeats').and.callFake(() => {
+        seatSignal.set([]);
+        seatAvailabilityError.set(false);
+      }),
     };
+
     const userContext = {
+      currentUser: signal({
+        id: 'user-1',
+        email: 'customer@example.com',
+        role: 'CUSTOMER',
+      }),
       isAuthenticated: signal(true),
       userEmail: signal('customer@example.com'),
     };
@@ -104,66 +206,90 @@ describe('SeatSelectionComponent', () => {
         provideRouter([]),
         {
           provide: ActivatedRoute,
-          useValue: { paramMap: of(convertToParamMap({ id: 'event-1' })) },
+          useValue: {
+            paramMap: of(convertToParamMap({ id: 'event-1' })),
+            queryParamMap: of(convertToParamMap({ sessionId: 'session-1' })),
+            snapshot: {
+              paramMap: convertToParamMap({ id: 'event-1' }),
+              queryParamMap: convertToParamMap({ sessionId: 'session-1' }),
+            },
+          },
         },
         { provide: EventApiService, useValue: eventApi },
         { provide: ReservationApiService, useValue: reservationApi },
-        { provide: SeatStateService, useValue: seatStateService },
+        { provide: SeatStateService, useValue: seatStateValue },
         { provide: WebSocketService, useValue: webSocketService },
-        { provide: UserContextService, useValue: userContext },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: UserContextService, useValue: userContext },
       ],
-    })
-      .overrideComponent(SeatSelectionComponent, { set: { template: '', imports: [] } })
-      .compileComponents();
+    }).compileComponents();
 
     fixture = TestBed.createComponent(SeatSelectionComponent);
     component = fixture.componentInstance;
     router = TestBed.inject(Router);
+    seatState = seatStateValue;
+    fixture.detectChanges();
+    // Settle the initial session's authoritative availability baseline so
+    // each test starts from SESSION_READY.
+    settleAvailability();
     fixture.detectChanges();
   });
 
-  afterEach(() => fixture.destroy());
+  function settleAvailability(): void {
+    seatLoading.set(false);
+    const pending = [...pendingAvailabilitySettlements];
+    pendingAvailabilitySettlements = [];
+    pendingAvailabilityErrors = [];
+    pending.forEach((settle) => settle());
+  }
 
-  it('loads and flattens the seat map before connecting live updates', () => {
+  // Mirrors SeatStateService failure ordering: error handler (flag + onError)
+  // runs before finalize (onSettled, which must NOT re-enable the controls).
+  function failAvailability(): void {
+    seatAvailabilityError.set(true);
+    seatLoading.set(false);
+    const errors = [...pendingAvailabilityErrors];
+    pendingAvailabilityErrors = [];
+    errors.forEach((notify) => notify());
+    const pending = [...pendingAvailabilitySettlements];
+    pendingAvailabilitySettlements = [];
+    pending.forEach((settle) => settle());
+  }
+
+  it('loads the event and seat map on initialization', () => {
+    expect(eventApi.getEventById).toHaveBeenCalledWith('event-1');
+    expect(eventApi.getEventSeatMap).toHaveBeenCalledWith('event-1');
     expect(component.seats().length).toBe(11);
-    expect(component.seats()[0]).toEqual(
-      jasmine.objectContaining({ price: 42.5, currency: 'EUR', status: 'AVAILABLE' }),
-    );
-    expect(webSocketService.connectForEvent).toHaveBeenCalledWith(
-      'event-1',
-      jasmine.any(Function),
-      jasmine.any(Function),
-    );
+    expect(component.selectedSession()?.id).toBe('session-1');
   });
 
-  it('rejects an eleventh seat and computes the selected total', () => {
-    component
-      .seats()
-      .slice(0, 10)
-      .forEach((seat) => component.toggleSeat(seat));
+  it('toggles seat selection up to the max selection limit', () => {
+    const seats = component.seats();
 
-    expect(component.selectedSeats().length).toBe(10);
-    expect(component.selectedSeats().reduce((sum, seat) => sum + seat.price, 0)).toBe(425);
+    for (let i = 0; i < 10; i++) {
+      component.toggleSeat(seats[i]!);
+    }
+    expect(component.selectedSeatIds().size).toBe(10);
 
-    component.toggleSeat(component.seats()[10]!);
-    expect(component.selectedSeats().length).toBe(10);
+    component.toggleSeat(seats[10]!);
+    expect(component.selectedSeatIds().size).toBe(10);
     expect(snackBar.open).toHaveBeenCalledWith(
       'Maximum 10 seats allowed per reservation.',
       'Close',
-      jasmine.objectContaining({ panelClass: 'snack-warning' }),
+      jasmine.any(Object),
     );
+
+    component.toggleSeat(seats[0]!);
+    expect(component.selectedSeatIds().size).toBe(9);
   });
 
-  it('ejects a selected seat when a live conflict arrives', () => {
+  it('deselects seat on conflict', () => {
     const seat = component.seats()[0]!;
     component.toggleSeat(seat);
-    seatSignal.update((seats) =>
-      seats.map((current) => (current.id === seat.id ? { ...current, status: 'HELD' } : current)),
-    );
-    const conflictCallback = webSocketService.connectForEvent.calls.mostRecent().args[1] as (
-      seatId: string,
-    ) => void;
+    expect(component.selectedSeatIds().has(seat.id)).toBeTrue();
+
+    const conflictCallback = webSocketService.connectForSession.calls.mostRecent()
+      .args[1] as (seatId: string) => void;
 
     conflictCallback(seat.id);
 
@@ -175,7 +301,7 @@ describe('SeatSelectionComponent', () => {
     );
   });
 
-  it('posts aligned seat prices with one idempotency key and navigates to checkout', () => {
+  it('posts aligned seat prices with one idempotency key and session ID to checkout', () => {
     const navigate = spyOn(router, 'navigate').and.resolveTo(true);
     const randomUuid = spyOn(globalThis.crypto, 'randomUUID').and.returnValue(
       '123e4567-e89b-42d3-a456-426614174000',
@@ -188,7 +314,8 @@ describe('SeatSelectionComponent', () => {
     const request = reservationApi.createReservation.calls.mostRecent()
       .args[0] as CreateReservationRequest;
     expect(request).toEqual({
-      eventId: 'event-1',
+      eventSessionId: 'session-1',
+      // P12-007: session is the sole booking key; no eventId is sent.
       customerEmail: 'customer@example.com',
       seatIds: ['seat-1', 'seat-2'],
       seatPrices: [42.5, 42.5],
@@ -196,6 +323,346 @@ describe('SeatSelectionComponent', () => {
     });
     expect(randomUuid).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(['/checkout', 'reservation-1']);
+  });
+
+  it('performs atomic session switch clearing selection and updating session', () => {
+    component.toggleSeat(component.seats()[0]!);
+    expect(component.selectedSeatIds().size).toBe(1);
+
+    component.switchSession(mockSessions[1]);
+
+    expect(component.selectedSession()?.id).toBe('session-2');
+    expect(component.selectedSeatIds().size).toBe(0);
+    expect(webSocketService.connectForSession).toHaveBeenCalledWith(
+      'session-2',
+      jasmine.any(Function),
+      jasmine.any(Function),
+    );
+  });
+
+  it('cancels active hold on session switch if reservation hold exists', () => {
+    component.currentReservationId.set('hold-123');
+    component.switchSession(mockSessions[1]);
+    expect(reservationApi.cancelReservation).toHaveBeenCalledWith('hold-123');
+    expect(component.selectedSession()?.id).toBe('session-2');
+  });
+
+  it('warns when query param sessionId does not match any scheduled session', () => {
+    const route = TestBed.inject(ActivatedRoute);
+    spyOn(route.snapshot.queryParamMap, 'get').and.returnValue('non-existent-session');
+
+    component.ngOnInit();
+
+    expect(component.sessionWarning()).toContain('The requested showtime is not available for this event');
+    expect(component.selectedSession()).toBeNull();
+  });
+
+  describe('session-switch races (TASK-P12-006 REV-001/REV-002/REV-003)', () => {
+    function startDeferredLoads(): { sessionA: Subject<EventSeatMapResponse>; sessionB: Subject<EventSeatMapResponse> } {
+      const sessionA = new Subject<EventSeatMapResponse>();
+      const sessionB = new Subject<EventSeatMapResponse>();
+      eventApi.getEventSeatMap.and.returnValues(sessionA.asObservable(), sessionB.asObservable());
+      return { sessionA, sessionB };
+    }
+
+    it('REV-001 ignores a late A seat-map response arriving after B resolved', () => {
+      const { sessionA, sessionB } = startDeferredLoads();
+      component.seatMap.set(null);
+
+      component.loadSeatMap('event-1', 'session-1');
+      component.switchSession(mockSessions[1]);
+
+      sessionB.next(response);
+      settleAvailability();
+      expect(component.selectedSession()?.id).toBe('session-2');
+      const appliedCalls = seatState.setSeats.calls.count();
+      const subscribedCalls = webSocketService.connectForSession.calls.count();
+
+      sessionA.next(response);
+
+      expect(component.selectedSession()?.id).toBe('session-2');
+      expect(seatState.setSeats.calls.count()).toBe(appliedCalls);
+      expect(webSocketService.connectForSession.calls.count()).toBe(subscribedCalls);
+      expect(webSocketService.connectForSession.calls.mostRecent().args[0]).toBe('session-2');
+      expect(seatState.setSeats.calls.mostRecent().args[2]).toBe('session-2');
+    });
+
+    it('REV-001 ignores an early A response when B is still pending, then applies B', () => {
+      const { sessionA, sessionB } = startDeferredLoads();
+      component.seatMap.set(null);
+
+      component.loadSeatMap('event-1', 'session-1');
+      component.switchSession(mockSessions[1]);
+
+      sessionA.next(response);
+      expect(component.selectedSession()?.id).toBe('session-2');
+      expect(component.seatMap()).toBeNull();
+
+      sessionB.next(response);
+      settleAvailability();
+
+      expect(component.selectedSession()?.id).toBe('session-2');
+      expect(component.seatMap()).toBe(response);
+      expect(seatState.setSeats.calls.mostRecent().args[2]).toBe('session-2');
+      expect(webSocketService.connectForSession.calls.mostRecent().args[0]).toBe('session-2');
+    });
+
+    it('REV-002 keeps selection and hold disabled until B availability settles', () => {
+      component.switchSession(mockSessions[1]);
+
+      expect(component.bookingState()).toBe('SESSION_SELECTED_LOADING_AVAILABILITY');
+      expect(seatState.reconcileAvailability).toHaveBeenCalledWith(
+        'session-2',
+        jasmine.any(Set),
+        jasmine.any(Function),
+        jasmine.any(Function),
+        jasmine.any(Function),
+      );
+
+      const seat = component.seats()[0]!;
+      component.toggleSeat(seat);
+      expect(component.selectedSeatIds().size).toBe(0);
+      component.createHold();
+      expect(reservationApi.createReservation).not.toHaveBeenCalled();
+
+      settleAvailability();
+      fixture.detectChanges();
+
+      expect(component.bookingState()).toBe('SESSION_READY');
+      component.toggleSeat(seat);
+      expect(component.selectedSeatIds().size).toBe(1);
+    });
+
+    it('REV-002 never offers a B-held seat as selectable after reconciliation', () => {
+      component.switchSession(mockSessions[1]);
+      settleAvailability();
+
+      seatSignal.set(
+        component.seats().map((seat, index) =>
+          index === 0 ? { ...seat, status: 'HELD' as const } : seat,
+        ),
+      );
+      const heldSeat = component.seats()[0]!;
+
+      component.toggleSeat(heldSeat);
+
+      expect(component.selectedSeatIds().size).toBe(0);
+    });
+
+    it('REV-002 (FIX-2) keeps selection and hold disabled on availability error until retry succeeds', () => {
+      component.switchSession(mockSessions[1]);
+
+      // B's authoritative availability baseline fails.
+      failAvailability();
+      fixture.detectChanges();
+
+      expect(component.seatAvailabilityError()).toBeTrue();
+      expect(component.bookingState()).toBe('SESSION_SELECTED_LOADING_AVAILABILITY');
+
+      // Neither selection nor hold submission is possible on the
+      // non-authoritative AVAILABLE statuses.
+      const seat = component.seats()[0]!;
+      expect(seat.status).toBe('AVAILABLE');
+      component.toggleSeat(seat);
+      expect(component.selectedSeatIds().size).toBe(0);
+      component.selectedSeatIds.set(new Set([seat.id]));
+      component.createHold();
+      expect(reservationApi.createReservation).not.toHaveBeenCalled();
+      component.selectedSeatIds.set(new Set());
+
+      // Error/retry state is shown instead of the seat map.
+      expect(
+        fixture.nativeElement.querySelector('[aria-label="Seat availability unavailable"]'),
+      ).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('app-seat-map')).toBeNull();
+
+      // Retry success re-enables booking correctly.
+      component.retryAvailability();
+      expect(component.seatAvailabilityError()).toBeFalse();
+      settleAvailability();
+      fixture.detectChanges();
+
+      expect(component.bookingState()).toBe('SESSION_READY');
+      expect(fixture.nativeElement.querySelector('app-seat-map')).not.toBeNull();
+      component.toggleSeat(seat);
+      expect(component.selectedSeatIds().size).toBe(1);
+    });
+
+    it('REV-003 blocks session switching while a hold request is in flight', () => {
+      const pendingHold = new Subject<ReservationResponse>();
+      reservationApi.createReservation.and.returnValue(pendingHold.asObservable());
+      component.toggleSeat(component.seats()[0]!);
+      component.createHold();
+      expect(component.isCreatingHold()).toBeTrue();
+
+      component.switchSession(mockSessions[1]);
+
+      expect(component.selectedSession()?.id).toBe('session-1');
+      expect(snackBar.open).toHaveBeenCalledWith(
+        'Please wait until your hold request completes before switching showtimes.',
+        'Close',
+        jasmine.any(Object),
+      );
+      pendingHold.complete();
+    });
+
+    it('REV-003 cancels a stale hold without navigating when the session changed mid-flight', () => {
+      const pendingHold = new Subject<ReservationResponse>();
+      reservationApi.createReservation.and.returnValue(pendingHold.asObservable());
+      const navigate = spyOn(router, 'navigate').and.resolveTo(true);
+      component.toggleSeat(component.seats()[0]!);
+      component.createHold();
+
+      // The selection is invalidated (event reload with an unknown deep link)
+      // while the hold request is outstanding.
+      const route = TestBed.inject(ActivatedRoute);
+      spyOn(route.snapshot.queryParamMap, 'get').and.returnValue('non-existent-session');
+      component.retryLoad();
+
+      const staleReservation: ReservationResponse = {
+        id: 'reservation-stale',
+        eventSessionId: 'session-1',
+        eventId: 'event-1',
+        status: 'PENDING',
+        expiresAt: '2026-10-10T18:15:00Z',
+        totalAmount: 42.5,
+        seats: [],
+      };
+      pendingHold.next(staleReservation);
+
+      expect(reservationApi.cancelReservation).toHaveBeenCalledWith('reservation-stale');
+      expect(component.currentReservationId()).toBeNull();
+      expect(navigate).not.toHaveBeenCalledWith(['/checkout', 'reservation-stale']);
+    });
+  });
+
+  describe('two-session browser flow (TASK-P12-006 REV-006)', () => {
+    it('drives A -> B -> A with URL/topic/availability transitions and no carry-over', () => {
+      const navigate = spyOn(router, 'navigate').and.resolveTo(true);
+
+      // Initial state: session A selected from the deep link, baseline settled.
+      expect(component.selectedSession()?.id).toBe('session-1');
+      expect(component.bookingState()).toBe('SESSION_READY');
+      expect(fixture.nativeElement.querySelector('app-seat-map')).not.toBeNull();
+
+      // A -> B: URL, topic, and availability transition together.
+      component.switchSession(mockSessions[1]);
+      fixture.detectChanges();
+
+      expect(navigate).toHaveBeenCalledWith(
+        [],
+        jasmine.objectContaining({ queryParams: { sessionId: 'session-2' } }),
+      );
+      expect(webSocketService.connectForSession.calls.mostRecent().args[0]).toBe('session-2');
+      expect(component.bookingState()).toBe('SESSION_SELECTED_LOADING_AVAILABILITY');
+      // While B's baseline is pending the map (and hold dock) stay hidden.
+      expect(fixture.nativeElement.querySelector('app-seat-map')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[aria-label="Loading seat map"]')).not.toBeNull();
+
+      settleAvailability();
+      fixture.detectChanges();
+
+      expect(component.bookingState()).toBe('SESSION_READY');
+      expect(fixture.nativeElement.querySelector('app-seat-map')).not.toBeNull();
+      component.toggleSeat(component.seats()[0]!);
+      expect(component.selectedSeatIds().size).toBe(1);
+
+      // B -> A: selection is cleared, URL/topic/availability return to A.
+      component.switchSession(mockSessions[0]);
+      fixture.detectChanges();
+
+      expect(component.selectedSeatIds().size).toBe(0);
+      expect(navigate).toHaveBeenCalledWith(
+        [],
+        jasmine.objectContaining({ queryParams: { sessionId: 'session-1' } }),
+      );
+      expect(webSocketService.connectForSession.calls.mostRecent().args[0]).toBe('session-1');
+
+      settleAvailability();
+      fixture.detectChanges();
+
+      expect(component.selectedSession()?.id).toBe('session-1');
+      expect(component.selectedSeatIds().size).toBe(0);
+      expect(component.bookingState()).toBe('SESSION_READY');
+      expect(fixture.nativeElement.querySelector('app-seat-map')).not.toBeNull();
+    });
+  });
+
+  describe('deep-link sale-window guard (TASK-P12-006 REV-004)', () => {
+    const upcomingSession: EventSession = {
+      id: 'session-upcoming',
+      eventId: 'event-1',
+      startsAt: '2027-06-01T18:00:00Z',
+      endsAt: '2027-06-01T20:00:00Z',
+      saleStartsAt: '2027-01-01T00:00:00Z',
+      status: 'SCHEDULED',
+      timezone: 'UTC',
+    };
+    const closedSession: EventSession = {
+      id: 'session-closed',
+      eventId: 'event-1',
+      startsAt: '2027-06-01T18:00:00Z',
+      endsAt: '2027-06-01T20:00:00Z',
+      saleEndsAt: '2020-01-01T00:00:00Z',
+      status: 'SCHEDULED',
+      timezone: 'UTC',
+    };
+    // Already started but not yet ended at test time (REV-004 FIX-2): the
+    // reservation service rejects startsAt <= now, so the UI must too.
+    const startedSession: EventSession = {
+      id: 'session-started',
+      eventId: 'event-1',
+      startsAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      endsAt: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+      status: 'SCHEDULED',
+      timezone: 'UTC',
+    };
+
+    function reloadWithDeepLink(sessionId: string, sessions: EventSession[]): void {
+      eventApi.getEventSessions.and.returnValue(of(sessions));
+      const route = TestBed.inject(ActivatedRoute);
+      spyOn(route.snapshot.queryParamMap, 'get').and.returnValue(sessionId);
+      const seatMapCalls = eventApi.getEventSeatMap.calls.count();
+      component.loadEventAndSessions('event-1');
+      expect(eventApi.getEventSeatMap.calls.count()).toBe(seatMapCalls);
+    }
+
+    it('rejects a direct link to a sale-upcoming session without loading seats', () => {
+      reloadWithDeepLink('session-upcoming', [upcomingSession, mockSessions[0]]);
+
+      expect(component.selectedSession()).toBeNull();
+      expect(component.seatMap()).toBeNull();
+      expect(component.sessionWarning()).toContain('not available');
+    });
+
+    it('rejects a direct link to a sale-closed session without loading seats', () => {
+      reloadWithDeepLink('session-closed', [closedSession, mockSessions[0]]);
+
+      expect(component.selectedSession()).toBeNull();
+      expect(component.seatMap()).toBeNull();
+      expect(component.sessionWarning()).toContain('not available');
+    });
+
+    it('rejects a direct link to an already-started session without loading seats', () => {
+      reloadWithDeepLink('session-started', [startedSession, mockSessions[0]]);
+
+      expect(component.selectedSession()).toBeNull();
+      expect(component.seatMap()).toBeNull();
+      expect(component.sessionWarning()).toContain('not available');
+    });
+
+    it('preserves a direct link to a bookable future session', () => {
+      eventApi.getEventSessions.and.returnValue(of(mockSessions));
+      const route = TestBed.inject(ActivatedRoute);
+      spyOn(route.snapshot.queryParamMap, 'get').and.returnValue('session-1');
+      const seatMapCalls = eventApi.getEventSeatMap.calls.count();
+
+      component.loadEventAndSessions('event-1');
+
+      expect(eventApi.getEventSeatMap.calls.count()).toBe(seatMapCalls + 1);
+      expect(component.selectedSession()?.id).toBe('session-1');
+      expect(component.sessionWarning()).toBeNull();
+    });
   });
 
   it('disconnects the root-scoped live service when destroyed', () => {
@@ -206,7 +673,7 @@ describe('SeatSelectionComponent', () => {
 
   it('formats event date with sfDate full variant in 24-hour format matching event detail', () => {
     const pipe = new DateFormatPipe();
-    const formatted = pipe.transform(response.eventDate, 'full');
+    const formatted = pipe.transform(mockSessions[0].startsAt, 'full');
     expect(formatted).toContain('•');
     expect(formatted).not.toMatch(/AM|PM/);
   });
@@ -216,7 +683,6 @@ describe('SeatSelectionComponent', () => {
       eventId: 'event-1',
       venueId: 'venue-1',
       eventTitle: 'Live at SeatFlow',
-      eventDate: '2026-10-10T18:00:00Z',
       venueName: 'Main Hall',
       venueCapacity: 100,
       totalConfiguredSeats: 3,
@@ -320,7 +786,6 @@ describe('SeatSelectionComponent', () => {
     };
 
     function loadAdvanced(): void {
-      const eventApi = TestBed.inject(EventApiService) as jasmine.SpyObj<EventApiService>;
       eventApi.getEventSeatMap.and.returnValue(of(advancedResponse));
       component.retryLoad();
     }
@@ -382,3 +847,4 @@ describe('SeatSelectionComponent', () => {
     });
   });
 });
+

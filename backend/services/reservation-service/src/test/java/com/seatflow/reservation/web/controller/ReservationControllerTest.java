@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = ReservationController.class)
+@WebMvcTest(controllers = {ReservationController.class, EventSessionAvailabilityController.class})
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
 class ReservationControllerTest {
 
@@ -53,65 +53,112 @@ class ReservationControllerTest {
     @MockitoBean
     private com.seatflow.common.security.converter.JwtRoleConverter jwtRoleConverter;
 
-    private ReservationResponse sampleResponse(UUID id, UUID eventId, UUID userId) {
-        return new ReservationResponse(id, eventId, userId, "guest@example.com", ReservationStatus.PENDING,
-                Instant.now().plus(Duration.ofMinutes(15)), new BigDecimal("50.00"), 1, List.of(), Instant.now());
+    private ReservationResponse sampleResponse(UUID id, UUID sessionId, UUID eventId, UUID userId) {
+        return new ReservationResponse(id, sessionId, eventId, userId, "guest@example.com", ReservationStatus.PENDING,
+                Instant.now().plus(Duration.ofMinutes(15)), new BigDecimal("50.00"), 1,
+                Instant.now().plus(Duration.ofDays(1)), Instant.now().plus(Duration.ofDays(1)).plus(Duration.ofHours(2)), null,
+                List.of(), Instant.now());
     }
 
-    private String validBody(UUID eventId, UUID seatId, String idempotencyKey) {
+    private String validBody(UUID sessionId, UUID seatId, String idempotencyKey) {
+        // P12-007: session is the sole booking key; no eventId field exists.
         return """
                 {
-                  "eventId": "%s",
+                  "eventSessionId": "%s",
                   "customerEmail": "guest@example.com",
                   "seatIds": ["%s"],
                   "seatPrices": ["50.00"],
                   "idempotencyKey": "%s"
                 }
-                """.formatted(eventId, seatId, idempotencyKey);
+                """.formatted(sessionId, seatId, idempotencyKey);
     }
 
     @Test
     void createReservation_unauthenticatedGuest_returns201() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
-        when(reservationService.createReservation(any(), any())).thenReturn(sampleResponse(reservationId, eventId, null));
+        when(reservationService.createReservation(any(), any())).thenReturn(sampleResponse(reservationId, sessionId, eventId, null));
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(eventId, seatId, "idem-1")))
+                        .content(validBody(sessionId, seatId, "idem-1")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(reservationId.toString()));
     }
 
     @Test
     void createReservation_authenticatedUser_returns201() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
-        when(reservationService.createReservation(any(), any())).thenReturn(sampleResponse(reservationId, eventId, userId));
+        when(reservationService.createReservation(any(), any())).thenReturn(sampleResponse(reservationId, sessionId, eventId, userId));
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(eventId, seatId, "idem-2"))
+                        .content(validBody(sessionId, seatId, "idem-2"))
                         .with(jwt().jwt(j -> j.subject(userId.toString()))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(reservationId.toString()));
     }
 
     @Test
-    void createReservation_withoutGuestEmail_returns400() throws Exception {
+    void createReservation_withLegacyEventId_returns400() throws Exception {
+        // P12-007: legacy eventId booking key is rejected, never silently ignored.
+        UUID sessionId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        String body = """
+                {
+                  "eventSessionId": "%s",
+                  "eventId": "%s",
+                  "customerEmail": "guest@example.com",
+                  "seatIds": ["%s"],
+                  "seatPrices": ["50.00"],
+                  "idempotencyKey": "idem-legacy"
+                }
+                """.formatted(sessionId, UUID.randomUUID(), seatId);
+
+        mockMvc.perform(post("/api/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createReservation_withoutSessionId_returns400() throws Exception {
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         String body = """
                  {
                    "eventId": "%s",
+                   "customerEmail": "guest@example.com",
+                   "seatIds": ["%s"],
+                   "seatPrices": ["50.00"],
+                   "idempotencyKey": "idem-nosession"
+                 }
+                 """.formatted(eventId, seatId);
+
+        mockMvc.perform(post("/api/reservations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createReservation_withoutGuestEmail_returns400() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        String body = """
+                 {
+                   "eventSessionId": "%s",
                    "seatIds": ["%s"],
                    "seatPrices": ["50.00"],
                    "idempotencyKey": "idem-3"
                  }
-                 """.formatted(eventId, seatId);
+                 """.formatted(sessionId, seatId);
 
         when(reservationService.createReservation(any(), any()))
                 .thenThrow(new com.seatflow.common.domain.exception.ValidationException(
@@ -125,7 +172,7 @@ class ReservationControllerTest {
 
     @Test
     void createReservation_withMoreThanTenSeats_returns400() throws Exception {
-        UUID eventId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         String seatIdsJson = IntStream.range(0, 11)
                 .mapToObj(i -> "\"" + UUID.randomUUID() + "\"")
                 .collect(Collectors.joining(","));
@@ -134,13 +181,13 @@ class ReservationControllerTest {
                 .collect(Collectors.joining(","));
         String body = """
                 {
-                  "eventId": "%s",
+                  "eventSessionId": "%s",
                   "customerEmail": "guest@example.com",
                   "seatIds": [%s],
                   "seatPrices": [%s],
                   "idempotencyKey": "idem-4"
                 }
-                """.formatted(eventId, seatIdsJson, seatPricesJson);
+                """.formatted(sessionId, seatIdsJson, seatPricesJson);
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -150,14 +197,14 @@ class ReservationControllerTest {
 
     @Test
     void createReservation_whenConflict_returns409() throws Exception {
-        UUID eventId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         when(reservationService.createReservation(any(), any()))
                 .thenThrow(new ConflictException("One or more seats are already held or sold", ErrorCode.SEAT_ALREADY_RESERVED));
 
         mockMvc.perform(post("/api/reservations")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody(eventId, seatId, "idem-5")))
+                        .content(validBody(sessionId, seatId, "idem-5")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value(ErrorCode.SEAT_ALREADY_RESERVED.getCode()));
     }
@@ -165,8 +212,9 @@ class ReservationControllerTest {
     @Test
     void getReservation_found_returns200() throws Exception {
         UUID id = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
-        when(reservationService.getReservationById(any(), any(), any())).thenReturn(sampleResponse(id, eventId, null));
+        when(reservationService.getReservationById(any(), any(), any())).thenReturn(sampleResponse(id, sessionId, eventId, null));
 
         mockMvc.perform(get("/api/reservations/{id}", id))
                 .andExpect(status().isOk())
@@ -193,15 +241,17 @@ class ReservationControllerTest {
     }
 
     @Test
-    void getSeatAvailability_returns200WithStatuses() throws Exception {
+    void getSessionSeatAvailability_returns200WithStatuses() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         when(reservationService.getSeatAvailability(any()))
-                .thenReturn(new SeatAvailabilityResponse(eventId,
+                .thenReturn(new SeatAvailabilityResponse(sessionId, eventId,
                         List.of(new EventSeatStatusResponse(seatId, SeatHoldStatus.HELD))));
 
-        mockMvc.perform(get("/api/reservations/events/{eventId}/availability", eventId))
+        mockMvc.perform(get("/api/event-sessions/{sessionId}/seats/availability", sessionId))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventSessionId").value(sessionId.toString()))
                 .andExpect(jsonPath("$.eventId").value(eventId.toString()))
                 .andExpect(jsonPath("$.seatStatuses[0].seatId").value(seatId.toString()));
     }

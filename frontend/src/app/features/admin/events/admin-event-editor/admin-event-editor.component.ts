@@ -18,6 +18,7 @@ import { EventCategory, EventStatus } from '../../../../models/event.model';
 import { VenueSummary } from '../../../../models/venue.model';
 import { BannerGalleryPickerComponent } from '../banner-gallery-picker/banner-gallery-picker.component';
 import { SkeletonLoaderComponent } from '../../../../shared/components/skeleton-loader/skeleton-loader.component';
+import { renderEventDescriptionMarkdown } from '../../../../shared/pipes/markdown-format.pipe';
 
 @Component({
   selector: 'app-admin-event-editor',
@@ -85,14 +86,14 @@ export class AdminEventEditorComponent implements OnInit {
     if (!raw.trim()) {
       return '<p class="text-[var(--color-text-muted)] italic">No description entered yet.</p>';
     }
-    return this.renderSimpleMarkdown(raw);
+    return renderEventDescriptionMarkdown(raw, 'No description entered yet.');
   });
 
   readonly eventForm = this.fb.group({
     title: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(150)]],
     category: ['CONCERT' as EventCategory, [Validators.required]],
     venueId: ['', [Validators.required]],
-    eventDate: ['', [Validators.required]],
+    // P12-007: eventDate control removed. Sessions own the schedule exclusively.
     description: ['', [Validators.required, Validators.minLength(10), Validators.maxLength(2000)]],
     bannerUrl: ['', [Validators.required]],
   });
@@ -131,13 +132,11 @@ export class AdminEventEditorComponent implements OnInit {
         this.bannerUrl.set(event.bannerUrl || '');
         this.currentDescription.set(event.description || '');
 
-        const localDateString = this.formatDateForInput(event.eventDate);
-
+        // P12-007: no event-level date remains; sessions own the schedule.
         this.eventForm.patchValue({
           title: event.title,
           category: event.category,
           venueId: event.venueId,
-          eventDate: localDateString,
           description: event.description,
           bannerUrl: event.bannerUrl,
         });
@@ -155,22 +154,8 @@ export class AdminEventEditorComponent implements OnInit {
     });
   }
 
-  private formatDateForInput(isoString: string): string {
-    if (!isoString) return '';
-    try {
-      const d = new Date(isoString);
-      if (isNaN(d.getTime())) return '';
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const day = pad(d.getDate());
-      const hours = pad(d.getHours());
-      const mins = pad(d.getMinutes());
-      return `${year}-${month}-${day}T${hours}:${mins}`;
-    } catch {
-      return '';
-    }
-  }
+  // P12-007: legacy event-level date formatting removed with the schedule field.
+  // Session dates are managed exclusively via the admin session manager.
 
   onBannerSelected(url: string): void {
     this.bannerUrl.set(url);
@@ -221,55 +206,6 @@ export class AdminEventEditorComponent implements OnInit {
     this.eventForm.controls.description.markAsDirty();
   }
 
-  private renderSimpleMarkdown(md: string): string {
-    const escapeHtml = (text: string) =>
-      text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-    const lines = md.split('\n');
-    const out: string[] = [];
-    let inList = false;
-
-    for (const rawLine of lines) {
-      const line = escapeHtml(rawLine.trim());
-
-      if (line.startsWith('### ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<h3 class="text-sm font-bold text-indigo-500 mt-3 mb-1">${line.substring(4)}</h3>`);
-      } else if (line.startsWith('## ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<h2 class="text-base font-extrabold text-[var(--color-text-primary)] mt-4 mb-1.5">${line.substring(3)}</h2>`);
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        if (!inList) { out.push('<ul class="list-disc list-inside space-y-1 my-1 text-xs text-[var(--color-text-secondary)]">'); inList = true; }
-        const formatted = this.applyInlineFormatting(line.substring(2));
-        out.push(`<li>${formatted}</li>`);
-      } else if (line.startsWith('&gt; ')) {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<blockquote class="border-l-2 border-indigo-500 pl-3 my-2 text-xs italic text-[var(--color-text-muted)]">${line.substring(5)}</blockquote>`);
-      } else if (line === '---') {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push('<hr class="border-[var(--color-border)] my-3"/>');
-      } else if (line === '') {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push('<div class="h-2"></div>');
-      } else {
-        if (inList) { out.push('</ul>'); inList = false; }
-        out.push(`<p class="text-xs leading-relaxed text-[var(--color-text-secondary)] mb-1">${this.applyInlineFormatting(line)}</p>`);
-      }
-    }
-    if (inList) out.push('</ul>');
-    return out.join('');
-  }
-
-  private applyInlineFormatting(text: string): string {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[var(--color-text-primary)]">$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
-      .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-[var(--color-canvas)] text-[11px] font-mono text-indigo-400">$1</code>');
-  }
-
   onSubmit(): void {
     if (this.isLocked() || this.eventForm.invalid) {
       this.eventForm.markAllAsTouched();
@@ -280,7 +216,6 @@ export class AdminEventEditorComponent implements OnInit {
     this.errorMessage.set(null);
 
     const formVal = this.eventForm.getRawValue();
-    const isoDate = new Date(formVal.eventDate!).toISOString();
 
     if (this.isEditMode() && this.eventId()) {
       const updatePayload = {
@@ -288,7 +223,7 @@ export class AdminEventEditorComponent implements OnInit {
         description: formVal.description!,
         category: formVal.category!,
         bannerUrl: formVal.bannerUrl!,
-        eventDate: isoDate,
+        // P12-007: no eventDate is sent; sessions own the schedule.
       };
 
       this.adminEventApi.updateEvent(this.eventId()!, updatePayload).subscribe({
@@ -310,8 +245,8 @@ export class AdminEventEditorComponent implements OnInit {
         description: formVal.description!,
         category: formVal.category!,
         bannerUrl: formVal.bannerUrl!,
-        eventDate: isoDate,
         venueId: formVal.venueId!,
+        // P12-007: no eventDate is sent; add sessions via the session manager.
       };
 
       this.adminEventApi.createEvent(createPayload).subscribe({

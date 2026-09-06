@@ -83,7 +83,9 @@ class PaymentControllerTest {
     void getPaymentReturns200Ok() throws Exception {
         PaymentResponse response = new PaymentResponse(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
-                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
+                UUID.randomUUID(), UUID.randomUUID(),
+                Instant.parse("2026-10-05T19:00:00Z"), Instant.parse("2026-10-05T21:00:00Z"), null,
+                "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
                 "USD", PaymentStatus.INITIATED,
                 null, Instant.now(), Instant.now());
         when(paymentService.getPaymentById(any(), any(), anyBoolean(), any())).thenReturn(response);
@@ -98,7 +100,9 @@ class PaymentControllerTest {
     void getPaymentByReservationReturns200Ok() throws Exception {
         PaymentResponse response = new PaymentResponse(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
-                UUID.randomUUID(), "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
+                UUID.randomUUID(), UUID.randomUUID(),
+                Instant.parse("2026-10-05T19:00:00Z"), Instant.parse("2026-10-05T21:00:00Z"), null,
+                "pi_123", new BigDecimal("49.99"), BigDecimal.ZERO, new BigDecimal("49.99"),
                 "USD", PaymentStatus.INITIATED,
                 null, Instant.now(), Instant.now());
         when(paymentService.getPaymentByReservationId(any(), any(), anyBoolean(), any())).thenReturn(response);

@@ -56,6 +56,7 @@ class EventServiceApplicationTests {
                 "SELECT version FROM flyway_schema_history ORDER BY version ASC", String.class);
 
         assertThat(versions)
-                .containsExactly("1", "2");
+                // P12-007: V4 drops the legacy event_date column behind the parity gate.
+                .containsExactly("1", "2", "3", "4");
     }
 }

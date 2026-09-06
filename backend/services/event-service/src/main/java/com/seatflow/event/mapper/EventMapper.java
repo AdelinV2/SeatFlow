@@ -29,17 +29,21 @@ public interface EventMapper {
     @Mapping(target = "pricingTiers", ignore = true)
     Event toEntity(CreateEventRequest request);
 
+    @Mapping(target = "sessions", ignore = true)
     EventDetailResponse toDetailResponse(Event event);
 
+    // P12-007: summary carries derived nextSessionStartsAt (display/search
+    // metadata, never a booking key) instead of legacy eventDate.
     @Mapping(target = "id", source = "event.id")
     @Mapping(target = "title", source = "event.title")
     @Mapping(target = "category", source = "event.category")
     @Mapping(target = "bannerUrl", source = "event.bannerUrl")
-    @Mapping(target = "eventDate", source = "event.eventDate")
+    @Mapping(target = "nextSessionStartsAt", source = "nextSessionStartsAt")
     @Mapping(target = "minPrice", source = "minPrice")
     @Mapping(target = "maxPrice", source = "maxPrice")
     @Mapping(target = "currency", source = "currency")
-    EventSummaryResponse toSummaryResponse(Event event, BigDecimal minPrice, BigDecimal maxPrice, String currency);
+    EventSummaryResponse toSummaryResponse(Event event, java.time.Instant nextSessionStartsAt,
+                                           BigDecimal minPrice, BigDecimal maxPrice, String currency);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)

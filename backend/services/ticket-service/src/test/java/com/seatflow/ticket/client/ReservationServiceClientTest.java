@@ -58,8 +58,9 @@ class ReservationServiceClientTest {
         when(headersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.onStatus(any(), errorHandlerCaptor.capture())).thenReturn(responseSpec);
         when(responseSpec.body(ReservationClientResponse.class)).thenReturn(
-                new ReservationClientResponse(reservationId, UUID.randomUUID(), UUID.randomUUID(),
+                new ReservationClientResponse(reservationId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                         "cust@example.com", "CONFIRMED", new BigDecimal("100.00"), 2,
+                        Instant.parse("2026-10-05T19:00:00Z"), Instant.parse("2026-10-05T21:00:00Z"), null,
                         List.of(), Instant.now(), Instant.now()));
 
         CircuitBreakerRegistry registry = CircuitBreakerRegistry.ofDefaults();

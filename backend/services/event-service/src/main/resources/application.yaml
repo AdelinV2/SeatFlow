@@ -5,6 +5,8 @@ spring:
     name: event-service
   jackson:
     default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: true
     time-zone: UTC
   jpa:
     open-in-view: false

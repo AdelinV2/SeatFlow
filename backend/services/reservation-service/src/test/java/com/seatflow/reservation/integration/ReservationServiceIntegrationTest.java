@@ -2,6 +2,7 @@ package com.seatflow.reservation.integration;
 
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.messaging.producer.OutboxEventPublisher;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.model.entity.SeatHold;
@@ -85,6 +86,7 @@ class ReservationServiceIntegrationTest {
 
     @Test
     void createReservationWritesOutboxAndPublisherDeliversToKafka() {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId1 = UUID.randomUUID();
         UUID seatId2 = UUID.randomUUID();
@@ -92,8 +94,12 @@ class ReservationServiceIntegrationTest {
         List<BigDecimal> prices = List.of(new BigDecimal("10.00"), new BigDecimal("20.00"));
         String idempotencyKey = "idem-integration-" + UUID.randomUUID();
 
+        when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID()));
         EventPricingDetails pricing = new EventPricingDetails(
-                eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds,
+                eventId, "PUBLISHED", seatIds,
                 Map.of(seatId1, new BigDecimal("10.00"), seatId2, new BigDecimal("20.00")));
         when(eventClient.getEventSeatPricing(any(), any())).thenReturn(pricing);
 
@@ -101,13 +107,14 @@ class ReservationServiceIntegrationTest {
         when(kafkaTemplate.send(anyString(), anyString(), anyString()))
                 .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(sendResult));
 
-        CreateReservationRequest request = new CreateReservationRequest(
-                eventId, "guest@example.com", seatIds, prices, idempotencyKey);
+        CreateReservationRequest request = new CreateReservationRequest(sessionId, "guest@example.com", seatIds, prices, idempotencyKey);
 
         var response = reservationService.createReservation(request, UUID.randomUUID());
 
-        // 1. Reservation is PENDING and seat holds are persisted as HELD
+        // 1. Reservation is PENDING, session-scoped, and seat holds are persisted as HELD
         assertThat(response.status()).isEqualTo(ReservationStatus.PENDING);
+        assertThat(response.eventSessionId()).isEqualTo(sessionId);
+        assertThat(response.eventId()).isEqualTo(eventId);
         List<SeatHold> holds = seatHoldRepository.findAll();
         assertThat(holds).hasSize(2);
         assertThat(holds).allMatch(h -> h.getStatus() == SeatHoldStatus.HELD);
@@ -137,3 +144,4 @@ class ReservationServiceIntegrationTest {
         assertThat(published.getRetryCount()).isZero();
     }
 }
+

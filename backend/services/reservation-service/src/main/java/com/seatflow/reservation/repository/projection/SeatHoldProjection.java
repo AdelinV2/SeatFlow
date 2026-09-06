@@ -9,6 +9,8 @@ public interface SeatHoldProjection {
 
     UUID getId();
 
+    UUID getEventSessionId();
+
     UUID getSeatId();
 
     SeatHoldStatus getStatus();

@@ -90,7 +90,11 @@ public class TicketServiceImpl implements TicketService {
                     .userId(command.userId())
                     .customerEmail(command.customerEmail())
                     .attendeeName(command.attendeeName())
+                    .eventSessionId(command.eventSessionId())
                     .eventId(command.eventId())
+                    .sessionStartsAt(command.sessionStartsAt())
+                    .sessionEndsAt(command.sessionEndsAt())
+                    .sessionTimezone(command.sessionTimezone())
                     .seatId(seat.seatId())
                     .price(seat.price())
                     .taxAmount(seat.taxAmount() == null ? BigDecimal.ZERO : seat.taxAmount())
@@ -110,7 +114,11 @@ public class TicketServiceImpl implements TicketService {
                     command.userId(),
                     command.customerEmail(),
                     command.attendeeName(),
+                    command.eventSessionId(),
                     command.eventId(),
+                    command.sessionStartsAt(),
+                    command.sessionEndsAt(),
+                    command.sessionTimezone(),
                     seat.seatId(),
                     seat.price(),
                     seat.taxAmount(),
@@ -141,8 +149,8 @@ public class TicketServiceImpl implements TicketService {
 
             AfterCommitMetrics.afterCommit(this::safeIncrementTicketIssued);
 
-            log.info("Ticket issued successfully. ticketId={}, eventId={}, paymentId={}",
-                    savedTicket.getId(), command.eventId(), command.paymentId());
+            log.info("Ticket issued successfully. ticketId={}, eventSessionId={}, eventId={}, paymentId={}",
+                    savedTicket.getId(), command.eventSessionId(), command.eventId(), command.paymentId());
         }
 
         return ticketMapper.toResponseList(savedTickets);
@@ -226,13 +234,21 @@ public class TicketServiceImpl implements TicketService {
             attendeeName = UserContext.getCurrentUserName().orElse(ticket.getAttendeeName());
         }
 
+        // P12-004: the showing instant renders from the persisted immutable snapshot,
+        // never from mutable event state. Live enrichment below supplies display-only
+        // metadata (title/venue/seat labels); enrichment.eventDate() is only a legacy
+        // fallback for pre-P12-004 tickets without a snapshot.
+        Instant showingStart = ticket.getSessionStartsAt() != null
+                ? ticket.getSessionStartsAt()
+                : enrichment.eventDate();
+
         PdfTicketData data = new PdfTicketData(
                 ticket.getId(),
                 ticket.getTicketCode(),
                 ticket.getStatus().name(),
                 enrichment.eventTitle(),
                 enrichment.eventCategory(),
-                enrichment.eventDate(),
+                showingStart,
                 enrichment.venueName(),
                 enrichment.venueCity(),
                 enrichment.sectionName(),
@@ -309,8 +325,14 @@ public class TicketServiceImpl implements TicketService {
                 ? ticket.getTicketType()
                 : "Standard";
 
+        // P12-004: scanner result renders the stored immutable showing snapshot;
+        // the live lookup is only a legacy fallback for pre-P12-004 tickets.
+        Instant showingStart = ticket.getSessionStartsAt() != null
+                ? ticket.getSessionStartsAt()
+                : enrichment.eventDate();
+
         return new ValidationResultResponse(true, ticket.getId(), ticket.getTicketCode(), ValidationResult.SUCCESS,
-                enrichment.eventTitle(), enrichment.eventDate(), ticket.getAttendeeName(),
+                enrichment.eventTitle(), showingStart, ticket.getAttendeeName(),
                 enrichment.sectionName(), enrichment.rowLabel(), enrichment.seatNumber(),
                 resolvedTicketType,
                 scanTime, "Entry granted successfully");

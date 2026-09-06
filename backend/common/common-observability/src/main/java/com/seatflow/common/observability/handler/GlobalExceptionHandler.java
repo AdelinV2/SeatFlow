@@ -105,9 +105,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotReadable(
+            org.springframework.http.converter.HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
+        // P12-007: legacy schedule/booking fields removed from DTOs are rejected here
+        // via FAIL_ON_UNKNOWN_PROPERTIES. Unknown properties (e.g. legacy eventDate,
+        // startsAt, or eventId booking keys) fail closed with 400, never silently ignored.
+        log.warn("Malformed or unknown-field request body on [{}]: {}", request.getRequestURI(), ex.getMessage());
+        ApiErrorResponse response = ApiErrorResponse.of(
+            HttpStatus.BAD_REQUEST.value(),
+            HttpStatus.BAD_REQUEST.getReasonPhrase(),
+            ErrorCode.INVALID_REQUEST.getCode(),
+            "Malformed request body or unsupported fields",
+            request.getRequestURI(),
+            getCorrelationId()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        log.warn("Access denied on request [{}]: {}", request.getRequestURI(), ex.getMessage());
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {        log.warn("Access denied on request [{}]: {}", request.getRequestURI(), ex.getMessage());
         ApiErrorResponse response = ApiErrorResponse.of(
             HttpStatus.FORBIDDEN.value(),
             HttpStatus.FORBIDDEN.getReasonPhrase(),
@@ -117,6 +135,24 @@ public class GlobalExceptionHandler {
             getCorrelationId()
         );
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoResourceFound(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex, HttpServletRequest request) {
+        // P12-008 scenario J: removed/unknown routes (e.g. the pre-P12 event-scoped
+        // availability URL) are client errors, not internal failures. Without this
+        // mapping the catch-all below would answer 500 for every unmapped path.
+        log.warn("No handler found for request [{} {}]", request.getMethod(), request.getRequestURI());
+        ApiErrorResponse response = ApiErrorResponse.of(
+            HttpStatus.NOT_FOUND.value(),
+            HttpStatus.NOT_FOUND.getReasonPhrase(),
+            ErrorCode.RESOURCE_NOT_FOUND.getCode(),
+            "No handler found for " + request.getMethod() + " " + request.getRequestURI(),
+            request.getRequestURI(),
+            getCorrelationId()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
     @ExceptionHandler(Exception.class)

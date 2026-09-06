@@ -1,9 +1,12 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
+import { SeatAvailabilityResponse } from '../models/seat.model';
 
 export interface CreateReservationRequest {
-  eventId: string;
+  eventSessionId: string;
+  // P12-007: legacy eventId compat field removed. The session is the sole
+  // booking key; the parent event derives server-side from trusted context.
   customerEmail?: string;
   seatIds: string[];
   seatPrices: number[];
@@ -33,6 +36,7 @@ export interface UpdateReservationPricingRequest {
 export interface ReservationResponse {
   id: string;
   eventId: string;
+  eventSessionId?: string;
   userId?: string;
   customerEmail?: string;
   customerName?: string;
@@ -40,6 +44,9 @@ export interface ReservationResponse {
   expiresAt: string;
   totalAmount: number;
   seatCount?: number;
+  sessionStartsAt?: string;
+  sessionEndsAt?: string;
+  sessionTimezone?: string;
   seats: ReservationSeatDetail[];
   createdAt?: string;
 }
@@ -53,6 +60,12 @@ export class ReservationApiService {
   createReservation(request: CreateReservationRequest): Observable<ReservationResponse> {
     return this.http.post<ReservationResponse>(this.baseUrl, request).pipe(
       tap((reservation) => this.rememberGuestProof(reservation.id, request.customerEmail)),
+    );
+  }
+
+  getSeatAvailability(eventSessionId: string): Observable<SeatAvailabilityResponse> {
+    return this.http.get<SeatAvailabilityResponse>(
+      `/api/event-sessions/${eventSessionId}/seats/availability`,
     );
   }
 

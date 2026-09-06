@@ -12,13 +12,17 @@ import java.util.UUID;
 public record ReservationResponse(
 
         UUID id,
-        UUID eventId,
+        @Schema(description = "Authoritative event session (inventory partition)") UUID eventSessionId,
+        @Schema(description = "Parent event UUID, derived from trusted session context (display only)") UUID eventId,
         UUID userId,
         String customerEmail,
         ReservationStatus status,
         Instant expiresAt,
         BigDecimal totalAmount,
         Integer seatCount,
+        @Schema(description = "Immutable session start instant captured at hold time") Instant sessionStartsAt,
+        @Schema(description = "Immutable session end instant captured at hold time") Instant sessionEndsAt,
+        @Schema(description = "Nullable IANA session timezone metadata") String sessionTimezone,
         List<SeatHoldResponse> seats,
         Instant createdAt
 ) {

@@ -16,8 +16,8 @@ import java.util.UUID;
         name = "seat_holds",
         indexes = {
                 @Index(name = "idx_holds_reservation_id", columnList = "reservation_id"),
-                @Index(name = "idx_holds_event_seat", columnList = "event_id, seat_id"),
-                @Index(name = "idx_holds_event_status", columnList = "event_id, status")
+                @Index(name = "idx_holds_session_seat", columnList = "event_session_id, seat_id"),
+                @Index(name = "idx_holds_session_status", columnList = "event_session_id, status")
         }
 )
 @Getter
@@ -42,7 +42,16 @@ public class SeatHold {
 
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
+    // P12-007 retained: non-authoritative parent-event audit/display reference,
+    // always derived from the trusted session booking context. Never a booking
+    // key; inventory is partitioned by eventSessionId only (ADR-011).
     private UUID eventId;
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    // P12-007: authoritative inventory partition (ADR-011); see Reservation
+    // for the V8 gate / TASK-P12-009 NOT NULL follow-up note.
+    private UUID eventSessionId;
 
     @Column(name = "seat_id", nullable = false, updatable = false)
     @ToString.Include

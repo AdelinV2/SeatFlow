@@ -32,7 +32,7 @@ export class WebSocketService implements OnDestroy {
 
   private client: Client | null = null;
   private currentSubscription: StompSubscription | null = null;
-  private activeEventId: string | null = null;
+  private activeEventSessionId: string | null = null;
   private pendingDeactivation: Promise<void> | null = null;
   private onSeatConflict?: ((seatId: string) => void) | null;
   private selectedSeatsRef?: (() => Set<string>) | null;
@@ -41,20 +41,26 @@ export class WebSocketService implements OnDestroy {
   readonly isConnected = signal(false);
   readonly lastSeatUpdate = signal<SeatStatusUpdate | null>(null);
 
-  connectForEvent(
-    eventId: string,
+  /**
+   * Canonical session-scoped subscription: /topic/sessions/{eventSessionId}/seats.
+   * Unsubscribes the previous session before subscribing and reconciles authoritative
+   * REST availability on every connect/reconnect. Full session-switching UX lives in P12-006.
+   */
+  connectForSession(
+    eventSessionId: string,
     onSeatConflict?: (seatId: string) => void,
     selectedSeatsRef?: () => Set<string>,
   ): void {
     this.onSeatConflict = onSeatConflict;
     this.selectedSeatsRef = selectedSeatsRef;
 
-    if (this.activeEventId === eventId && this.client?.active) {
+    if (this.activeEventSessionId === eventSessionId && this.client?.active) {
       return;
     }
 
     const priorDeactivation = this.teardownCurrentClient();
-    this.activeEventId = eventId;
+    const sessionId = eventSessionId;
+    this.activeEventSessionId = sessionId;
     this.connectionStatus.set('CONNECTING');
 
     let client: Client;
@@ -70,13 +76,13 @@ export class WebSocketService implements OnDestroy {
         connectingClient.connectHeaders = token ? { Authorization: `Bearer ${token}` } : {};
       },
       onConnect: () => {
-        if (this.client !== client || this.activeEventId !== eventId) {
+        if (this.client !== client || this.activeEventSessionId !== sessionId) {
           return;
         }
 
         this.connectionStatus.set('CONNECTED');
         this.isConnected.set(true);
-        this.currentSubscription = client.subscribe(`/topic/events/${eventId}/seats`, (message) => {
+        this.currentSubscription = client.subscribe(`/topic/sessions/${sessionId}/seats`, (message) => {
           if (!message.body || this.client !== client) {
             return;
           }
@@ -84,6 +90,11 @@ export class WebSocketService implements OnDestroy {
           try {
             const messageUpdate = JSON.parse(message.body) as
               SeatStatusUpdate | SeatStatusUpdateMessage;
+            // Defense in depth: ignore updates that do not belong to the active session,
+            // even though the broker routes by session-scoped destination.
+            if (!messageUpdate.eventSessionId || messageUpdate.eventSessionId !== sessionId) {
+              return;
+            }
             const isBatchUpdate =
               'seatIds' in messageUpdate && Array.isArray(messageUpdate.seatIds);
             const seatIds: string[] = isBatchUpdate
@@ -106,10 +117,11 @@ export class WebSocketService implements OnDestroy {
                 ? (messageUpdate as SeatStatusUpdateMessage).holdExpiresAt
                 : (messageUpdate as SeatStatusUpdate).expiresAt;
               const update: SeatStatusUpdate = {
-                eventId: messageUpdate.eventId,
+                eventSessionId: messageUpdate.eventSessionId,
                 seatId,
                 status: messageUpdate.status,
                 timestamp: messageUpdate.timestamp,
+                ...(messageUpdate.eventId !== undefined ? { eventId: messageUpdate.eventId } : {}),
                 ...(expiresAt !== undefined ? { expiresAt } : {}),
               };
               this.lastSeatUpdate.set(update);
@@ -125,7 +137,7 @@ export class WebSocketService implements OnDestroy {
         });
 
         this.seatStateService.reconcileAvailability(
-          eventId,
+          sessionId,
           this.selectedSeatsRef?.(),
           this.onSeatConflict ?? undefined,
         );
@@ -156,7 +168,7 @@ export class WebSocketService implements OnDestroy {
     this.client = client;
     if (priorDeactivation) {
       void priorDeactivation.then(() => {
-        if (this.client === client && this.activeEventId === eventId) {
+        if (this.client === client && this.activeEventSessionId === sessionId) {
           client.activate();
         }
       });
@@ -165,6 +177,10 @@ export class WebSocketService implements OnDestroy {
     }
   }
 
+  // P12-007: legacy connectForEvent compat alias removed. Callers must use
+  // connectForSession with an explicit event session ID. The session topic
+  // /topic/sessions/{id}/seats is the sole realtime channel; the old
+  // event-scoped destination receives nothing.
   disconnect(): void {
     this.onSeatConflict = undefined;
     this.selectedSeatsRef = undefined;
@@ -186,7 +202,7 @@ export class WebSocketService implements OnDestroy {
 
     const client = this.client;
     this.client = null;
-    this.activeEventId = null;
+    this.activeEventSessionId = null;
     if (client) {
       let deactivation: Promise<void>;
       try {

@@ -9,6 +9,7 @@ import com.seatflow.reservation.client.dto.EventSeatMapClientResponse;
 import com.seatflow.reservation.client.dto.SeatMapSectionClientDto;
 import com.seatflow.reservation.client.dto.SeatMapSeatClientDto;
 import com.seatflow.reservation.client.dto.SeatPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.client.exception.EventClientUnavailableException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -24,7 +25,6 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +42,7 @@ public class EventClientImpl implements EventClient {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
     private static final String SEAT_MAP_PATH = "/api/events/{eventId}/seat-map";
+    private static final String BOOKING_CONTEXT_PATH = "/internal/event-sessions/{sessionId}/booking-context";
     private static final String PUBLISHED_STATUS = "PUBLISHED";
 
     private final RestClient.Builder loadBalancedBuilder;
@@ -108,6 +109,40 @@ public class EventClientImpl implements EventClient {
         }
     }
 
+    @Override
+    public SessionBookingContextDto getSessionBookingContext(UUID eventSessionId) {
+        if (eventSessionId == null) {
+            throw new ValidationException("Event session ID is required", ErrorCode.INVALID_REQUEST);
+        }
+        try {
+            return circuitBreaker.executeSupplier(() -> doGetBookingContext(eventSessionId));
+        } catch (CallNotPermittedException e) {
+            throw new EventClientUnavailableException(
+                    "Event service circuit is open for eventSessionId=" + eventSessionId, e);
+        }
+    }
+
+    private SessionBookingContextDto doGetBookingContext(UUID eventSessionId) {
+        try {
+            SessionBookingContextDto response = client().get()
+                    .uri(BOOKING_CONTEXT_PATH, eventSessionId)
+                    .retrieve()
+                    .body(SessionBookingContextDto.class);
+            if (response == null || response.eventSessionId() == null || response.eventId() == null) {
+                throw new EventClientUnavailableException(
+                        "Event service returned an incomplete booking context for eventSessionId=" + eventSessionId);
+            }
+            if (!eventSessionId.equals(response.eventSessionId())) {
+                throw new EventClientUnavailableException(
+                        "Event service returned a booking context for a different session: requested="
+                                + eventSessionId + ", received=" + response.eventSessionId());
+            }
+            return response;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
+            throw new ValidationException("Unknown event session: " + eventSessionId, ErrorCode.INVALID_REQUEST);
+        }
+    }
+
     private EventPricingDetails doGetPricing(UUID eventId, Set<UUID> requestedSeatIds) {
         EventSeatMapClientResponse response = client().get()
                 .uri(SEAT_MAP_PATH, eventId)
@@ -122,17 +157,21 @@ public class EventClientImpl implements EventClient {
     }
 
     private EventPricingDetails mapToPricingDetails(UUID eventId,
-                                                    EventSeatMapClientResponse response,
-                                                    Set<UUID> requestedSeatIds) {
+                                                     EventSeatMapClientResponse response,
+                                                     Set<UUID> requestedSeatIds) {
         if (!PUBLISHED_STATUS.equalsIgnoreCase(response.status())) {
             throw new ValidationException("Event is not published and cannot be reserved", ErrorCode.INVALID_REQUEST);
         }
 
-        Instant eventDate = response.eventDate();
-        if (eventDate == null || eventDate.isBefore(Instant.now().plus(Duration.ofMinutes(15)))) {
-            throw new ValidationException("Event is in the past or too close to start time", ErrorCode.INVALID_REQUEST);
-        }
-
+        // P12-007 (REV-001): no temporal gate on the seat-map payload. The
+        // wire response carries venue layout + pricing only (no event-level
+        // instant exists to check), and the removed 15-minute event-level
+        // buffer is intentionally NOT re-implemented here: session
+        // bookability — session status, sale windows, startsAt/endsAt — is
+        // enforced from the trusted SessionBookingContextDto in
+        // ReservationServiceImpl.validateBookingContext, with saleEndsAt as
+        // the operator-controlled cutoff. Gating pricing on a client-visible
+        // instant would reintroduce an event-level booking semantic.
         List<SeatMapSectionClientDto> sections = response.sections();
         if (sections == null || sections.isEmpty()) {
             throw new EventClientUnavailableException("Seat map unavailable for eventId=" + eventId);
@@ -179,7 +218,6 @@ public class EventClientImpl implements EventClient {
         return new EventPricingDetails(
                 eventId,
                 response.status(),
-                eventDate,
                 new ArrayList<>(requestedSeatIds),
                 seatPrices,
                 seatDetails);

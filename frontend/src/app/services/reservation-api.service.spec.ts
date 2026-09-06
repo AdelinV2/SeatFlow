@@ -30,7 +30,7 @@ describe('ReservationApiService', () => {
 
   it('should create a reservation hold via POST /api/reservations', () => {
     const request: CreateReservationRequest = {
-      eventId: 'ev-101',
+      eventSessionId: 'sess-101',
       customerEmail: 'guest@example.com',
       seatIds: ['s-1', 's-2'],
       seatPrices: [50, 75],
@@ -40,6 +40,7 @@ describe('ReservationApiService', () => {
     const mockResponse: ReservationResponse = {
       id: 'res-999',
       eventId: 'ev-101',
+      eventSessionId: 'sess-101',
       customerEmail: 'guest@example.com',
       status: 'PENDING',
       expiresAt: '2026-10-10T18:15:00Z',
@@ -52,6 +53,7 @@ describe('ReservationApiService', () => {
 
     service.createReservation(request).subscribe((res) => {
       expect(res.id).toBe('res-999');
+      expect(res.eventSessionId).toBe('sess-101');
       expect(res.status).toBe('PENDING');
       expect(res.totalAmount).toBe(125);
       expect(res.seats.length).toBe(2);
@@ -82,6 +84,20 @@ describe('ReservationApiService', () => {
     expect(req.request.method).toBe('GET');
     expect(req.request.headers.get('X-Customer-Email')).toBe('guest@example.com');
     req.flush(mockResponse);
+  });
+
+  it('should get seat availability via GET /api/event-sessions/:id/seats/availability', () => {
+    service.getSeatAvailability('sess-101').subscribe((res) => {
+      expect(res.eventSessionId).toBe('sess-101');
+      expect(res.seatStatuses?.length).toBe(1);
+    });
+
+    const req = httpMock.expectOne('/api/event-sessions/sess-101/seats/availability');
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      eventSessionId: 'sess-101',
+      seatStatuses: [{ seatId: 's-1', status: 'AVAILABLE' }],
+    });
   });
 
   it('should cancel a reservation hold with optional guest proof header', () => {
@@ -117,3 +133,4 @@ describe('ReservationApiService', () => {
     });
   });
 });
+

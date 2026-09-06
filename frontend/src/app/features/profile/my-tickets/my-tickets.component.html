@@ -172,7 +172,7 @@
               <div class="text-xs text-[var(--color-text-secondary)] space-y-1">
                 <p class="font-bold text-[var(--color-text-primary)] flex items-center gap-1.5">
                   <span>📅</span>
-                  <span>{{ (eventInfo?.eventDate || ticket.eventDate || ticket.createdAt) | sfDate:'full' }}</span>
+                  <span>{{ (showingDate(ticket) || ticket.createdAt) | sfDate:'full' }}</span>
                 </p>
                 <p class="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5 truncate">
                   <span>📍</span>

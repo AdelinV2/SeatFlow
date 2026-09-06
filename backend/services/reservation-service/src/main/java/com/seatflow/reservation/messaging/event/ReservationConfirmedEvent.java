@@ -11,12 +11,16 @@ import java.util.UUID;
 @Schema(description = "Event published when a reservation hold is confirmed after successful payment")
 public record ReservationConfirmedEvent(
         UUID reservationId,
+        UUID eventSessionId,
         UUID eventId,
         UUID userId,
         String customerEmail,
         List<UUID> seatIds,
         BigDecimal totalAmount,
         UUID paymentId,
+        Instant sessionStartsAt,
+        Instant sessionEndsAt,
+        String sessionTimezone,
         Instant occurredAt
 ) implements DomainEvent {
 }

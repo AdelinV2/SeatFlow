@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seatflow.common.observability.tracing.W3cTraceContextPropagator;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
+import com.seatflow.reservation.client.dto.SessionBookingContextDto;
 import com.seatflow.reservation.mapper.ReservationMapper;
 import com.seatflow.reservation.model.entity.OutboxEvent;
 import com.seatflow.reservation.model.entity.Reservation;
@@ -39,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -67,13 +69,22 @@ class ReservationMetricsTest {
         SecurityContextHolder.clearContext();
     }
 
-    private CreateReservationRequest req(UUID eventId, List<UUID> seatIds, List<BigDecimal> prices, String key) {
-        return new CreateReservationRequest(eventId, "guest@example.com", seatIds, prices, key);
+    private CreateReservationRequest req(UUID sessionId, UUID ignoredLegacyEventId, List<UUID> seatIds, List<BigDecimal> prices, String key) {
+        // P12-007: client request carries session only; parent event derives server-side.
+        return new CreateReservationRequest(sessionId, "guest@example.com", seatIds, prices, key);
     }
 
-    private Reservation stub(UUID id, UUID eventId) {
+    private void stubBookableSession(UUID sessionId, UUID eventId) {
+        lenient().when(eventClient.getSessionBookingContext(sessionId)).thenReturn(new SessionBookingContextDto(
+                sessionId, eventId, "PUBLISHED", "SCHEDULED",
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000),
+                null, null, UUID.randomUUID()));
+    }
+
+    private Reservation stub(UUID id, UUID sessionId, UUID eventId) {
         return Reservation.builder()
                 .id(id)
+                .eventSessionId(sessionId)
                 .eventId(eventId)
                 .customerEmail("guest@example.com")
                 .status(ReservationStatus.PENDING)
@@ -84,26 +95,36 @@ class ReservationMetricsTest {
                 .build();
     }
 
+    private com.seatflow.reservation.web.dto.response.ReservationResponse response(UUID id, UUID sessionId, UUID eventId) {
+        return new com.seatflow.reservation.web.dto.response.ReservationResponse(id, sessionId, eventId, null,
+                "guest@example.com", ReservationStatus.PENDING, Instant.now().plusSeconds(900),
+                new BigDecimal("50.00"), 1,
+                Instant.now().plusSeconds(86400), Instant.now().plusSeconds(90000), null,
+                List.of(), Instant.now());
+    }
+
     @Test
     void shouldIncrementCreatedCounterAfterCommittedHold() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
-        CreateReservationRequest request = req(eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-created");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-created");
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
 
+        stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-created")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), any())).thenReturn(List.of());
-        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, eventId));
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), any())).thenReturn(List.of());
+        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, sessionId, eventId));
         when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             r.setId(reservationId);
             return r;
         });
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        when(reservationMapper.toResponse(any())).thenReturn(new com.seatflow.reservation.web.dto.response.ReservationResponse(reservationId, eventId, null, "guest@example.com", ReservationStatus.PENDING, Instant.now().plusSeconds(900), new BigDecimal("50.00"), 1, List.of(), Instant.now()));
+        when(reservationMapper.toResponse(any())).thenReturn(response(reservationId, sessionId, eventId));
 
         service.createReservation(request, null);
 
@@ -116,14 +137,16 @@ class ReservationMetricsTest {
 
     @Test
     void shouldIncrementConflictCounterOnAlreadyHeld() {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
-        CreateReservationRequest request = req(eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-conflict");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-conflict");
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-conflict")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), any())).thenReturn(List.of(SeatHold.builder().seatId(seatId).status(SeatHoldStatus.HELD).build()));
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), any())).thenReturn(List.of(SeatHold.builder().seatId(seatId).status(SeatHoldStatus.HELD).build()));
 
         assertThatThrownBy(() -> service.createReservation(request, null)).isInstanceOf(com.seatflow.common.domain.exception.ConflictException.class);
 
@@ -136,7 +159,7 @@ class ReservationMetricsTest {
     void shouldIncrementConflictCounterOnLimitExceeded() {
         List<UUID> seatIds = java.util.stream.IntStream.range(0, 11).mapToObj(i -> UUID.randomUUID()).toList();
         List<BigDecimal> prices = seatIds.stream().map(s -> new BigDecimal("10.00")).toList();
-        CreateReservationRequest request = req(UUID.randomUUID(), seatIds, prices, "idem-limit");
+        CreateReservationRequest request = req(UUID.randomUUID(), UUID.randomUUID(), seatIds, prices, "idem-limit");
 
         assertThatThrownBy(() -> service.createReservation(request, null)).isInstanceOf(com.seatflow.common.domain.exception.ValidationException.class);
 
@@ -146,23 +169,25 @@ class ReservationMetricsTest {
 
     @Test
     void shouldRecordHoldDurationTimer() throws Exception {
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
-        CreateReservationRequest request = req(eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-dur");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-dur");
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-dur")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), any())).thenReturn(List.of());
-        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, eventId));
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), any())).thenReturn(List.of());
+        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, sessionId, eventId));
         when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             r.setId(reservationId);
             return r;
         });
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        when(reservationMapper.toResponse(any())).thenReturn(new com.seatflow.reservation.web.dto.response.ReservationResponse(reservationId, eventId, null, "guest@example.com", ReservationStatus.PENDING, Instant.now().plusSeconds(900), new BigDecimal("50.00"), 1, List.of(), Instant.now()));
+        when(reservationMapper.toResponse(any())).thenReturn(response(reservationId, sessionId, eventId));
 
         service.createReservation(request, null);
 
@@ -176,7 +201,7 @@ class ReservationMetricsTest {
     @Test
     void shouldIncrementExpiredCounterOnSweeperRelease() {
         UUID id = UUID.randomUUID();
-        Reservation r = stub(id, UUID.randomUUID());
+        Reservation r = stub(id, UUID.randomUUID(), UUID.randomUUID());
         r.setStatus(ReservationStatus.PENDING);
         SeatHold hold = SeatHold.builder().id(UUID.randomUUID()).seatId(UUID.randomUUID()).status(SeatHoldStatus.HELD).price(new BigDecimal("10.00")).build();
         r.setSeatHolds(new HashSet<>(Set.of(hold)));
@@ -209,26 +234,29 @@ class ReservationMetricsTest {
         ReservationServiceImpl failingService = new ReservationServiceImpl(reservationRepository, seatHoldRepository, outboxEventRepository,
                 reservationMapper, eventClient, objectMapper, failingRegistry, propagator);
 
+        UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         UUID reservationId = UUID.randomUUID();
         List<UUID> seatIds = List.of(seatId);
-        CreateReservationRequest request = req(eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-no-rollback");
-        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", Instant.now().plusSeconds(3600), seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        CreateReservationRequest request = req(sessionId, eventId, seatIds, List.of(new BigDecimal("50.00")), "idem-no-rollback");
+        EventPricingDetails pricing = new EventPricingDetails(eventId, "PUBLISHED", seatIds, Map.of(seatId, new BigDecimal("50.00")));
+        stubBookableSession(sessionId, eventId);
         when(eventClient.getEventSeatPricing(eq(eventId), any())).thenReturn(pricing);
         when(reservationRepository.findWithSeatHoldsByIdempotencyKey("idem-no-rollback")).thenReturn(Optional.empty());
-        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(eventId), any())).thenReturn(List.of());
-        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, eventId));
+        when(seatHoldRepository.findAndLockSeatsForUpdate(eq(sessionId), any())).thenReturn(List.of());
+        when(reservationMapper.toEntity(any(), any())).thenReturn(stub(null, sessionId, eventId));
         when(reservationRepository.saveAndFlush(any(Reservation.class))).thenAnswer(inv -> {
             Reservation r = inv.getArgument(0);
             r.setId(reservationId);
             return r;
         });
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        when(reservationMapper.toResponse(any())).thenReturn(new com.seatflow.reservation.web.dto.response.ReservationResponse(reservationId, eventId, null, "guest@example.com", ReservationStatus.PENDING, Instant.now().plusSeconds(900), new BigDecimal("50.00"), 1, List.of(), Instant.now()));
+        when(reservationMapper.toResponse(any())).thenReturn(response(reservationId, sessionId, eventId));
 
         // should not throw despite meter failure
         var resp = failingService.createReservation(request, null);
         assertThat(resp).isNotNull();
     }
 }
+

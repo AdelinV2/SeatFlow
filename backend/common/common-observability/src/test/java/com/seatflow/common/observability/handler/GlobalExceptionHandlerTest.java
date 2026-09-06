@@ -81,8 +81,26 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void shouldMapUnhandledExceptionTo500WithoutLeakingDetails() {
-        when(request.getRequestURI()).thenReturn("/api/x");
+    void shouldMapNoResourceFoundTo404() {
+        // P12-008 scenario J: unmapped/removed routes answer 404, never 500.
+        when(request.getRequestURI()).thenReturn("/api/reservations/events/123/availability");
+        when(request.getMethod()).thenReturn("GET");
+        org.springframework.web.servlet.resource.NoResourceFoundException ex =
+                new org.springframework.web.servlet.resource.NoResourceFoundException(
+                        org.springframework.http.HttpMethod.GET, "/api/reservations/events/123/availability",
+                        "No static resource /api/reservations/events/123/availability.");
+        ResponseEntity<ApiErrorResponse> response = handler.handleNoResourceFound(ex, request);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        ApiErrorResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.errorCode()).isEqualTo(ErrorCode.RESOURCE_NOT_FOUND.getCode());
+        assertThat(body.status()).isEqualTo(404);
+        assertThat(body.message()).contains("/api/reservations/events/123/availability");
+    }
+
+    @Test
+    void shouldMapUnhandledExceptionTo500WithoutLeakingDetails() {        when(request.getRequestURI()).thenReturn("/api/x");
         RuntimeException cause = new RuntimeException("DB connection refused: secrets...");
         ResponseEntity<ApiErrorResponse> response = handler.handleUnhandledException(cause, request);
 

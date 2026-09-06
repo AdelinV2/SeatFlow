@@ -22,6 +22,7 @@ import java.util.UUID;
     },
     indexes = {
         @Index(name = "idx_tickets_event_status", columnList = "event_id, status"),
+        @Index(name = "idx_tickets_event_session_status", columnList = "event_session_id, status"),
         @Index(name = "idx_tickets_user_id", columnList = "user_id"),
         @Index(name = "idx_tickets_customer_email", columnList = "customer_email"),
         @Index(name = "idx_tickets_reservation_id", columnList = "reservation_id"),
@@ -64,6 +65,19 @@ public class Ticket {
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
     private UUID eventId;
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    private UUID eventSessionId; // Immutable showing identity snapshot (P12-004).
+
+    @Column(name = "session_starts_at", updatable = false)
+    private Instant sessionStartsAt; // Immutable showing snapshot (P12-004); render source of truth.
+
+    @Column(name = "session_ends_at", updatable = false)
+    private Instant sessionEndsAt; // Immutable showing snapshot (P12-004); render source of truth.
+
+    @Column(name = "session_timezone", length = 64, updatable = false)
+    private String sessionTimezone; // Nullable IANA ZoneId metadata (P12-004).
 
     @Column(name = "seat_id", nullable = false, updatable = false)
     @ToString.Include

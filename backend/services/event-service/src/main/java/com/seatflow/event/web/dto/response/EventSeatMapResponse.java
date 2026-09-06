@@ -3,7 +3,6 @@ package com.seatflow.event.web.dto.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,7 +13,8 @@ public record EventSeatMapResponse(
     @Schema(description = "Owning venue UUID") UUID venueId,
     @Schema(description = "Event title") String eventTitle,
     @Schema(description = "Event status") String status,
-    @Schema(description = "UTC start time of the event") Instant eventDate,
+    // P12-007: legacy eventDate removed. Seat-map carries venue layout + pricing
+    // only; showing schedule lives exclusively on EventSession.
     @Schema(description = "Venue name") String venueName,
     @Schema(description = "Total venue capacity") Integer venueCapacity,
     @Schema(description = "Total configured seats across all sections") Long totalConfiguredSeats,
@@ -23,10 +23,10 @@ public record EventSeatMapResponse(
     @Schema(description = "Venue-level non-bookable visual layout elements") List<LayoutElement> layoutElements
 
 ) {
-    public EventSeatMapResponse(UUID eventId, UUID venueId, String eventTitle, Instant eventDate,
+    public EventSeatMapResponse(UUID eventId, UUID venueId, String eventTitle,
                                 String venueName, Integer venueCapacity, Long totalConfiguredSeats,
                                 List<SeatMapSectionResponse> sections) {
-        this(eventId, venueId, eventTitle, "PUBLISHED", eventDate, venueName, venueCapacity, totalConfiguredSeats,
+        this(eventId, venueId, eventTitle, "PUBLISHED", venueName, venueCapacity, totalConfiguredSeats,
                 sections, 0L, List.of());
     }
 

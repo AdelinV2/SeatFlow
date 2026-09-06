@@ -11,12 +11,20 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Request body to create a 15-minute seat reservation hold. Maximum 10 seats per reservation.")
+@Schema(description = "Request body to create a 15-minute seat reservation hold. Maximum 10 seats per reservation. "
+        + "The event session is the authoritative inventory key (ADR-011).")
 public record CreateReservationRequest(
 
-        @Schema(description = "UUID of the target event", example = "123e4567-e89b-12d3-a456-426614174000")
-        @NotNull(message = "eventId is required")
-        UUID eventId,
+        @Schema(description = "UUID of the target event session (authoritative booking key)",
+                example = "123e4567-e89b-12d3-a456-426614174000")
+        @NotNull(message = "eventSessionId is required")
+        UUID eventSessionId,
+
+        // P12-007: legacy eventId compat field removed (ADR-011). The session is
+        // the sole booking key; the parent event is derived server-side from the
+        // trusted session booking context. Unknown JSON properties (including a
+        // legacy eventId) are rejected with 400 via FAIL_ON_UNKNOWN_PROPERTIES,
+        // never silently ignored or used for session inference.
 
         @Schema(description = "Contact email for the reservation. Required for guests; authenticated users may omit to use their JWT email (ADR-001).",
                 example = "guest@example.com")

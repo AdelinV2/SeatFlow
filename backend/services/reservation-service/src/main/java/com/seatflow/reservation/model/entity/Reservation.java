@@ -22,7 +22,7 @@ import java.util.UUID;
         },
         indexes = {
                 @Index(name = "idx_res_pending_expires_at", columnList = "expires_at"),
-                @Index(name = "idx_res_event_status", columnList = "event_id, status"),
+                @Index(name = "idx_res_session_status", columnList = "event_session_id, status"),
                 @Index(name = "idx_res_user_status", columnList = "user_id, status"),
                 @Index(name = "idx_res_customer_email", columnList = "customer_email"),
                 @Index(name = "idx_res_created_at", columnList = "created_at")
@@ -51,9 +51,33 @@ public class Reservation {
     @ToString.Include
     private String customerEmail;
 
-    @Column(name = "event_id", nullable = false)
+    @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
+    // P12-007 retained: non-authoritative parent-event audit/display reference,
+    // always derived from the trusted session booking context. Never a booking
+    // key; inventory is partitioned by eventSessionId only (ADR-011).
     private UUID eventId;
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    // P12-007: authoritative inventory partition (ADR-011). Always populated by
+    // the service from the trusted session booking context; V8 aborts migration
+    // when NULLs remain. Hard NOT NULL is tracked follow-up TASK-P12-009 (kept
+    // nullable until the backfill suites that persist legacy-NULL rows move to
+    // a staged pre-constraint schema); SessionIntegrityStartupCheck alerts on
+    // NULL session rows at boot.
+    private UUID eventSessionId;
+
+    @Column(name = "session_starts_at", updatable = false)
+    @ToString.Include
+    private Instant sessionStartsAt; // Immutable showing snapshot captured at hold time (P12-004).
+
+    @Column(name = "session_ends_at", updatable = false)
+    @ToString.Include
+    private Instant sessionEndsAt; // Immutable showing snapshot captured at hold time (P12-004).
+
+    @Column(name = "session_timezone", length = 64, updatable = false)
+    private String sessionTimezone; // Nullable IANA ZoneId metadata (P12-004); null until trusted source exposes it.
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)

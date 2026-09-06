@@ -25,7 +25,8 @@ import java.util.UUID;
         @Index(name = "idx_payments_user_id", columnList = "user_id"),
         @Index(name = "idx_payments_customer_email", columnList = "customer_email"),
         @Index(name = "idx_payments_status_created", columnList = "status, created_at"),
-        @Index(name = "idx_payments_event_id", columnList = "event_id")
+        @Index(name = "idx_payments_event_id", columnList = "event_id"),
+        @Index(name = "idx_payments_event_session_id", columnList = "event_session_id")
     }
 )
 @DynamicUpdate
@@ -57,6 +58,19 @@ public class Payment {
     @Column(name = "event_id", nullable = false, updatable = false)
     @ToString.Include
     private UUID eventId;
+
+    @Column(name = "event_session_id", updatable = false)
+    @ToString.Include
+    private UUID eventSessionId; // Audit/correlation (P12-004); derived from trusted reservation state.
+
+    @Column(name = "session_starts_at", updatable = false)
+    private Instant sessionStartsAt; // Immutable showing snapshot (P12-004).
+
+    @Column(name = "session_ends_at", updatable = false)
+    private Instant sessionEndsAt; // Immutable showing snapshot (P12-004).
+
+    @Column(name = "session_timezone", length = 64, updatable = false)
+    private String sessionTimezone; // Nullable IANA ZoneId metadata (P12-004).
 
     @Column(name = "stripe_payment_intent_id")
     @ToString.Include

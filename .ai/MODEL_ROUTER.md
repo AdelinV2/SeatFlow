@@ -31,6 +31,8 @@ Primary roles: independent backend judgment, difficult debugging, substantive re
 
 **Global Codex rule:** standard speed only. `Fast mode = OFF` unless the user explicitly requests Fast for that run.
 
+**Codex effort case rule (case-sensitive):** Codex reasoning effort values must always be lowercase when passed to the harness/subagent selector: `low | medium | high | xhigh | max`. Never pass `High`, `Medium`, `Low`, `xHigh`, or `Max` for a Codex (Luna/Terra/Sol) effort — subagent selection is case-sensitive and `High` fails where `high` succeeds. Risk labels such as `Failure risk: Low | Medium | High | Critical` keep their capitalized form; only the Codex effort token is lowercase.
+
 ### Antigravity Pro
 
 Primary roles: supervisor/coordinator, routine planning, frontend/browser/visual work, fast independent analysis, normal final QA.
@@ -56,7 +58,7 @@ Current exact selections:
 - Free: `opencode/muse-spark-1.3-contributor-free`
 - Go: `opencode-go/muse-spark-1.3-contributor`
 
-Other secondary OpenCode Go models may be used only when the route below explicitly calls for them or when the preferred model is unavailable/unsuitable.
+No other OpenCode / OpenCode Go model is recommended. Do not route OpenCode work to GLM 5.3 / GLM-Flash, Hy3, Hy4 (including preview variants), Kimi, Qwen, DeepSeek, MiniMax, Grok, or any other OpenCode catalog model. The only permitted OpenCode routes are the two Muse Spark 1.3 routes above. If both Muse routes are unavailable or prohibited, use the task-specific Alternative from this router (normally a non-OpenCode harness), not another OpenCode model.
 
 ---
 
@@ -185,11 +187,11 @@ Best for:
 - large-context task decomposition;
 - quick plan validation before Muse execution.
 
-**Alternative:** `GPT-5.6 Terra High`.
+**Alternative:** `GPT-5.6 Terra high`.
 
 ### 5.3 Backend Architecture / ADR / Subtle Design Judgment
 
-**Recommended:** `GPT-5.6 Terra High`, Fast OFF.
+**Recommended:** `GPT-5.6 Terra high`, Fast OFF.
 
 Use for:
 
@@ -202,7 +204,7 @@ Use for:
 
 **Alternative:** `Gemini 3.8 Flash High`.
 
-**Escalate:** `Terra xHigh` only for unusually difficult unresolved architecture; `Sol High` when the design directly controls critical money/security/data-integrity/concurrency invariants.
+**Escalate:** `Terra xhigh` only for unusually difficult unresolved architecture; `Sol high` when the design directly controls critical money/security/data-integrity/concurrency invariants.
 
 ### 5.4 Deterministic Backend / General Implementation
 
@@ -249,25 +251,25 @@ Require reproduction/regression evidence when practical.
 
 **Alternative:** `Gemini 3.8 Flash High`.
 
-After one meaningful failed repair where root cause remains unclear, **escalate diagnosis** to Terra High rather than blindly repeating Muse.
+After one meaningful failed repair where root cause remains unclear, **escalate diagnosis** to Terra high rather than blindly repeating Muse.
 
 ### 5.7 Difficult Root-Cause Debugging
 
-**Recommended:** `GPT-5.6 Terra High`, Fast OFF.
+**Recommended:** `GPT-5.6 Terra high`, Fast OFF.
 
 Best for ambiguous backend failures, transaction semantics, cross-service root cause, and interpreting weak/flaky evidence.
 
 **Alternative:** `Gemini 3.8 Flash High`, especially when tool/browser/repo exploration dominates.
 
-**Escalate:** `Terra xHigh` or `Sol High` only if the remaining ambiguity is unusually difficult or becomes critical-risk.
+**Escalate:** `Terra xhigh` or `Sol high` only if the remaining ambiguity is unusually difficult or becomes critical-risk.
 
 ### 5.8 Independent Review
 
-**Small/mechanical review:** `GPT-5.6 Terra Medium`, Fast OFF.
+**Small/mechanical review:** `GPT-5.6 Terra medium`, Fast OFF.
 
-**Substantive review:** `GPT-5.6 Terra High`, Fast OFF.
+**Substantive review:** `GPT-5.6 Terra high`, Fast OFF.
 
-**Critical money/security/concurrency/data-integrity review:** `GPT-5.6 Sol High`, Fast OFF.
+**Critical money/security/concurrency/data-integrity review:** `GPT-5.6 Sol high`, Fast OFF.
 
 **Alternative normal reviewer:** `Gemini 3.8 Flash High` when Codex quota is constrained or independent model-family diversity is desirable.
 
@@ -275,7 +277,7 @@ Reviewer independence matters more than using the most expensive model twice.
 
 ### 5.9 Critical Correctness Authority
 
-Use `GPT-5.6 Sol High`, Fast OFF when hidden mistakes can plausibly cause:
+Use `GPT-5.6 Sol high`, Fast OFF when hidden mistakes can plausibly cause:
 
 - double booking;
 - incorrect 15-minute hold semantics under concurrency;
@@ -286,19 +288,19 @@ Use `GPT-5.6 Sol High`, Fast OFF when hidden mistakes can plausibly cause:
 - distributed ordering/consistency violations;
 - unsafe destructive migrations.
 
-Use `Sol xHigh` only after `Sol High` leaves material unresolved ambiguity or the incident is genuinely severe.
+Use `Sol xhigh` only after `Sol high` leaves material unresolved ambiguity or the incident is genuinely severe.
 
-`Sol Max` is an exceptional final escalation, not a routine stage.
+`Sol max` is an exceptional final escalation, not a routine stage.
 
 ### 5.10 Utility / Documentation / Status
 
 Prefer `Gemini 3.8 Flash Medium` for routine repository status, documentation drafting, extraction, and simple coordination because it preserves Codex quota.
 
-Use `GPT-5.6 Luna Low/Medium`, Fast OFF when Codex-specific context/tooling is useful.
+Use `GPT-5.6 Luna low/medium`, Fast OFF when Codex-specific context/tooling is useful.
 
-`Luna High` is a bounded fallback for small coding/judgment tasks, not the normal reviewer for substantive SeatFlow changes.
+`Luna high` is a bounded fallback for small coding/judgment tasks, not the normal reviewer for substantive SeatFlow changes.
 
-Do not use Luna Max or Luna High Fast as a default workaround for difficult reasoning. Move to Terra instead.
+Do not use Luna max or Luna high fast as a default workaround for difficult reasoning. Move to Terra instead.
 
 ---
 
@@ -306,37 +308,37 @@ Do not use Luna Max or Luna High Fast as a default workaround for difficult reas
 
 | SeatFlow stage/task | Recommended | Alternative | Escalation / review |
 |---|---|---|---|
-| Supervisor only / stage coordination | Gemini 3.8 Medium | Luna Low/Medium | Gemini 3.8 High if supervisor must analyze deeply |
-| Routine task planning | Gemini 3.8 High | Terra High | Terra High/xHigh when backend design ambiguity dominates |
-| Create atomic task `.md` | Gemini 3.8 High | Terra High | Sol High if critical invariant/ADR decision |
-| Backend architecture / ADR | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
-| Tiny mechanical backend change | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium review only if meaningful risk |
-| Normal substantive backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review |
-| CRUD / DTO / mapper / repository / controller | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review when substantive |
-| Unit/integration/concurrency test implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High for weak oracle/test strategy |
-| Large cross-file backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra High review; Sol High if critical risk |
-| Complex Spring/JPA implementation from complete plan | Muse 1.3 xHigh | Terra High | Terra High review; Sol High critical review |
-| Kafka/outbox implementation from complete contract | Muse 1.3 xHigh | Terra High | Terra High review; Sol High if delivery/ordering invariant changes |
-| Angular / TypeScript / Tailwind | Gemini 3.8 High | Muse 1.3 xHigh | Terra High review for non-trivial state/contracts |
+| Supervisor only / stage coordination | Gemini 3.8 Medium | Luna low/medium | Gemini 3.8 High if supervisor must analyze deeply |
+| Routine task planning | Gemini 3.8 High | Terra high | Terra high/xhigh when backend design ambiguity dominates |
+| Create atomic task `.md` | Gemini 3.8 High | Terra high | Sol high if critical invariant/ADR decision |
+| Backend architecture / ADR | Terra high | Gemini 3.8 High | Terra xhigh; Sol high if critical |
+| Tiny mechanical backend change | Muse 1.3 High | Gemini 3.8 Medium/High | Terra medium review only if meaningful risk |
+| Normal substantive backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra high review |
+| CRUD / DTO / mapper / repository / controller | Muse 1.3 xHigh | Gemini 3.8 High | Terra high review when substantive |
+| Unit/integration/concurrency test implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra high for weak oracle/test strategy |
+| Large cross-file backend implementation | Muse 1.3 xHigh | Gemini 3.8 High | Terra high review; Sol high if critical risk |
+| Complex Spring/JPA implementation from complete plan | Muse 1.3 xHigh | Terra high | Terra high review; Sol high critical review |
+| Kafka/outbox implementation from complete contract | Muse 1.3 xHigh | Terra high | Terra high review; Sol high if delivery/ordering invariant changes |
+| Angular / TypeScript / Tailwind | Gemini 3.8 High | Muse 1.3 xHigh | Terra high review for non-trivial state/contracts |
 | Simple frontend styling/component | Gemini 3.8 Medium | Muse 1.3 High | Gemini High if scope grows |
-| Screenshot/browser-heavy UI | Gemini 3.8 High | Muse 1.3 xHigh | Terra High only for contract/state risk |
-| Large-context repo exploration | Gemini 3.8 High | Muse 1.3 xHigh | Terra High when subtle backend conclusions matter |
-| Clear localized reproducible bug | Muse 1.3 High/xHigh | Gemini 3.8 High | Terra High diagnosis after failed meaningful repair |
-| Difficult backend root cause | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
-| Browser/tool-heavy debugging | Gemini 3.8 High | Muse 1.3 xHigh | Terra High if root cause ambiguous |
-| Cross-service root cause | Terra High | Gemini 3.8 High | Terra xHigh; Sol High if critical |
-| Intermittent concurrency/distributed bug | Sol High | Terra xHigh | Sol xHigh if unresolved |
-| Routine small review | Terra Medium | Gemini 3.8 High | Terra High if meaningful issue surface appears |
-| Substantive code review | Terra High | Gemini 3.8 High | Sol High for critical domain |
-| Security/payment/concurrency final review | Sol High | Terra xHigh | Sol xHigh if unresolved |
-| Mechanical refactor execution | Muse 1.3 High | Gemini 3.8 Medium/High | Terra Medium review if behavior risk |
-| Large repo-wide refactor execution | Muse 1.3 xHigh | Gemini 3.8 High | Terra High planning/review |
-| Routine DB migration from approved schema | Muse 1.3 High/xHigh | Terra High | Terra High review |
-| Dangerous/destructive migration | Sol High design/review + Muse xHigh execution | Terra xHigh design/review | Sol xHigh if unresolved |
-| CI / Docker / observability | Muse 1.3 xHigh | Gemini 3.8 High | Terra High hard diagnosis |
-| Normal final QA | Gemini 3.8 High | Terra High | Terra High if hidden backend semantics dominate |
-| Critical final QA / hidden-invariant verification | Terra High + required deterministic tests | Gemini 3.8 High | Sol High final judgment when critical |
-| Documentation / extraction / status | Gemini 3.8 Medium | Luna Low/Medium | Terra only if reasoning becomes non-trivial |
+| Screenshot/browser-heavy UI | Gemini 3.8 High | Muse 1.3 xHigh | Terra high only for contract/state risk |
+| Large-context repo exploration | Gemini 3.8 High | Muse 1.3 xHigh | Terra high when subtle backend conclusions matter |
+| Clear localized reproducible bug | Muse 1.3 High/xHigh | Gemini 3.8 High | Terra high diagnosis after failed meaningful repair |
+| Difficult backend root cause | Terra high | Gemini 3.8 High | Terra xhigh; Sol high if critical |
+| Browser/tool-heavy debugging | Gemini 3.8 High | Muse 1.3 xHigh | Terra high if root cause ambiguous |
+| Cross-service root cause | Terra high | Gemini 3.8 High | Terra xhigh; Sol high if critical |
+| Intermittent concurrency/distributed bug | Sol high | Terra xhigh | Sol xhigh if unresolved |
+| Routine small review | Terra medium | Gemini 3.8 High | Terra high if meaningful issue surface appears |
+| Substantive code review | Terra high | Gemini 3.8 High | Sol high for critical domain |
+| Security/payment/concurrency final review | Sol high | Terra xhigh | Sol xhigh if unresolved |
+| Mechanical refactor execution | Muse 1.3 High | Gemini 3.8 Medium/High | Terra medium review if behavior risk |
+| Large repo-wide refactor execution | Muse 1.3 xHigh | Gemini 3.8 High | Terra high planning/review |
+| Routine DB migration from approved schema | Muse 1.3 High/xHigh | Terra high | Terra high review |
+| Dangerous/destructive migration | Sol high design/review + Muse xHigh execution | Terra xhigh design/review | Sol xhigh if unresolved |
+| CI / Docker / observability | Muse 1.3 xHigh | Gemini 3.8 High | Terra high hard diagnosis |
+| Normal final QA | Gemini 3.8 High | Terra high | Terra high if hidden backend semantics dominate |
+| Critical final QA / hidden-invariant verification | Terra high + required deterministic tests | Gemini 3.8 High | Sol high final judgment when critical |
+| Documentation / extraction / status | Gemini 3.8 Medium | Luna low/medium | Terra only if reasoning becomes non-trivial |
 
 All Muse entries implicitly mean **Free first, then Go Contributor**.
 All Codex entries implicitly mean **Fast OFF** unless explicitly requested by the user.
@@ -384,9 +386,9 @@ The implementation worker must not become the final decision authority for:
 Rules:
 
 1. Java/Spring alone is not a risk override.
-2. Terra High is the normal decision/review floor for subtle non-critical backend invariants.
-3. Sol High is required when plausible failure can cause money/security/data-corruption/double-booking severity.
-4. Sol xHigh is reserved for unresolved severe ambiguity.
+2. Terra high is the normal decision/review floor for subtle non-critical backend invariants.
+3. Sol high is required when plausible failure can cause money/security/data-corruption/double-booking severity.
+4. Sol xhigh is reserved for unresolved severe ambiguity.
 5. Sol is a risk override, not a blanket implementation model.
 
 ---
@@ -401,8 +403,8 @@ When compiler + meaningful tests + integration/browser checks provide a strong o
 
 When correctness is weakly observable:
 
-- raise planning/review authority to Terra High;
-- use Sol High for critical hidden failure modes;
+- raise planning/review authority to Terra high;
+- use Sol high for critical hidden failure modes;
 - do not compensate for weak verification merely by increasing the implementation model's effort.
 
 For every non-trivial change:
@@ -422,21 +424,21 @@ For every non-trivial change:
 
 ### Normal backend task
 
-`Gemini High plan if needed -> Muse xHigh (Free -> Go) implement -> tests -> Terra High review (Fast OFF) -> Muse fixes -> re-review if needed -> Gemini High QA`
+`Gemini High plan if needed -> Muse xHigh (Free -> Go) implement -> tests -> Terra high review (Fast OFF) -> Muse fixes -> re-review if needed -> Gemini High QA`
 
 ### Small mechanical backend task
 
-`Muse High (Free -> Go) -> targeted tests -> optional Terra Medium review -> QA proportional to risk`
+`Muse High (Free -> Go) -> targeted tests -> optional Terra medium review -> QA proportional to risk`
 
 ### Large backend / cross-file task
 
-`Gemini High or Terra High plan -> Muse xHigh (Free -> Go) -> full verification -> Terra High review -> fixes/re-review -> Gemini High QA`
+`Gemini High or Terra high plan -> Muse xHigh (Free -> Go) -> full verification -> Terra high review -> fixes/re-review -> Gemini High QA`
 
 Use Terra for planning when backend architecture/transaction semantics, not mere size, is the dominant difficulty.
 
 ### Frontend feature
 
-`Gemini High plan/implementation -> browser/tests -> Terra High independent review when state/contracts are substantive -> Gemini High QA`
+`Gemini High plan/implementation -> browser/tests -> Terra high independent review when state/contracts are substantive -> Gemini High QA`
 
 Alternative implementation: Muse xHigh (Free -> Go).
 
@@ -444,23 +446,23 @@ Alternative implementation: Muse xHigh (Free -> Go).
 
 `Muse High/xHigh reproduce + regression test + fix -> verify -> review when substantive/high-risk`
 
-After one meaningful failed repair with unclear root cause: `Terra High diagnosis -> targeted repair`.
+After one meaningful failed repair with unclear root cause: `Terra high diagnosis -> targeted repair`.
 
 ### Hard backend bug
 
-`Terra High diagnosis -> Muse xHigh targeted fix -> Terra review -> QA`
+`Terra high diagnosis -> Muse xHigh targeted fix -> Terra review -> QA`
 
 Alternative diagnosis: Gemini High when tool/repository exploration dominates.
 
 ### Critical reservation/payment/security task
 
-`Sol High risk analysis (Fast OFF) -> explicit deterministic spec -> Muse xHigh (Free -> Go) implementation -> exhaustive tests -> Sol High final review (Fast OFF) -> fixes/re-review -> QA`
+`Sol high risk analysis (Fast OFF) -> explicit deterministic spec -> Muse xHigh (Free -> Go) implementation -> exhaustive tests -> Sol high final review (Fast OFF) -> fixes/re-review -> QA`
 
-If implementation still requires active architecture decisions, use Terra High as implementation alternative rather than asking Muse to invent the design.
+If implementation still requires active architecture decisions, use Terra high as implementation alternative rather than asking Muse to invent the design.
 
 ### Repo-wide refactor
 
-`Terra High or Gemini High plan -> Muse xHigh execution -> full verification -> Terra High independent review -> QA`
+`Terra high or Gemini High plan -> Muse xHigh execution -> full verification -> Terra high independent review -> QA`
 
 ---
 
@@ -479,21 +481,27 @@ If implementation still requires active architecture decisions, use Terra High a
 
 ### GPT-5.6 Terra
 
-- Medium: small bounded review/judgment
-- High: substantive review, difficult debugging, backend architecture
-- xHigh: unusually hard unresolved architecture/multi-service diagnosis
-- Max: not routine
+(Codex effort values are lowercase and case-sensitive: `low | medium | high | xhigh | max`.)
+
+- medium: small bounded review/judgment
+- high: substantive review, difficult debugging, backend architecture
+- xhigh: unusually hard unresolved architecture/multi-service diagnosis
+- max: not routine
 
 ### GPT-5.6 Sol
 
-- High: critical risk analysis/review authority
-- xHigh: unresolved/severe critical issue
-- Max: exceptional final escalation only
+(Codex effort values are lowercase and case-sensitive: `low | medium | high | xhigh | max`.)
+
+- high: critical risk analysis/review authority
+- xhigh: unresolved/severe critical issue
+- max: exceptional final escalation only
 
 ### GPT-5.6 Luna
 
-- Low/Medium: utility/docs/extraction when Codex is useful
-- High: bounded fallback only
+(Codex effort values are lowercase and case-sensitive: `low | medium | high | xhigh | max`.)
+
+- low/medium: utility/docs/extraction when Codex is useful
+- high: bounded fallback only
 - Fast: OFF unless user explicitly asks
 
 ---

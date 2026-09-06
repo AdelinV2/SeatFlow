@@ -56,7 +56,8 @@ export class EventListComponent implements OnInit {
   readonly selectedCategory = signal<EventCategory | 'ALL'>('ALL');
   readonly searchQuery = signal<string>('');
   readonly selectedCalendarDate = signal<Date | null>(null);
-  readonly sortOption = signal<string>('eventDate');
+  // P12-007: catalog orders/filters by derived nextSessionStartsAt (session-owned).
+  readonly sortOption = signal<string>('nextSessionStartsAt');
 
   readonly activeHeroIndex = signal<number>(0);
   private heroTimerId?: ReturnType<typeof setInterval>;
@@ -92,13 +93,13 @@ export class EventListComponent implements OnInit {
       result = result.filter((e) => e.category === cat);
     }
 
-    // Calendar date filter
+    // Calendar date filter (session-derived next showing)
     const calDate = this.selectedCalendarDate();
     if (calDate) {
       const calDateString = calDate.toDateString();
       result = result.filter((e) => {
-        if (!e.eventDate) return false;
-        const d = new Date(e.eventDate);
+        if (!e.nextSessionStartsAt) return false;
+        const d = new Date(e.nextSessionStartsAt);
         return !isNaN(d.getTime()) && d.toDateString() === calDateString;
       });
     }
@@ -114,10 +115,10 @@ export class EventListComponent implements OnInit {
       });
     }
 
-    // Sorting
+    // Sorting (session-derived next showing is the date sort)
     const sort = this.sortOption();
-    if (sort === 'eventDate') {
-      result.sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
+    if (sort === 'nextSessionStartsAt') {
+      result.sort((a, b) => +new Date(a.nextSessionStartsAt ?? 0) - +new Date(b.nextSessionStartsAt ?? 0));
     } else if (sort === 'title') {
       result.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sort === 'priceLow') {
@@ -150,7 +151,7 @@ export class EventListComponent implements OnInit {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
-    this.eventApiService.getEvents({ size: 100, sort: 'eventDate' }).subscribe({
+    this.eventApiService.getEvents({ size: 100, sort: 'nextSessionStartsAt' }).subscribe({
       next: (page) => {
         this.events.set(page.content || []);
         this.isLoading.set(false);

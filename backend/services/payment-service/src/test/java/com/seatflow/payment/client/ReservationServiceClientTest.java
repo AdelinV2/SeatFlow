@@ -83,8 +83,10 @@ class ReservationServiceClientTest {
 
     private ReservationClientResponse buildResponse(String status, Instant expiresAt) {
         return new ReservationClientResponse(
-                reservationId, UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
-                status, expiresAt, new BigDecimal("100.00"), 2, List.of(), Instant.now());
+                reservationId, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "cust@example.com",
+                status, expiresAt, new BigDecimal("100.00"), 2,
+                Instant.parse("2026-10-05T19:00:00Z"), Instant.parse("2026-10-05T21:00:00Z"), null,
+                List.of(), Instant.now());
     }
 
     @Test

@@ -56,8 +56,9 @@ public class RedisSeatStatusSubscriber implements MessageListener {
             seatStatusBroadcaster.broadcastSeatStatus(envelope.payload());
             receivedCounter.increment();
             SeatStatusUpdateMessage payload = envelope.payload();
-            log.info("Consumed realtime Redis update: sourceEventId={}, messageId={}, originInstanceId={}, eventId={}, status={}, seatCount={}",
-                    envelope.sourceEventId(), envelope.messageId(), envelope.originInstanceId(), payload.eventId(),
+            log.info("Consumed realtime Redis update: sourceEventId={}, messageId={}, originInstanceId={}, eventSessionId={}, eventId={}, status={}, seatCount={}",
+                    envelope.sourceEventId(), envelope.messageId(), envelope.originInstanceId(),
+                    payload.eventSessionId(), payload.eventId(),
                     payload.status(), payload.seatIds().size());
         } catch (com.fasterxml.jackson.core.JsonProcessingException | IllegalArgumentException exception) {
             errorCounter.increment();
@@ -75,10 +76,12 @@ public class RedisSeatStatusSubscriber implements MessageListener {
         if (envelope == null || !StringUtils.hasText(envelope.sourceEventId())
                 || envelope.messageId() == null || !StringUtils.hasText(envelope.originInstanceId())
                 || envelope.publishedAt() == null || envelope.payload() == null
-                || envelope.payload().eventId() == null || envelope.payload().status() == null
+                || envelope.payload().eventSessionId() == null || envelope.payload().status() == null
                 || envelope.payload().seatIds() == null || envelope.payload().seatIds().isEmpty()
                 || envelope.payload().seatIds().stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("Redis realtime envelope is missing required fields");
+            throw new IllegalArgumentException(
+                    "Redis realtime envelope is missing required fields (eventSessionId is required; "
+                            + "legacy event-only payloads are discarded, never routed by inference)");
         }
     }
 

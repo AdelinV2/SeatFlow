@@ -174,16 +174,9 @@ A buggy Free attempt should not automatically be re-run on paid Contributor mere
 
 ## 6. OpenCode Go Economics
 
-Current OpenCode Go product information advertises very generous relative allowance for Muse Spark 1.3 Contributor compared with many other Go models.
+Current OpenCode Go product information advertises a very generous relative allowance for Muse Spark 1.3 Contributor. SeatFlow does not track or compare allowances for other OpenCode / OpenCode Go models because no other OpenCode model is recommended (see section 12).
 
-The September 4 product page currently shows approximately:
-
-- Muse Spark 1.3 Contributor: ~45,300 typical requests / 5h reference window;
-- GPT-5.6 Luna: ~2,050;
-- Hy4 preview: ~1,350;
-- other heavier models substantially lower than Muse.
-
-These figures are **relative product estimates**, not guarantees for SeatFlow-sized prompts. A long agentic run can consume far more than an average request.
+Allowance figures are **relative product estimates**, not guarantees for SeatFlow-sized prompts. A long agentic run can consume far more than an average request.
 
 The useful conclusion is robust:
 
@@ -250,7 +243,7 @@ It is selected because SeatFlow needs a stable independent senior-engineer layer
 
 is operationally stronger than using the same model for both generation and approval because it separates execution from judgment and reduces correlated mistakes.
 
-For small/mechanical reviews, Terra Medium is enough. Terra High is the normal substantive review route.
+For small/mechanical reviews, Terra medium is enough. Terra high is the normal substantive review route.
 
 ---
 
@@ -268,16 +261,16 @@ Sol is reserved for places where a plausible error can survive ordinary tests an
 Preferred critical pipeline:
 
 ```text
-Sol High risk analysis
+Sol high risk analysis
 -> explicit deterministic task/spec
 -> Muse xHigh implementation (Free -> Go)
 -> exhaustive deterministic tests
--> Sol High independent final review
+-> Sol high independent final review
 ```
 
 This spends premium quota where it changes expected escaped-defect risk instead of using Sol as a bulk code writer.
 
-Sol xHigh is for unresolved severe ambiguity. Sol Max is exceptional.
+Sol xhigh is for unresolved severe ambiguity. Sol max is exceptional.
 
 ---
 
@@ -290,41 +283,23 @@ Luna is useful for:
 - tiny deterministic fixes;
 - quick bounded checks.
 
-For substantive review, Terra Medium/High is a better allocation of Codex quota than trying to compensate with Luna High.
+For substantive review, Terra medium/high is a better allocation of Codex quota than trying to compensate with Luna high.
 
 Most importantly for Poracode:
 
-**Luna High Fast is not a default SeatFlow route.**
+**Luna high fast is not a default SeatFlow route.**
 
 Fast mode is explicitly disabled by repository policy unless the user asks for it.
 
 ---
 
-## 12. Secondary OpenCode Models
+## 12. No Secondary OpenCode Models
 
-### Hy4 preview
+SeatFlow does not recommend any secondary OpenCode / OpenCode Go model.
 
-Useful for:
+In particular, do **not** recommend or route work to GLM 5.3 / GLM-Flash, Hy3, Hy4 (including preview variants), Kimi, Qwen, DeepSeek, MiniMax, Grok, or any other OpenCode catalog model. The only permitted OpenCode routes are Muse Spark 1.3 Contributor Free (`opencode/muse-spark-1.3-contributor-free`) and Muse Spark 1.3 Contributor via OpenCode Go (`opencode-go/muse-spark-1.3-contributor`).
 
-- independent open-model-family attempts;
-- long-horizon/tool-heavy tasks when Muse behaves poorly;
-- terminal-heavy debugging.
-
-Because it is a preview route and materially more expensive in Go allowance than Muse, it is not the default final authority for critical invariants.
-
-### GLM-5.3 / GLM-5.3-Flash
-
-Credible terminal-heavy alternatives, but current Go economics do not justify replacing Muse as the normal implementation worker.
-
-Use when:
-
-- Muse is unavailable;
-- an independent open-model-family attempt is specifically useful;
-- provider behavior makes GLM materially better for the current task.
-
-### Other Go models
-
-Kimi, Qwen, DeepSeek, MiniMax, Grok and others may be capable. They remain secondary until a SeatFlow-specific reason or updated evidence justifies promoting them into the default route.
+If both Muse routes are unavailable or prohibited, use the task-specific Alternative from `.ai/MODEL_ROUTER.md` (normally a non-OpenCode harness), not another OpenCode model.
 
 Avoid churn in the router merely because a new model appears in the catalog.
 
@@ -354,11 +329,11 @@ Poracode therefore fits SeatFlow as an execution/orchestration harness, while `.
 
 ### Routine backend
 
-`Gemini High plan when needed -> Muse xHigh Free -> Muse xHigh Go fallback -> tests -> Terra High review -> Muse fixes -> Gemini High QA`
+`Gemini High plan when needed -> Muse xHigh Free -> Muse xHigh Go fallback -> tests -> Terra high review -> Muse fixes -> Gemini High QA`
 
 ### Frontend
 
-`Gemini High implementation -> browser/tests -> Terra High review when state/contracts are substantive -> Gemini High QA`
+`Gemini High implementation -> browser/tests -> Terra high review when state/contracts are substantive -> Gemini High QA`
 
 ### Clear bug
 
@@ -366,11 +341,11 @@ Poracode therefore fits SeatFlow as an execution/orchestration harness, while `.
 
 ### Hard backend bug
 
-`Terra High diagnosis -> Muse xHigh repair -> Terra review`
+`Terra high diagnosis -> Muse xHigh repair -> Terra review`
 
 ### Critical reservation/payment/security
 
-`Sol High risk analysis -> Muse xHigh implementation -> exhaustive tests -> Sol High final review`
+`Sol high risk analysis -> Muse xHigh implementation -> exhaustive tests -> Sol high final review`
 
 ### Standard speed policy
 

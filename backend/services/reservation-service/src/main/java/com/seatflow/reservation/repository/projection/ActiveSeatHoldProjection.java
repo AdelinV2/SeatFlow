@@ -6,6 +6,10 @@ import java.util.UUID;
 
 public interface ActiveSeatHoldProjection {
 
+    UUID getEventSessionId();
+
+    UUID getEventId();
+
     UUID getSeatId();
 
     SeatHoldStatus getStatus();

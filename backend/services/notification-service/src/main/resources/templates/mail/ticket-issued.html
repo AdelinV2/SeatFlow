@@ -59,6 +59,10 @@
                                     <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Seat Information</td>
                                     <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;" th:text="${seatInfo ?: 'Reserved Seat'}">Section A, Row 5, Seat 12</td>
                                 </tr>
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #64748b; font-size: 14px;">Showing (Session)</td>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 600;" th:text="${sessionStartsAt} + (${sessionTimezone} != '' ? ' (' + ${sessionTimezone} + ')' : ' (UTC)')">2026-09-05 19:00:00 UTC (UTC)</td>
+                                </tr>
                             </table>
 
                             <!-- ADR-004 Fiscal Tax Breakdown -->

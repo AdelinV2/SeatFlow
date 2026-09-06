@@ -20,7 +20,6 @@ describe('AdminEventApiService', () => {
     description: 'A spectacular live concert',
     category: 'CONCERT',
     bannerUrl: 'https://example.com/banner.jpg',
-    eventDate: '2026-11-20T20:00:00Z',
     status: 'DRAFT',
     pricingTiers: [],
     createdAt: '2026-08-29T10:00:00Z',
@@ -87,7 +86,6 @@ describe('AdminEventApiService', () => {
       description: 'A spectacular live concert',
       category: 'CONCERT',
       bannerUrl: 'https://example.com/banner.jpg',
-      eventDate: '2026-11-20T20:00:00Z',
       venueId: 'venue-456',
     };
 

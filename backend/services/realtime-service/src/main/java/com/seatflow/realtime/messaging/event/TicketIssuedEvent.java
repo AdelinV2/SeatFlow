@@ -1,5 +1,6 @@
 package com.seatflow.realtime.messaging.event;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.seatflow.common.events.DomainEvent;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -7,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Schema(description = "Event received when a digital ticket is generated and issued for a seat")
 public record TicketIssuedEvent(
         UUID ticketId,
@@ -14,6 +16,7 @@ public record TicketIssuedEvent(
         UUID userId,              // Nullable for guest checkouts (ADR-001)
         String customerEmail,
         String attendeeName,
+        UUID eventSessionId,
         UUID eventId,
         UUID seatId,
         BigDecimal price,

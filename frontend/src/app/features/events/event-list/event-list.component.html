@@ -41,7 +41,7 @@
                   <line x1="8" y1="2" x2="8" y2="6" />
                   <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
-                <span>{{ hero.eventDate | sfDate: 'full' }}</span>
+                <span>{{ hero.nextSessionStartsAt | sfDate: 'full' }}</span>
               </div>
 
               @if (hero.venueName) {
@@ -251,7 +251,7 @@
             class="min-h-11 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-semibold text-[var(--color-text-secondary)] focus:border-indigo-500 focus:outline-none"
             aria-label="Sort events"
           >
-            <option value="eventDate">Sort by: Date (Soonest)</option>
+            <option value="nextSessionStartsAt">Sort by: Date (Soonest)</option>
             <option value="title">Sort by: Title (A-Z)</option>
             <option value="priceLow">Sort by: Price (Low to High)</option>
             <option value="priceHigh">Sort by: Price (High to Low)</option>

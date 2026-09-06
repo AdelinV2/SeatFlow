@@ -85,7 +85,7 @@ class TicketMetricsTest {
         UUID paymentId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         IssueTicketsCommand.SeatTicketItem seat = new IssueTicketsCommand.SeatTicketItem(seatId, new BigDecimal("50.00"), BigDecimal.ZERO, BigDecimal.ZERO, "Standard");
-        IssueTicketsCommand cmd = new IssueTicketsCommand(paymentId, reservationId, UUID.randomUUID(), "guest@example.com", "Guest", eventId, List.of(seat), "USD");
+        IssueTicketsCommand cmd = new IssueTicketsCommand(paymentId, reservationId, UUID.randomUUID(), "guest@example.com", "Guest", UUID.randomUUID(), eventId, null, null, null, List.of(seat), "USD");
 
         var result = service.issueTickets(cmd);
 
@@ -107,7 +107,7 @@ class TicketMetricsTest {
                 new IssueTicketsCommand.SeatTicketItem(UUID.randomUUID(), new BigDecimal("30.00"), BigDecimal.ZERO, BigDecimal.ZERO, "Standard"),
                 new IssueTicketsCommand.SeatTicketItem(UUID.randomUUID(), new BigDecimal("40.00"), BigDecimal.ZERO, BigDecimal.ZERO, "VIP")
         );
-        IssueTicketsCommand cmd = new IssueTicketsCommand(paymentId, reservationId, null, "guest@example.com", "Guest", eventId, seats, "USD");
+        IssueTicketsCommand cmd = new IssueTicketsCommand(paymentId, reservationId, null, "guest@example.com", "Guest", UUID.randomUUID(), eventId, null, null, null, seats, "USD");
 
         service.issueTickets(cmd);
 
@@ -148,7 +148,7 @@ class TicketMetricsTest {
     void shouldNotContainHighCardinalityTagsOnIssued() {
         UUID eventId = UUID.randomUUID();
         IssueTicketsCommand.SeatTicketItem seat = new IssueTicketsCommand.SeatTicketItem(UUID.randomUUID(), new BigDecimal("50.00"), BigDecimal.ZERO, BigDecimal.ZERO, "Standard");
-        IssueTicketsCommand cmd = new IssueTicketsCommand(UUID.randomUUID(), UUID.randomUUID(), null, "guest@example.com", "Guest", eventId, List.of(seat), "USD");
+        IssueTicketsCommand cmd = new IssueTicketsCommand(UUID.randomUUID(), UUID.randomUUID(), null, "guest@example.com", "Guest", UUID.randomUUID(), eventId, null, null, null, List.of(seat), "USD");
 
         service.issueTickets(cmd);
 
@@ -254,7 +254,7 @@ class TicketMetricsTest {
         when(outboxRepository.save(any(OutboxEvent.class))).thenAnswer(a -> a.getArgument(0));
         UUID eventId = UUID.randomUUID();
         IssueTicketsCommand.SeatTicketItem seat = new IssueTicketsCommand.SeatTicketItem(UUID.randomUUID(), new BigDecimal("50.00"), BigDecimal.ZERO, BigDecimal.ZERO, "Standard");
-        IssueTicketsCommand cmd = new IssueTicketsCommand(UUID.randomUUID(), UUID.randomUUID(), null, "guest@example.com", "Guest", eventId, List.of(seat), "USD");
+        IssueTicketsCommand cmd = new IssueTicketsCommand(UUID.randomUUID(), UUID.randomUUID(), null, "guest@example.com", "Guest", UUID.randomUUID(), eventId, null, null, null, List.of(seat), "USD");
 
         var result = failingService.issueTickets(cmd);
         assertThat(result).isNotNull();
@@ -268,6 +268,10 @@ class TicketMetricsTest {
                 "guest@example.com",
                 "Guest",
                 UUID.randomUUID(),
+                UUID.randomUUID(),
+                null,
+                null,
+                null,
                 List.of(new IssueTicketsCommand.SeatTicketItem(
                         UUID.randomUUID(), new BigDecimal("50.00"), BigDecimal.ZERO,
                         BigDecimal.ZERO, "Standard")),

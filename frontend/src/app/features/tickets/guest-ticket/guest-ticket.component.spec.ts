@@ -65,7 +65,6 @@ describe('GuestTicketComponent', () => {
     description: 'A great classical evening',
     category: 'SYMPHONY',
     bannerUrl: 'https://cdn.seatflow.com/symphony.jpg',
-    eventDate: '2026-10-15T20:00:00Z',
     status: 'PUBLISHED',
     venueName: 'Royal Concert Hall',
     pricingTiers: [],

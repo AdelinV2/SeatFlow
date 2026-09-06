@@ -52,8 +52,9 @@ class SeatHoldRepositoryTest {
     @Autowired
     private SeatHoldRepository seatHoldRepository;
 
-    private Reservation pendingReservation() {
+    private Reservation pendingReservation(UUID sessionId) {
         return Reservation.builder()
+                .eventSessionId(sessionId)
                 .eventId(UUID.randomUUID())
                 .customerEmail("guest@example.com")
                 .status(ReservationStatus.PENDING)
@@ -64,15 +65,20 @@ class SeatHoldRepositoryTest {
                 .build();
     }
 
-    @Test
-    void shouldPersistSeatHoldWithReservationCascade() {
-        Reservation reservation = pendingReservation();
-        SeatHold hold = SeatHold.builder()
-                .eventId(reservation.getEventId())
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
+    private SeatHold hold(UUID sessionId, UUID seatId, SeatHoldStatus status) {
+        return SeatHold.builder()
+                .eventSessionId(sessionId)
+                .eventId(UUID.randomUUID())
+                .seatId(seatId)
+                .status(status)
                 .price(new BigDecimal("50.00"))
                 .build();
+    }
+
+    @Test
+    void shouldPersistSeatHoldWithReservationCascade() {
+        Reservation reservation = pendingReservation(UUID.randomUUID());
+        SeatHold hold = hold(reservation.getEventSessionId(), UUID.randomUUID(), SeatHoldStatus.HELD);
         reservation.addSeatHold(hold);
 
         Reservation saved = reservationRepository.saveAndFlush(reservation);
@@ -84,76 +90,72 @@ class SeatHoldRepositoryTest {
     }
 
     @Test
-    void duplicateActiveSeatHoldForSameEventAndSeatMustViolateUniqueIndex() {
-        UUID eventId = UUID.randomUUID();
+    void duplicateActiveSeatHoldForSameSessionAndSeatMustViolateUniqueIndex() {
+        UUID sessionId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
-        Reservation reservation = pendingReservation();
-        reservation.setEventId(eventId);
+        Reservation reservation = pendingReservation(sessionId);
 
-        SeatHold first = SeatHold.builder()
-                .eventId(eventId)
-                .seatId(seatId)
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("50.00"))
-                .build();
-        SeatHold second = SeatHold.builder()
-                .eventId(eventId)
-                .seatId(seatId)
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("50.00"))
-                .build();
-        reservation.addSeatHold(first);
-        reservation.addSeatHold(second);
+        reservation.addSeatHold(hold(sessionId, seatId, SeatHoldStatus.HELD));
+        reservation.addSeatHold(hold(sessionId, seatId, SeatHoldStatus.HELD));
 
         assertThatThrownBy(() -> reservationRepository.saveAndFlush(reservation))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
-    void differentSeatsForSameEventMustNotCollide() {
-        UUID eventId = UUID.randomUUID();
-        Reservation reservation = pendingReservation();
-        reservation.setEventId(eventId);
-        reservation.addSeatHold(SeatHold.builder()
-                .eventId(eventId)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("50.00"))
-                .build());
-        reservation.addSeatHold(SeatHold.builder()
-                .eventId(eventId)
-                .seatId(UUID.randomUUID())
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("60.00"))
-                .build());
+    void sameSeatInDifferentSessionsMustNotCollide() {
+        UUID seatId = UUID.randomUUID();
+        Reservation first = pendingReservation(UUID.randomUUID());
+        first.addSeatHold(hold(first.getEventSessionId(), seatId, SeatHoldStatus.HELD));
+        Reservation second = pendingReservation(UUID.randomUUID());
+        second.addSeatHold(hold(second.getEventSessionId(), seatId, SeatHoldStatus.HELD));
+
+        reservationRepository.saveAndFlush(first);
+        reservationRepository.saveAndFlush(second);
+
+        assertThat(seatHoldRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    void differentSeatsForSameSessionMustNotCollide() {
+        UUID sessionId = UUID.randomUUID();
+        Reservation reservation = pendingReservation(sessionId);
+        reservation.addSeatHold(hold(sessionId, UUID.randomUUID(), SeatHoldStatus.HELD));
+        reservation.addSeatHold(hold(sessionId, UUID.randomUUID(), SeatHoldStatus.HELD));
 
         reservationRepository.saveAndFlush(reservation);
 
-        long active = seatHoldRepository.countByEventIdAndSeatIdAndStatusIn(
-                eventId, seatIdOrFirst(reservation), List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD));
+        long active = seatHoldRepository.countByEventSessionIdAndSeatIdAndStatusIn(
+                sessionId, seatIdOrFirst(reservation), List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD));
         assertThat(active).isNotNegative();
         assertThat(seatHoldRepository.count()).isEqualTo(2);
     }
 
     @Test
     void shouldFindActiveHoldExcludingReleased() {
-        UUID eventId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
-        Reservation reservation = pendingReservation();
-        reservation.setEventId(eventId);
-        SeatHold hold = SeatHold.builder()
-                .eventId(eventId)
-                .seatId(seatId)
-                .status(SeatHoldStatus.HELD)
-                .price(new BigDecimal("50.00"))
-                .build();
-        reservation.addSeatHold(hold);
+        Reservation reservation = pendingReservation(sessionId);
+        reservation.addSeatHold(hold(sessionId, seatId, SeatHoldStatus.HELD));
         reservationRepository.saveAndFlush(reservation);
 
-        Optional<SeatHold> found = seatHoldRepository.findActiveHold(eventId, seatId);
+        Optional<SeatHold> found = seatHoldRepository.findActiveHold(sessionId, seatId);
 
         assertThat(found).isPresent();
         assertThat(found.get().getStatus()).isEqualTo(SeatHoldStatus.HELD);
+    }
+
+    @Test
+    void activeHoldLookupMustBeSessionScoped() {
+        UUID seatId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        Reservation reservationA = pendingReservation(sessionA);
+        reservationA.addSeatHold(hold(sessionA, seatId, SeatHoldStatus.HELD));
+        reservationRepository.saveAndFlush(reservationA);
+
+        assertThat(seatHoldRepository.findActiveHold(sessionA, seatId)).isPresent();
+        assertThat(seatHoldRepository.findActiveHold(sessionB, seatId)).isEmpty();
     }
 
     private UUID seatIdOrFirst(Reservation reservation) {

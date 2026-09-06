@@ -27,7 +27,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
 
-    private static final String DESTINATION_TEMPLATE = "/topic/events/%s/seats";
+    /** Canonical session-scoped STOMP destination. Never route on eventId. */
+    private static final String SESSION_DESTINATION_TEMPLATE = "/topic/sessions/%s/seats";
+    // P12-007: the legacy event-scoped seat destination was removed (ADR-011).
+    // Seat updates publish exclusively to the session topic. Old subscribers
+    // receive nothing (no redirect, no inference).
     private final SimpMessagingTemplate messagingTemplate;
     private final MeterRegistry meterRegistry;
 
@@ -79,8 +83,8 @@ public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
         if (message == null) {
             throw new IllegalArgumentException("SeatStatusUpdateMessage must not be null");
         }
-        if (message.eventId() == null) {
-            throw new IllegalArgumentException("eventId must not be null");
+        if (message.eventSessionId() == null) {
+            throw new IllegalArgumentException("eventSessionId must not be null");
         }
         if (message.seatIds() == null || message.seatIds().isEmpty()) {
             throw new IllegalArgumentException("seatIds must not be null or empty");
@@ -89,23 +93,26 @@ public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
             throw new IllegalArgumentException("status must not be null");
         }
 
-        String destination = String.format(DESTINATION_TEMPLATE, message.eventId());
+        String destination = String.format(SESSION_DESTINATION_TEMPLATE, message.eventSessionId());
 
-        log.info("Broadcasting seat status update: destination={}, status={}, seatCount={}, holdExpiresAt={}",
-                destination, message.status(), message.seatIds().size(), message.holdExpiresAt());
+        log.info("Broadcasting seat status update: destination={}, eventSessionId={}, eventId={}, status={}, seatCount={}, holdExpiresAt={}",
+                destination, message.eventSessionId(), message.eventId(), message.status(),
+                message.seatIds().size(), message.holdExpiresAt());
 
         messagingTemplate.convertAndSend(destination, message);
     }
 
     @Override
-    public void broadcastSeatStatus(UUID eventId, List<UUID> seatIds, SeatStatus status, Instant holdExpiresAt) {
-        SeatStatusUpdateMessage message = SeatStatusUpdateMessage.of(eventId, seatIds, status, holdExpiresAt);
+    public void broadcastSeatStatus(UUID eventSessionId, UUID eventId, List<UUID> seatIds, SeatStatus status,
+                                    Instant holdExpiresAt) {
+        SeatStatusUpdateMessage message = SeatStatusUpdateMessage.of(eventSessionId, eventId, seatIds, status,
+                holdExpiresAt);
         broadcastSeatStatus(message);
     }
 
     @Override
-    public void broadcastSeatStatus(UUID eventId, UUID seatId, SeatStatus status) {
-        SeatStatusUpdateMessage message = SeatStatusUpdateMessage.of(eventId, seatId, status);
+    public void broadcastSeatStatus(UUID eventSessionId, UUID eventId, UUID seatId, SeatStatus status) {
+        SeatStatusUpdateMessage message = SeatStatusUpdateMessage.of(eventSessionId, eventId, seatId, status);
         broadcastSeatStatus(message);
     }
 }

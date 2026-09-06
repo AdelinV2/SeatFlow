@@ -31,6 +31,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(HttpMethod.GET, "/api/events", "/api/events/**").permitAll()
+                .requestMatchers("/internal/**").authenticated()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/prometheus").hasAuthority("SCOPE_metrics.read")

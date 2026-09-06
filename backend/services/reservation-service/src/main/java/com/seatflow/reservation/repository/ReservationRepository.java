@@ -73,7 +73,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     List<UUID> findAllExpiredReservationsForUpdate(@Param("now") Instant now);
 
     @Query(value = """
-            SELECT sh.id AS id, sh.seatId AS seatId, sh.status AS status, sh.price AS price
+            SELECT sh.id AS id, sh.event_session_id AS eventSessionId, sh.seat_id AS seatId,
+                   sh.status AS status, sh.price AS price
             FROM seat_holds sh
             WHERE sh.reservation_id = :reservationId
             """,
@@ -127,4 +128,26 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     int updateUserIdForGuestEmail(@Param("userId") UUID userId,
                                   @Param("customerEmail") String customerEmail,
                                   @Param("now") Instant now);
+
+    // --- P12-003 backfill support (SessionInventoryBackfillService only) ---
+
+    @Query(value = """
+            SELECT COUNT(*) FROM reservations WHERE event_session_id IS NULL
+            """, nativeQuery = true)
+    long countReservationsWithNullSession();
+
+    @Query(value = """
+            SELECT DISTINCT event_id FROM reservations WHERE event_session_id IS NULL
+            """, nativeQuery = true)
+    List<UUID> findLegacyEventIdsWithNullSession();
+
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE reservations
+            SET event_session_id = :eventSessionId
+            WHERE event_id = :eventId
+              AND event_session_id IS NULL
+            """, nativeQuery = true)
+    int backfillSessionIdForLegacyEvent(@Param("eventId") UUID eventId,
+                                        @Param("eventSessionId") UUID eventSessionId);
 }

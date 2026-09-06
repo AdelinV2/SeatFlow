@@ -33,7 +33,10 @@ export interface Seat {
 }
 
 export interface SeatStatusUpdate {
-  eventId: string;
+  /** Routing key: the subscribed event session. */
+  eventSessionId: string;
+  /** Catalog event ID retained for audit compatibility only; never used for routing. */
+  eventId?: string;
   seatId: string;
   status: SeatStatus;
   expiresAt?: string;
@@ -41,7 +44,10 @@ export interface SeatStatusUpdate {
 }
 
 export interface SeatStatusUpdateMessage {
-  eventId: string;
+  /** Routing key: the subscribed event session. */
+  eventSessionId: string;
+  /** Catalog event ID retained for audit compatibility only; never used for routing. */
+  eventId?: string;
   seatIds: string[];
   status: SeatStatus;
   holdExpiresAt?: string;
@@ -49,7 +55,8 @@ export interface SeatStatusUpdateMessage {
 }
 
 export interface SeatAvailabilityResponse {
-  eventId: string;
+  eventSessionId?: string;
+  eventId?: string;
   seatStatuses?: {
     seatId: string;
     status: SeatStatus;
@@ -120,7 +127,8 @@ export interface EventSeatMapResponse {
   venueId: string;
   eventTitle: string;
   status?: string;
-  eventDate: string;
+  // P12-007: legacy eventDate removed. Seat-map carries venue layout + pricing
+  // only; showing schedule lives exclusively on EventSession.
   venueName: string;
   venueCapacity: number;
   totalConfiguredSeats: number;

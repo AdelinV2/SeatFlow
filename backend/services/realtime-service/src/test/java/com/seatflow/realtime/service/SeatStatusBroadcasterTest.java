@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,18 +49,20 @@ class SeatStatusBroadcasterTest {
     }
 
     @Test
-    @DisplayName("Should broadcast batch HELD seats to /topic/events/{eventId}/seats with hold expiration")
+    @DisplayName("Should broadcast batch HELD seats to /topic/sessions/{eventSessionId}/seats with hold expiration")
     void broadcastSeatStatus_BatchHeldSeats_SendsToCorrectTopic() {
+        UUID eventSessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         List<UUID> seatIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         Instant expiresAt = Instant.now().plusSeconds(900);
 
-        broadcaster.broadcastSeatStatus(eventId, seatIds, SeatStatus.HELD, expiresAt);
+        broadcaster.broadcastSeatStatus(eventSessionId, eventId, seatIds, SeatStatus.HELD, expiresAt);
 
-        String expectedDestination = "/topic/events/" + eventId + "/seats";
+        String expectedDestination = "/topic/sessions/" + eventSessionId + "/seats";
         verify(messagingTemplate).convertAndSend(eq(expectedDestination), messageCaptor.capture());
 
         SeatStatusUpdateMessage sentMessage = messageCaptor.getValue();
+        assertEquals(eventSessionId, sentMessage.eventSessionId());
         assertEquals(eventId, sentMessage.eventId());
         assertEquals(seatIds, sentMessage.seatIds());
         assertEquals(SeatStatus.HELD, sentMessage.status());
@@ -68,21 +71,105 @@ class SeatStatusBroadcasterTest {
     }
 
     @Test
-    @DisplayName("Should broadcast single SOLD seat to /topic/events/{eventId}/seats with null expiration")
+    @DisplayName("Should broadcast single SOLD seat to /topic/sessions/{eventSessionId}/seats with null expiration")
     void broadcastSeatStatus_SingleSoldSeat_SendsToCorrectTopic() {
+        UUID eventSessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
 
-        broadcaster.broadcastSeatStatus(eventId, seatId, SeatStatus.SOLD);
+        broadcaster.broadcastSeatStatus(eventSessionId, eventId, seatId, SeatStatus.SOLD);
 
-        String expectedDestination = "/topic/events/" + eventId + "/seats";
+        String expectedDestination = "/topic/sessions/" + eventSessionId + "/seats";
         verify(messagingTemplate).convertAndSend(eq(expectedDestination), messageCaptor.capture());
 
         SeatStatusUpdateMessage sentMessage = messageCaptor.getValue();
-        assertEquals(eventId, sentMessage.eventId());
+        assertEquals(eventSessionId, sentMessage.eventSessionId());
         assertEquals(List.of(seatId), sentMessage.seatIds());
         assertEquals(SeatStatus.SOLD, sentMessage.status());
         assertNull(sentMessage.holdExpiresAt());
+    }
+
+    @Test
+    @DisplayName("Session A message goes only to /topic/sessions/A/seats and never to session B")
+    void broadcastSeatStatus_SessionA_DoesNotLeakToSessionB() {
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID sharedSeatId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(sessionA, eventId, List.of(sharedSeatId), SeatStatus.HELD,
+                Instant.now().plusSeconds(900));
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + sessionA + "/seats"), messageCaptor.capture());
+        verify(messagingTemplate, never()).convertAndSend(eq("/topic/sessions/" + sessionB + "/seats"), messageCaptor.capture());
+        assertEquals(sessionA, messageCaptor.getValue().eventSessionId());
+    }
+
+    @Test
+    @DisplayName("Same seat UUID in sessions A and B routes to distinct destinations without collision")
+    void broadcastSeatStatus_SameSeatInTwoSessions_RoutesToDistinctDestinations() {
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID sharedSeatId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(sessionA, eventId, List.of(sharedSeatId), SeatStatus.HELD,
+                Instant.now().plusSeconds(900));
+        broadcaster.broadcastSeatStatus(sessionB, eventId, List.of(sharedSeatId), SeatStatus.SOLD, null);
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + sessionA + "/seats"), messageCaptor.capture());
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + sessionB + "/seats"), messageCaptor.capture());
+    }
+
+    @Test
+    @DisplayName("Should never build a /topic/events/{sessionId} destination from a session identity")
+    void broadcastSeatStatus_NeverUsesAmbiguousEventSessionPath() {
+        UUID eventSessionId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(eventSessionId, null, List.of(UUID.randomUUID()), SeatStatus.AVAILABLE, null);
+
+        verify(messagingTemplate, never()).convertAndSend(eq("/topic/events/" + eventSessionId + "/seats"),
+                messageCaptor.capture());
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + eventSessionId + "/seats"),
+                messageCaptor.capture());
+    }
+
+    @Test
+    @DisplayName("P12-007: old event-scoped destination receives nothing even when audit eventId is present")
+    void broadcastSeatStatus_RemovedLegacyEventDestination() {
+        UUID eventSessionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(eventSessionId, eventId, List.of(UUID.randomUUID()), SeatStatus.HELD,
+                Instant.now().plusSeconds(900));
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + eventSessionId + "/seats"),
+                messageCaptor.capture());
+        verify(messagingTemplate, never()).convertAndSend(eq("/topic/events/" + eventId + "/seats"),
+                messageCaptor.capture());
+        verify(messagingTemplate, never()).convertAndSend(
+                org.mockito.ArgumentMatchers.contains("/topic/events/"), messageCaptor.capture());
+    }
+
+    @Test
+    @DisplayName("Broadcast payload exposes no private reservation, customer, or payment data")
+    void broadcastSeatStatus_PayloadContainsNoPrivateData() {
+        UUID eventSessionId = UUID.randomUUID();
+
+        broadcaster.broadcastSeatStatus(eventSessionId, UUID.randomUUID(), List.of(UUID.randomUUID()),
+                SeatStatus.HELD, Instant.now().plusSeconds(900));
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/sessions/" + eventSessionId + "/seats"),
+                messageCaptor.capture());
+        SeatStatusUpdateMessage sentMessage = messageCaptor.getValue();
+        String serialized = sentMessage.toString().toLowerCase();
+        assertFalse(serialized.contains("customer"));
+        assertFalse(serialized.contains("payment"));
+        assertFalse(serialized.contains("email"));
+        assertNotNull(sentMessage.eventSessionId());
+        assertNotNull(sentMessage.seatIds());
+        assertNotNull(sentMessage.status());
+        assertNotNull(sentMessage.timestamp());
     }
 
     @Test
@@ -92,10 +179,11 @@ class SeatStatusBroadcasterTest {
     }
 
     @Test
-    @DisplayName("Should throw IllegalArgumentException when eventId is null")
-    void broadcastSeatStatus_NullEventId_ThrowsException() {
+    @DisplayName("Should throw IllegalArgumentException when eventSessionId is null (event-only never routed)")
+    void broadcastSeatStatus_NullEventSessionId_ThrowsException() {
         SeatStatusUpdateMessage message = new SeatStatusUpdateMessage(
                 null,
+                UUID.randomUUID(),
                 List.of(UUID.randomUUID()),
                 SeatStatus.AVAILABLE,
                 Instant.now(),
@@ -109,6 +197,7 @@ class SeatStatusBroadcasterTest {
     void broadcastSeatStatus_EmptySeatIds_ThrowsException() {
         SeatStatusUpdateMessage message = new SeatStatusUpdateMessage(
                 UUID.randomUUID(),
+                UUID.randomUUID(),
                 List.of(),
                 SeatStatus.AVAILABLE,
                 Instant.now(),
@@ -121,6 +210,7 @@ class SeatStatusBroadcasterTest {
     @DisplayName("Should throw IllegalArgumentException when status is null")
     void broadcastSeatStatus_NullStatus_ThrowsException() {
         SeatStatusUpdateMessage message = new SeatStatusUpdateMessage(
+                UUID.randomUUID(),
                 UUID.randomUUID(),
                 List.of(UUID.randomUUID()),
                 null,

@@ -9,6 +9,21 @@ export type EventCategory =
 
 export type EventStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED' | 'COMPLETED';
 
+export type EventSessionStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED';
+
+export interface EventSession {
+  id: string;
+  eventId: string;
+  startsAt: string;
+  endsAt: string;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  status: EventSessionStatus;
+  timezone?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface EventPricingTier {
   id?: string;
   sectionId: string;
@@ -24,7 +39,12 @@ export interface EventSummary {
   description?: string;
   category: EventCategory;
   bannerUrl: string;
-  eventDate: string;
+  /**
+   * P12-007: derived display/search metadata (earliest future SCHEDULED session
+   * start), never a booking key. Replaces the removed legacy eventDate.
+   * Null only when no visible session exists (published search filters these out).
+   */
+  nextSessionStartsAt: string | null;
   venueName?: string;
   status?: EventStatus;
   minPrice: number;
@@ -39,9 +59,11 @@ export interface EventDetail {
   description: string;
   category: EventCategory;
   bannerUrl: string;
-  eventDate: string;
+  // P12-007: legacy eventDate removed. Showing schedule lives exclusively on
+  // sessions[]. Consumers must select an explicit session for booking.
   status: EventStatus;
   pricingTiers: EventPricingTier[];
+  sessions?: EventSession[];
   createdAt: string;
   updatedAt?: string;
   // Enriched venue fields (fetched via VenueApiService.getVenueById(venueId))
