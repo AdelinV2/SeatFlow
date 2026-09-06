@@ -2,15 +2,11 @@ package com.seatflow.reservation.migration;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,15 +21,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Testcontainers
 class V8SessionGateMigrationTest {
 
-    private static final String[] STAGED = {
-            "db/migration/V1__create_reservations_and_seat_holds_tables.sql",
-            "db/migration/V2__create_outbox_events_table.sql",
-            "db/migration/V3__add_seat_checkout_details.sql",
-            "db/migration/V4__add_seat_holds_pricing_tier_index.sql",
-            "db/migration/V5__add_seat_holds_active_held_index.sql",
-            "db/migration/V6__add_event_session_inventory_key.sql",
-            "db/migration/V7__add_session_schedule_snapshot.sql"
-    };
     private static final String V8 = "db/migration/V8__enforce_session_inventory_key.sql";
 
     @Container
@@ -42,44 +29,12 @@ class V8SessionGateMigrationTest {
             .withUsername("test")
             .withPassword("test");
 
-    private JdbcTemplate stagedDatabase(String dbName) {
-        try (Connection admin = DriverManager.getConnection(
-                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
-            admin.createStatement().execute("CREATE DATABASE \"" + dbName + "\"");
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not create staged database " + dbName, ex);
-        }
-        String baseUrl = postgres.getJdbcUrl();
-        String jdbcUrl = baseUrl.substring(0, baseUrl.lastIndexOf('/')) + "/" + dbName;
-        JdbcTemplate jdbc = new JdbcTemplate(new SimpleDriverDataSource(
-                new org.postgresql.Driver(), jdbcUrl, postgres.getUsername(), postgres.getPassword()));
-        for (String script : STAGED) {
-            executeScript(jdbc, script);
-        }
-        return jdbc;
+    private static StagedMigrationSupport.FreshDatabase stagedDatabase(String dbName) {
+        return StagedMigrationSupport.migrateToV7(postgres, dbName);
     }
 
-    private void executeScript(JdbcTemplate jdbc, String classpathLocation) {
-        try (Connection connection = jdbc.getDataSource().getConnection()) {
-            org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
-                    connection, new ClassPathResource(classpathLocation));
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not execute migration script " + classpathLocation, ex);
-        }
-    }
-
-    private void applyV8(JdbcTemplate jdbc) {
-        // V8 contains a dollar-quoted DO gate block that Spring's ScriptUtils
-        // would split on inner semicolons, so the whole file is executed as one
-        // statement batch like Flyway does.
-        try (Connection connection = jdbc.getDataSource().getConnection();
-                java.sql.Statement statement = connection.createStatement();
-                java.io.InputStream in = new ClassPathResource(V8).getInputStream()) {
-            String sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            statement.execute(sql);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not execute migration script " + V8, ex);
-        }
+    private static void applyV8(JdbcTemplate jdbc) {
+        StagedMigrationSupport.executeWholeScript(jdbc, V8);
     }
 
     private UUID insertLegacyReservation(JdbcTemplate jdbc) {
@@ -100,7 +55,7 @@ class V8SessionGateMigrationTest {
     @Test
     @DisplayName("V8 refuses migration while orphan session refs exist, passes after backfill")
     void v8GateRefusesOrphansAndPassesAfterBackfill() {
-        JdbcTemplate jdbc = stagedDatabase("seatflow_res_v8_gate_it");
+        JdbcTemplate jdbc = stagedDatabase("seatflow_res_v8_gate_it").jdbc();
         UUID legacyId = insertLegacyReservation(jdbc);
 
         assertThatThrownBy(() -> applyV8(jdbc))

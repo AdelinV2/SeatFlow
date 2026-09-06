@@ -3,9 +3,11 @@ package com.seatflow.reservation.integration;
 import com.seatflow.common.domain.enums.ErrorCode;
 import com.seatflow.common.domain.exception.ConflictException;
 import com.seatflow.common.domain.exception.ValidationException;
+import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.reservation.client.EventClient;
 import com.seatflow.reservation.client.dto.EventPricingDetails;
 import com.seatflow.reservation.client.dto.SessionBookingContextDto;
+import com.seatflow.reservation.messaging.event.ReservationHeldEvent;
 import com.seatflow.reservation.migration.SessionInventoryBackfillService;
 import com.seatflow.reservation.model.entity.Reservation;
 import com.seatflow.reservation.model.entity.SeatHold;
@@ -16,10 +18,13 @@ import com.seatflow.reservation.repository.ReservationRepository;
 import com.seatflow.reservation.repository.SeatHoldRepository;
 import com.seatflow.reservation.service.ReservationService;
 import com.seatflow.reservation.web.dto.request.CreateReservationRequest;
+import com.seatflow.reservation.web.dto.response.ReservationResponse;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -28,6 +33,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -42,13 +48,17 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 /**
@@ -63,6 +73,8 @@ import static org.mockito.Mockito.when;
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SessionScopedInventoryIntegrationTest {
+
+    private static final Logger log = LoggerFactory.getLogger(SessionScopedInventoryIntegrationTest.class);
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -102,8 +114,19 @@ class SessionScopedInventoryIntegrationTest {
     @Autowired
     private OutboxEventRepository outboxEventRepository;
 
+    // Spy (not mock) on the concrete ObjectMapper: every serialization
+    // delegates to the real mapper; order 14 adds a temporary gating answer
+    // that is removed afterwards, so later ordered tests run unstubbed. (A
+    // repository-interface spy cannot use callRealMethod, so the gate sits on
+    // the outbox serialization step inside the same production transaction.)
+    @MockitoSpyBean
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
     @Autowired
     private SessionInventoryBackfillService backfillService;
+
+    @Autowired
+    private com.seatflow.reservation.messaging.producer.OutboxEventPublisher outboxEventPublisher;
 
     private void stubSession(UUID sessionId, UUID eventId) {
         stubSession(sessionId, eventId, "SCHEDULED", "PUBLISHED");
@@ -190,23 +213,44 @@ class SessionScopedInventoryIntegrationTest {
 
         int threads = 20;
         ExecutorService executor = Executors.newFixedThreadPool(threads);
+        // Ready barrier + start gate: every contender must be poised on the
+        // gate before release, so the run cannot pass with sequential
+        // scheduling. ready.countDown() immediately precedes start.await() in
+        // each worker; the main thread releases only after all 20 counted down.
+        CountDownLatch ready = new CountDownLatch(threads);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger success = new AtomicInteger();
         AtomicInteger conflict = new AtomicInteger();
         AtomicInteger error = new AtomicInteger();
         java.util.concurrent.ConcurrentLinkedQueue<String> errorDetails = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        // P12-008 scenario C evidence: per-attempt latency histogram (log only,
+        // no hardware thresholds — the repo defines none).
+        java.util.concurrent.ConcurrentLinkedQueue<Long> latenciesNanos = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < threads; i++) {
             final int index = i;
             executor.submit(() -> {
                 try {
+                    ready.countDown();
                     start.await();
-                    reservationService.createReservation(
-                            request(sessionId, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
-                                    "idem-3-" + index + "-" + UUID.randomUUID()), null);
-                    success.incrementAndGet();
+                    long attemptStart = System.nanoTime();
+                    try {
+                        reservationService.createReservation(
+                                request(sessionId, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
+                                        "idem-3-" + index + "-" + UUID.randomUUID()), null);
+                        success.incrementAndGet();
+                    } finally {
+                        latenciesNanos.add(System.nanoTime() - attemptStart);
+                    }
                 } catch (ConflictException e) {
-                    conflict.incrementAndGet();
+                    // Exact loser contract: same-seat contention must surface
+                    // the established seat-taken code, not any other conflict.
+                    if (e.getErrorCode() == ErrorCode.SEAT_ALREADY_RESERVED) {
+                        conflict.incrementAndGet();
+                    } else {
+                        error.incrementAndGet();
+                        errorDetails.add("wrong-code:" + e.getErrorCode() + ": " + e.getMessage());
+                    }
                 } catch (Exception e) {
                     error.incrementAndGet();
                     errorDetails.add(e.getClass().getName() + ": " + e.getMessage());
@@ -214,10 +258,18 @@ class SessionScopedInventoryIntegrationTest {
                 return null;
             });
         }
+        assertThat(ready.await(30, TimeUnit.SECONDS)).as("all 20 contenders poised").isTrue();
         start.countDown();
         executor.shutdown();
         assertThat(executor.awaitTermination(60, TimeUnit.SECONDS)).isTrue();
 
+        List<Long> percentiles = percentilesMillis(latenciesNanos);
+        log.info("P12-008 scenario C same-session contention evidence. threads={}, winners={}, conflicts={}, latencyMs[p50/p95/p99]={}",
+                threads, success.get(), conflict.get(), percentiles);
+        writeLatencyEvidence("scenario-C-same-session",
+                threads, success.get(), conflict.get(), percentiles);
+
+        assertThat(latenciesNanos).as("every contender recorded an attempt").hasSize(threads);
         assertThat(errorDetails).as("unexpected errors: %s", errorDetails).isEmpty();
         assertThat(error.get()).isZero();
         assertThat(success.get()).isEqualTo(1);
@@ -239,23 +291,46 @@ class SessionScopedInventoryIntegrationTest {
 
         int perSession = 10;
         ExecutorService executor = Executors.newFixedThreadPool(perSession * 2);
+        // Ready barrier + start gate across BOTH sessions: all 20 contenders
+        // must be poised before release, or the run proves nothing about
+        // partitioned locking under overlap.
+        CountDownLatch ready = new CountDownLatch(perSession * 2);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger successA = new AtomicInteger();
         AtomicInteger successB = new AtomicInteger();
+        AtomicInteger conflictA = new AtomicInteger();
+        AtomicInteger conflictB = new AtomicInteger();
         AtomicInteger error = new AtomicInteger();
         java.util.concurrent.ConcurrentLinkedQueue<String> errorDetails = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        // P12-008 scenario D evidence: per-session latency histograms (log only,
+        // no hardware thresholds). Partitioned session locks must let both
+        // sessions elect a winner instead of one global lock serializing them.
+        java.util.concurrent.ConcurrentLinkedQueue<Long> latenciesANanos = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        java.util.concurrent.ConcurrentLinkedQueue<Long> latenciesBNanos = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
         for (int i = 0; i < perSession; i++) {
             final int index = i;
             executor.submit(() -> {
                 try {
+                    ready.countDown();
                     start.await();
-                    reservationService.createReservation(
-                            request(sessionA, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
-                                    "idem-4a-" + index + "-" + UUID.randomUUID()), null);
-                    successA.incrementAndGet();
+                    long attemptStart = System.nanoTime();
+                    try {
+                        reservationService.createReservation(
+                                request(sessionA, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
+                                        "idem-4a-" + index + "-" + UUID.randomUUID()), null);
+                        successA.incrementAndGet();
+                    } finally {
+                        latenciesANanos.add(System.nanoTime() - attemptStart);
+                    }
                 } catch (ConflictException e) {
-                    // expected loser
+                    // Exact loser contract per session.
+                    if (e.getErrorCode() == ErrorCode.SEAT_ALREADY_RESERVED) {
+                        conflictA.incrementAndGet();
+                    } else {
+                        error.incrementAndGet();
+                        errorDetails.add("A:wrong-code:" + e.getErrorCode() + ": " + e.getMessage());
+                    }
                 } catch (Exception e) {
                     error.incrementAndGet();
                     errorDetails.add("A:" + e.getClass().getName() + ": " + e.getMessage());
@@ -264,13 +339,25 @@ class SessionScopedInventoryIntegrationTest {
             });
             executor.submit(() -> {
                 try {
+                    ready.countDown();
                     start.await();
-                    reservationService.createReservation(
-                            request(sessionB, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
-                                    "idem-4b-" + index + "-" + UUID.randomUUID()), null);
-                    successB.incrementAndGet();
+                    long attemptStart = System.nanoTime();
+                    try {
+                        reservationService.createReservation(
+                                request(sessionB, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
+                                        "idem-4b-" + index + "-" + UUID.randomUUID()), null);
+                        successB.incrementAndGet();
+                    } finally {
+                        latenciesBNanos.add(System.nanoTime() - attemptStart);
+                    }
                 } catch (ConflictException e) {
-                    // expected loser
+                    // Exact loser contract per session.
+                    if (e.getErrorCode() == ErrorCode.SEAT_ALREADY_RESERVED) {
+                        conflictB.incrementAndGet();
+                    } else {
+                        error.incrementAndGet();
+                        errorDetails.add("B:wrong-code:" + e.getErrorCode() + ": " + e.getMessage());
+                    }
                 } catch (Exception e) {
                     error.incrementAndGet();
                     errorDetails.add("B:" + e.getClass().getName() + ": " + e.getMessage());
@@ -278,14 +365,36 @@ class SessionScopedInventoryIntegrationTest {
                 return null;
             });
         }
+        assertThat(ready.await(30, TimeUnit.SECONDS)).as("all 20 contenders poised").isTrue();
         start.countDown();
         executor.shutdown();
         assertThat(executor.awaitTermination(60, TimeUnit.SECONDS)).isTrue();
 
+        List<Long> percentilesA = percentilesMillis(latenciesANanos);
+        List<Long> percentilesB = percentilesMillis(latenciesBNanos);
+        log.info("P12-008 scenario D parallel-session evidence. perSession={}, winnersA={}, winnersB={},"
+                        + " latencyMsA[p50/p95/p99]={}, latencyMsB[p50/p95/p99]={}",
+                perSession, successA.get(), successB.get(), percentilesA, percentilesB);
+        // P12-008 REV-004: persist BOTH sessions' percentiles (earlier code
+        // wrote only session A even though both were logged).
+        writeLatencyEvidenceTwoSessions("scenario-D-parallel-sessions",
+                perSession, successA.get(), successB.get(),
+                conflictA.get() + conflictB.get(), percentilesA, percentilesB);
+
+        assertThat(latenciesANanos).as("every session-A contender recorded an attempt").hasSize(perSession);
+        assertThat(latenciesBNanos).as("every session-B contender recorded an attempt").hasSize(perSession);
         assertThat(errorDetails).as("unexpected errors: %s", errorDetails).isEmpty();
         assertThat(error.get()).isZero();
         assertThat(successA.get()).isEqualTo(1);
         assertThat(successB.get()).isEqualTo(1);
+        assertThat(conflictA.get()).isEqualTo(perSession - 1);
+        assertThat(conflictB.get()).isEqualTo(perSession - 1);
+        // Locks are partitioned by session: each session independently holds the
+        // shared physical seat exactly once at the DB level.
+        assertThat(seatHoldRepository.countByEventSessionIdAndSeatIdAndStatusIn(
+                sessionA, seat, List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD))).isEqualTo(1);
+        assertThat(seatHoldRepository.countByEventSessionIdAndSeatIdAndStatusIn(
+                sessionB, seat, List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD))).isEqualTo(1);
     }
 
     @Test
@@ -341,12 +450,16 @@ class SessionScopedInventoryIntegrationTest {
         stubSession(sessionId, eventId);
         stubPricing(eventId, Map.of(seat, new BigDecimal("15.00")));
 
+        // Tight execution bounds (milliseconds, not a minute-wide window): a
+        // non-15-minute HOLD_DURATION fails deterministically.
         Instant before = Instant.now();
         var response = reservationService.createReservation(
                 request(sessionId, eventId, List.of(seat), List.of(new BigDecimal("15.00")), "idem-7-" + UUID.randomUUID()), null);
+        Instant after = Instant.now();
 
-        assertThat(response.expiresAt()).isAfter(before.plus(Duration.ofMinutes(14)));
-        assertThat(response.expiresAt()).isBefore(before.plus(Duration.ofMinutes(16)));
+        assertThat(response.expiresAt())
+                .isAfterOrEqualTo(before.plus(Duration.ofMinutes(15)))
+                .isBeforeOrEqualTo(after.plus(Duration.ofMinutes(15)));
     }
 
     @Test
@@ -436,16 +549,49 @@ class SessionScopedInventoryIntegrationTest {
         legacy.addSeatHold(legacyHold);
         reservationRepository.saveAndFlush(legacy);
 
-        var result = backfillService.backfill(Map.of(legacyEventId, sessionId));
+        // P12-008 scenario G: a second legacy event carries a CONFIRMED/SOLD
+        // booking, so the real backfill path proves both reservation states
+        // and both hold states through the same run and gate.
+        UUID legacyEventConfirmed = UUID.randomUUID();
+        UUID sessionConfirmed = UUID.randomUUID();
+        stubSession(sessionConfirmed, legacyEventConfirmed);
 
-        assertThat(result.reservationsUpdated()).isEqualTo(1);
-        assertThat(result.seatHoldsUpdated()).isEqualTo(1);
+        Reservation legacyConfirmed = Reservation.builder()
+                .eventId(legacyEventConfirmed)
+                .customerEmail("legacy-confirmed@seatflow.com")
+                .status(ReservationStatus.CONFIRMED)
+                .expiresAt(Instant.now().plusSeconds(900))
+                .idempotencyKey("legacy-confirmed-" + UUID.randomUUID())
+                .totalAmount(new BigDecimal("10.00"))
+                .seatCount(1)
+                .build();
+        legacyConfirmed.addSeatHold(SeatHold.builder()
+                .eventId(legacyEventConfirmed)
+                .seatId(UUID.randomUUID())
+                .status(SeatHoldStatus.SOLD)
+                .price(new BigDecimal("10.00"))
+                .build());
+        reservationRepository.saveAndFlush(legacyConfirmed);
+
+        var result = backfillService.backfill(
+                Map.of(legacyEventId, sessionId, legacyEventConfirmed, sessionConfirmed));
+
+        assertThat(result.reservationsUpdated()).isEqualTo(2);
+        assertThat(result.seatHoldsUpdated()).isEqualTo(2);
         var reloaded = reservationRepository.findWithSeatHoldsById(legacy.getId()).orElseThrow();
         assertThat(reloaded.getEventSessionId()).isEqualTo(sessionId);
         assertThat(reloaded.getSeatHolds()).allMatch(h -> sessionId.equals(h.getEventSessionId()));
+        var reloadedConfirmed =
+                reservationRepository.findWithSeatHoldsById(legacyConfirmed.getId()).orElseThrow();
+        assertThat(reloadedConfirmed.getStatus()).isEqualTo(ReservationStatus.CONFIRMED);
+        assertThat(reloadedConfirmed.getEventSessionId()).isEqualTo(sessionConfirmed);
+        assertThat(reloadedConfirmed.getSeatHolds())
+                .allMatch(h -> sessionConfirmed.equals(h.getEventSessionId())
+                        && h.getStatus() == SeatHoldStatus.SOLD);
 
         // Rerun is a safe no-op.
-        var rerun = backfillService.backfill(Map.of(legacyEventId, sessionId));
+        var rerun = backfillService.backfill(
+                Map.of(legacyEventId, sessionId, legacyEventConfirmed, sessionConfirmed));
         assertThat(rerun.reservationsUpdated()).isZero();
         assertThat(rerun.seatHoldsUpdated()).isZero();
     }
@@ -514,6 +660,134 @@ class SessionScopedInventoryIntegrationTest {
     }
 
     @Test
+    @Order(14)
+    void sessionBCompletesWhileSessionACreateReservationIsInFlight() throws Exception {
+        // P12-008 scenario D partition oracle (REV-004): a genuinely in-flight
+        // session-A createReservation SERVICE transaction is held open AFTER
+        // its seat-lock acquisition + aggregate insert and BEFORE commit, by
+        // gating the outbox serialization step inside the production
+        // transaction (ReservationServiceImpl.saveOutboxRecord runs between
+        // saveAndFlush and commit). Session B must then complete within a
+        // bounded Future.get while A is still blocked. A regression adding a
+        // global event/advisory lock anywhere in the creation path before
+        // commit would be held by A's open transaction and block B, failing
+        // the bounded get deterministically instead of hanging. Coordination
+        // uses latches only — no hardware thresholds, no arbitrary sleeps.
+        UUID eventId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        UUID seat = UUID.randomUUID();
+        stubSession(sessionA, eventId);
+        stubSession(sessionB, eventId);
+        stubPricing(eventId, Map.of(seat, new BigDecimal("40.00")));
+
+        CountDownLatch enteredTx = new CountDownLatch(1);
+        CountDownLatch releaseTx = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            Object value = invocation.getArgument(0);
+            // Gate ONLY session A's ReservationHeld envelope serialization: at
+            // this point A's transaction has already run
+            // findAndLockSeatsForUpdate plus the reservation/hold insert, and
+            // still holds the transaction open. Session B's own envelope (a
+            // different session payload) serializes straight through.
+            if (value instanceof EventEnvelope<?> envelope
+                    && "ReservationHeldEvent".equals(envelope.eventType())
+                    && envelope.payload() instanceof ReservationHeldEvent held
+                    && sessionA.equals(held.eventSessionId())) {
+                enteredTx.countDown();
+                assertThat(releaseTx.await(30, TimeUnit.SECONDS))
+                        .as("release signal never arrived; failing instead of hanging")
+                        .isTrue();
+            }
+            return invocation.callRealMethod();
+        }).when(objectMapper).writeValueAsString(any());
+
+        ExecutorService booking = Executors.newFixedThreadPool(2);
+        try {
+            Future<ReservationResponse> inFlightA = booking.submit(() -> reservationService.createReservation(
+                    request(sessionA, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
+                            "idem-14a-" + UUID.randomUUID()), null));
+
+            assertThat(enteredTx.await(30, TimeUnit.SECONDS))
+                    .as("session-A service transaction reached the pre-commit gate")
+                    .isTrue();
+
+            Future<ReservationResponse> bookedB = booking.submit(() -> reservationService.createReservation(
+                    request(sessionB, eventId, List.of(seat), List.of(new BigDecimal("40.00")),
+                            "idem-14b-" + UUID.randomUUID()), null));
+            ReservationResponse responseB = bookedB.get(30, TimeUnit.SECONDS);
+            assertThat(responseB.eventSessionId()).isEqualTo(sessionB);
+
+            // B provably overtook A: A must still be blocked pre-commit here.
+            assertThat(inFlightA.isDone())
+                    .as("session-A must still be blocked pre-commit after B completed")
+                    .isFalse();
+
+            releaseTx.countDown();
+            ReservationResponse responseA = inFlightA.get(30, TimeUnit.SECONDS);
+            assertThat(responseA.eventSessionId()).isEqualTo(sessionA);
+        } finally {
+            releaseTx.countDown();
+            booking.shutdownNow();
+            // Remove the gating answer so later ordered tests run unstubbed
+            // (the gate only matches this test's session-A payload anyway).
+            reset(objectMapper);
+        }
+
+        // Both sessions independently hold the shared physical seat at the DB level.
+        assertThat(seatHoldRepository.countByEventSessionIdAndSeatIdAndStatusIn(
+                sessionA, seat, List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD))).isEqualTo(1);
+        assertThat(seatHoldRepository.countByEventSessionIdAndSeatIdAndStatusIn(
+                sessionB, seat, List.of(SeatHoldStatus.HELD, SeatHoldStatus.SOLD))).isEqualTo(1);
+    }
+
+    @Test
+    @Order(15)
+    void brokerPublishFailureLeavesCommittedOutboxRetryableAndAggregateIntact() {
+        // P12-008 outbox failure path (publisher leg): the aggregate + outbox
+        // commit together, and a broker failure must leave the committed
+        // outbox row unpublished/retryable without touching the aggregate.
+        // (The publisher never writes aggregates by construction; the rollback
+        // leg — forced outbox-write failure leaves no rows — lives in
+        // ReservationOutboxFailurePathIntegrationTest.)
+        UUID eventId = UUID.randomUUID();
+        UUID sessionId = UUID.randomUUID();
+        UUID seat = UUID.randomUUID();
+        stubSession(sessionId, eventId);
+        stubPricing(eventId, Map.of(seat, new BigDecimal("22.00")));
+
+        var response = reservationService.createReservation(
+                request(sessionId, eventId, List.of(seat), List.of(new BigDecimal("22.00")),
+                        "idem-15-" + UUID.randomUUID()), null);
+
+        var outboxBefore = outboxEventRepository.findAll().stream()
+                .filter(o -> response.id().equals(o.getAggregateId())
+                        && "ReservationHeldEvent".equals(o.getEventType()))
+                .toList();
+        assertThat(outboxBefore).hasSize(1);
+        int retryBefore = outboxBefore.getFirst().getRetryCount();
+
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(failedFuture(new RuntimeException("forced broker failure")));
+
+        outboxEventPublisher.publishPendingEvents();
+
+        var outboxAfter = outboxEventRepository.findAll().stream()
+                .filter(o -> response.id().equals(o.getAggregateId())
+                        && "ReservationHeldEvent".equals(o.getEventType()))
+                .toList();
+        assertThat(outboxAfter).hasSize(1);
+        assertThat(outboxAfter.getFirst().getPublishedAt()).isNull();
+        assertThat(outboxAfter.getFirst().getRetryCount()).isGreaterThan(retryBefore);
+
+        var stored = reservationRepository.findWithSeatHoldsById(response.id()).orElseThrow();
+        assertThat(stored.getStatus()).isEqualTo(ReservationStatus.PENDING);
+        assertThat(stored.getEventSessionId()).isEqualTo(sessionId);
+        assertThat(stored.getSeatHolds())
+                .allMatch(h -> h.getStatus() == SeatHoldStatus.HELD && sessionId.equals(h.getEventSessionId()));
+    }
+
+    @Test
     @Order(20)
     void expiringSessionADoesNotReleaseSessionB() {
         UUID eventId = UUID.randomUUID();
@@ -547,5 +821,82 @@ class SessionScopedInventoryIntegrationTest {
                 .toList();
         assertThat(expiredEvents).hasSize(1);
         assertThat(expiredEvents.getFirst().getPayload()).contains(sessionA.toString());
+    }
+
+    /**
+     * Evidence-only latency summary (P12-008 scenarios C/D). Returns
+     * {@code [p50, p95, p99]} in milliseconds. Never used as a pass/fail gate:
+     * the repository defines no hardware latency thresholds.
+     */    /**
+     * Persists the p50/p95/p99 evidence to a reviewable artifact under
+     * {@code target/p12-008-latency-evidence/} in addition to the log line
+     * (Surefire log retention is not relied upon). Assertion-free: file output
+     * never gates the test.
+     */
+    private static void writeLatencyEvidence(String scenario, int threads, int winners,
+                                             int conflicts, List<Long> percentilesMs) {
+        try {
+            java.nio.file.Path dir = java.nio.file.Path.of("target", "p12-008-latency-evidence");
+            java.nio.file.Files.createDirectories(dir);
+            String body = "scenario=" + scenario + System.lineSeparator()
+                    + "threads=" + threads + System.lineSeparator()
+                    + "winners=" + winners + System.lineSeparator()
+                    + "conflicts=" + conflicts + System.lineSeparator()
+                    + "latencyMs[p50/p95/p99]=" + percentilesMs + System.lineSeparator()
+                    + "recordedAt=" + Instant.now() + System.lineSeparator();
+            java.nio.file.Files.writeString(dir.resolve(scenario + ".txt"), body,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not persist latency evidence for " + scenario, e);
+        }
+    }
+
+    private static <T> java.util.concurrent.CompletableFuture<T> failedFuture(Throwable ex) {
+        java.util.concurrent.CompletableFuture<T> future = new java.util.concurrent.CompletableFuture<>();
+        future.completeExceptionally(ex);
+        return future;
+    }
+
+    /**
+     * Two-session variant of {@link #writeLatencyEvidence}: persists per-session
+     * p50/p95/p99 for parallel-session evidence (P12-008 scenario D) so review
+     * can inspect both sessions, not just session A. Assertion-free like the
+     * single-session variant.
+     */
+    private static void writeLatencyEvidenceTwoSessions(String scenario, int perSession,
+                                                        int winnersA, int winnersB, int conflicts,
+                                                        List<Long> percentilesAMs, List<Long> percentilesBMs) {
+        try {
+            java.nio.file.Path dir = java.nio.file.Path.of("target", "p12-008-latency-evidence");
+            java.nio.file.Files.createDirectories(dir);
+            String body = "scenario=" + scenario + System.lineSeparator()
+                    + "perSession=" + perSession + System.lineSeparator()
+                    + "winnersA=" + winnersA + System.lineSeparator()
+                    + "winnersB=" + winnersB + System.lineSeparator()
+                    + "conflicts=" + conflicts + System.lineSeparator()
+                    + "latencyMsA[p50/p95/p99]=" + percentilesAMs + System.lineSeparator()
+                    + "latencyMsB[p50/p95/p99]=" + percentilesBMs + System.lineSeparator()
+                    + "recordedAt=" + Instant.now() + System.lineSeparator();
+            java.nio.file.Files.writeString(dir.resolve(scenario + ".txt"), body,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not persist latency evidence for " + scenario, e);
+        }
+    }
+
+    private static List<Long> percentilesMillis(java.util.Collection<Long> latenciesNanos) {
+        if (latenciesNanos == null || latenciesNanos.isEmpty()) {
+            return List.of(-1L, -1L, -1L);
+        }
+        List<Long> sortedMillis = latenciesNanos.stream()
+                .map(nanos -> nanos / 1_000_000L)
+                .sorted()
+                .toList();
+        return List.of(
+                sortedMillis.get((int) (0.50 * (sortedMillis.size() - 1))),
+                sortedMillis.get((int) (0.95 * (sortedMillis.size() - 1))),
+                sortedMillis.get(sortedMillis.size() - 1));
     }
 }

@@ -29,7 +29,7 @@ public class SeatStatusBroadcasterImpl implements SeatStatusBroadcaster {
 
     /** Canonical session-scoped STOMP destination. Never route on eventId. */
     private static final String SESSION_DESTINATION_TEMPLATE = "/topic/sessions/%s/seats";
-    // P12-007: legacy event-scoped destination /topic/events/{id}/seats removed.
+    // P12-007: the legacy event-scoped seat destination was removed (ADR-011).
     // Seat updates publish exclusively to the session topic. Old subscribers
     // receive nothing (no redirect, no inference).
     private final SimpMessagingTemplate messagingTemplate;

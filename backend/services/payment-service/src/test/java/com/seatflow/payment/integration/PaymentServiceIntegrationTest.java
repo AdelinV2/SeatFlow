@@ -100,12 +100,18 @@ class PaymentServiceIntegrationTest {
     void fullPaymentLifecyclePublishesOutboxToKafka() {
         UUID reservationId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
+        // P12-008 scenario F/A: one correlated session-A identity flows through
+        // payment; session B exists only as a leakage oracle.
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        Instant startsA = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsA = Instant.parse("2026-10-05T21:00:00Z");
         String paymentIntentId = "pi_integration_123";
         String idempotencyKey = "idem-integration-1";
 
         when(reservationServiceClient.getReservation(reservationId)).thenReturn(new ReservationClientResponse(
                 reservationId,
-                UUID.randomUUID(),
+                sessionA,
                 eventId,
                 null,
                 "guest@example.com",
@@ -113,8 +119,8 @@ class PaymentServiceIntegrationTest {
                 Instant.now().plus(java.time.Duration.ofMinutes(15)),
                 new BigDecimal("50.00"),
                 2,
-                Instant.parse("2026-10-05T19:00:00Z"),
-                Instant.parse("2026-10-05T21:00:00Z"),
+                startsA,
+                endsA,
                 null,
                 List.of(),
                 Instant.now()
@@ -143,9 +149,13 @@ class PaymentServiceIntegrationTest {
             stripeWebhookService.handleWebhookEvent("{}", "sig");
         }
 
-        // 4. Payment status updated to SUCCESS
+        // 4. Payment status updated to SUCCESS with the exact session-A
+        // snapshot carried from the trusted reservation state.
         Payment updated = paymentRepository.findByReservationId(reservationId).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(updated.getEventSessionId()).isEqualTo(sessionA);
+        assertThat(updated.getSessionStartsAt()).isEqualTo(startsA);
+        assertThat(updated.getSessionEndsAt()).isEqualTo(endsA);
 
         // 5. Unpublished PaymentCompleted outbox record exists
         assertThat(outboxEventRepository.countByAggregateIdAndEventType(paymentId, "PaymentCompleted")).isEqualTo(1);
@@ -154,6 +164,11 @@ class PaymentServiceIntegrationTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(pending.getPublishedAt()).isNull();
+        String pendingPayload = pending.getPayload().toString();
+        assertThat(pendingPayload).contains(sessionA.toString());
+        assertThat(pendingPayload).contains(startsA.toString());
+        assertThat(pendingPayload).contains(endsA.toString());
+        assertThat(pendingPayload).doesNotContain(sessionB.toString());
 
         // 6. Trigger publisher
         outboxEventPublisher.publishPendingEvents();
@@ -171,5 +186,96 @@ class PaymentServiceIntegrationTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(published.getPublishedAt()).isNotNull();
+
+        // 9. Duplicate webhook delivery stays idempotent: replaying the same
+        // Stripe success produces no second payment row and no second
+        // PaymentCompleted outbox event (one logical payment set).
+        Event duplicateWebhookEvent = mockSucceededWebhookEvent(paymentIntentId);
+        try (var webhook = mockStatic(Webhook.class)) {
+            webhook.when(() -> Webhook.constructEvent(anyString(), anyString(), anyString()))
+                    .thenReturn(duplicateWebhookEvent);
+            stripeWebhookService.handleWebhookEvent("{}", "sig");
+        }
+
+        assertThat(paymentRepository.findByReservationId(reservationId)).isPresent();
+        assertThat(outboxEventRepository.countByAggregateIdAndEventType(paymentId, "PaymentCompleted")).isEqualTo(1);
+        Payment afterReplay = paymentRepository.findByReservationId(reservationId).orElseThrow();
+        assertThat(afterReplay.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(afterReplay.getEventSessionId()).isEqualTo(sessionA);
+    }
+
+    @Test
+    void brokerPublishFailureLeavesCommittedOutboxRetryableAndPaymentIntact() {
+        // P12-008 outbox failure path (publisher leg, REV-005): the payment +
+        // PaymentCompleted outbox commit together in the webhook transaction,
+        // and a broker failure must leave the committed outbox row
+        // unpublished/retryable without touching the authoritative payment.
+        // (The aggregate leg — forced outbox-write failure rolls back the
+        // whole webhook transaction — lives in
+        // PaymentOutboxWriteFailureIntegrationTest.)
+        UUID reservationId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
+        UUID sessionB = UUID.randomUUID();
+        Instant startsA = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsA = Instant.parse("2026-10-05T21:00:00Z");
+        String paymentIntentId = "pi_broker_fail_123";
+        String idempotencyKey = "idem-broker-fail-1";
+
+        when(reservationServiceClient.getReservation(reservationId)).thenReturn(new ReservationClientResponse(
+                reservationId,
+                sessionA,
+                eventId,
+                null,
+                "guest@example.com",
+                "PENDING",
+                Instant.now().plus(java.time.Duration.ofMinutes(15)),
+                new BigDecimal("50.00"),
+                2,
+                startsA,
+                endsA,
+                null,
+                List.of(),
+                Instant.now()
+        ));
+        when(stripePaymentGateway.createPaymentIntent(any(), any(), any(), any(), any()))
+                .thenReturn(new StripeIntentResult(paymentIntentId, "secret_broker_fail", "requires_payment_method"));
+
+        paymentService.createPaymentIntent(new CreatePaymentIntentRequest(reservationId, idempotencyKey), null);
+
+        Payment payment = paymentRepository.findByReservationId(reservationId).orElseThrow();
+        UUID paymentId = payment.getId();
+
+        Event webhookEvent = mockSucceededWebhookEvent(paymentIntentId);
+        try (var webhook = mockStatic(Webhook.class)) {
+            webhook.when(() -> Webhook.constructEvent(anyString(), anyString(), anyString()))
+                    .thenReturn(webhookEvent);
+            stripeWebhookService.handleWebhookEvent("{}", "sig");
+        }
+
+        OutboxEvent pending = outboxEventRepository.findAll().stream()
+                .filter(o -> o.getAggregateId().equals(paymentId) && "PaymentCompleted".equals(o.getEventType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(pending.getPublishedAt()).isNull();
+        int retryBefore = pending.getRetryCount();
+
+        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("forced broker failure")));
+
+        outboxEventPublisher.publishPendingEvents();
+
+        OutboxEvent after = outboxEventRepository.findAll().stream()
+                .filter(o -> o.getAggregateId().equals(paymentId) && "PaymentCompleted".equals(o.getEventType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(after.getPublishedAt()).isNull();
+        assertThat(after.getRetryCount()).isGreaterThan(retryBefore);
+
+        Payment stored = paymentRepository.findByReservationId(reservationId).orElseThrow();
+        assertThat(stored.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(stored.getEventSessionId()).isEqualTo(sessionA);
+        assertThat(stored.getSessionStartsAt()).isEqualTo(startsA);
+        assertThat(stored.getSessionEndsAt()).isEqualTo(endsA);
     }
 }

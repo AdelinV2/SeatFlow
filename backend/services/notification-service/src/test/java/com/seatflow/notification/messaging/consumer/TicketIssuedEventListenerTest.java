@@ -43,7 +43,10 @@ class TicketIssuedEventListenerTest {
         UUID reservationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
+        UUID sessionA = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
+        Instant startsA = Instant.parse("2026-10-05T19:00:00Z");
+        Instant endsA = Instant.parse("2026-10-05T21:00:00Z");
 
         TicketIssuedEvent eventPayload = new TicketIssuedEvent(
                 ticketId,
@@ -51,10 +54,10 @@ class TicketIssuedEventListenerTest {
                 userId,
                 "alice@example.com",
                 "Alice Smith",
-                UUID.randomUUID(),
+                sessionA,
                 eventId,
-                Instant.parse("2026-10-05T19:00:00Z"),
-                Instant.parse("2026-10-05T21:00:00Z"),
+                startsA,
+                endsA,
                 null,
                 seatId,
                 new BigDecimal("120.00"),
@@ -86,6 +89,11 @@ class TicketIssuedEventListenerTest {
         assertThat(captured.customerEmail()).isEqualTo("alice@example.com");
         assertThat(captured.ticketCode()).isEqualTo("SF-TKT-7788");
         assertThat(captured.price()).isEqualTo(new BigDecimal("120.00"));
+        // P12-008 scenario F/A: the exact session-A identity and showing
+        // snapshot pass through to the notification unchanged.
+        assertThat(captured.eventSessionId()).isEqualTo(sessionA);
+        assertThat(captured.sessionStartsAt()).isEqualTo(startsA);
+        assertThat(captured.sessionEndsAt()).isEqualTo(endsA);
     }
 
     @Test

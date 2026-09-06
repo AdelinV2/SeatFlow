@@ -231,6 +231,14 @@ class EventSessionServiceImplTest {
         assertThatThrownBy(() -> eventSessionService.updateSession(otherEventId, SESSION_ID,
                 new UpdateEventSessionRequest(start, start.plusSeconds(7200), null, null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        // P12-008 scenario H (REV-001): the 404 oracle is decided by the exact
+        // event-scoped lookup with the mismatched pair — a session-only
+        // findById lookup would satisfy the same oracle without enforcing the
+        // pair, so it must never be consulted here.
+        verify(eventSessionRepository).findByIdAndEvent_Id(SESSION_ID, otherEventId);
+        verify(eventSessionRepository, never()).findById(any());
+        verify(eventSessionRepository, never()).save(any());
     }
 
     @Test
@@ -400,5 +408,26 @@ class EventSessionServiceImplTest {
 
         assertThatThrownBy(() -> eventSessionService.getBookingContext(SESSION_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void deleteSession_mismatchedPair_rejects404WithoutDeleting() {
+        // P12-008 scenario H: a session that belongs to another event is
+        // indistinguishable from a missing one (scoped lookup), and nothing
+        // is mutated. Per-organizer ownership beyond the ADMIN role boundary
+        // does not exist in the current model (no organizerId on Event), so
+        // the enforceable IDOR boundary is the event-scoped lookup + role
+        // checks proven here and in the controller slice.
+        UUID otherEventId = UUID.randomUUID();
+        when(eventSessionRepository.findByIdAndEvent_Id(SESSION_ID, otherEventId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> eventSessionService.deleteSession(otherEventId, SESSION_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+        // The scoped lookup with the exact mismatched pair decides; a
+        // session-only findById must never be consulted, and nothing is deleted.
+        verify(eventSessionRepository).findByIdAndEvent_Id(SESSION_ID, otherEventId);
+        verify(eventSessionRepository, never()).findById(any());
+        verify(eventSessionRepository, never()).delete(any());
     }
 }
