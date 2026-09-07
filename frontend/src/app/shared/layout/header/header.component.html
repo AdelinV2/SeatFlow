@@ -105,6 +105,21 @@
 
     <!-- Right: Controls & User Profile -->
     <div class="flex items-center gap-2.5">
+      @if (userContext.isAuthenticated()) {
+        <button
+          id="assistant-launcher"
+          type="button"
+          class="btn-spring touch-target flex h-10 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 text-xs font-semibold text-[var(--color-text-secondary)] shadow-xs transition-colors hover:border-indigo-400/40 hover:text-[var(--color-primary)]"
+          aria-label="Open SeatFlow Assistant"
+          [attr.aria-expanded]="assistant.isOpen()"
+          (click)="toggleAssistant()"
+        >
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>Assistant</span>
+        </button>
+      }
       <!-- Theme Switcher Button -->
       <button
         type="button"
@@ -345,6 +360,18 @@
           </svg>
           <span>My Tickets</span>
         </a>
+
+        <button
+          type="button"
+          class="mobile-nav-link"
+          aria-label="Open SeatFlow Assistant"
+          (click)="toggleAssistant()"
+        >
+          <svg class="size-5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>Assistant</span>
+        </button>
       }
 
       @if (userContext.isStaff()) {

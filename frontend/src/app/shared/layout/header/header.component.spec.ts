@@ -1,9 +1,12 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
 import { ThemeService } from '../../../core/theme/theme.service';
+import { AssistantStore } from '../../../services/assistant-store.service';
 import { HeaderComponent } from './header.component';
 
 describe('HeaderComponent', () => {
@@ -26,6 +29,8 @@ describe('HeaderComponent', () => {
       imports: [HeaderComponent],
       providers: [
         provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
         UserContextService,
         { provide: AuthService, useValue: authService },
         {
@@ -117,5 +122,45 @@ describe('HeaderComponent', () => {
     fixture.componentInstance.signOut();
 
     expect(authService.logout).toHaveBeenCalled();
+  });
+
+  it('hides the assistant launcher for guests and shows it when authenticated', () => {
+    fixture.detectChanges();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('#assistant-launcher'),
+    ).toBeNull();
+
+    userContext.setUser({
+      id: 'user-123',
+      email: 'alex@seatflow.test',
+      name: 'Alex',
+      roles: ['ROLE_CUSTOMER'],
+    });
+    fixture.detectChanges();
+
+    const launcher = (fixture.nativeElement as HTMLElement).querySelector(
+      '#assistant-launcher',
+    ) as HTMLButtonElement;
+    expect(launcher).not.toBeNull();
+    expect(launcher.getAttribute('aria-label')).toBe('Open SeatFlow Assistant');
+  });
+
+  it('opens the assistant drawer from the launcher', () => {
+    userContext.setUser({
+      id: 'user-123',
+      email: 'alex@seatflow.test',
+      name: 'Alex',
+      roles: ['ROLE_CUSTOMER'],
+    });
+    fixture.detectChanges();
+
+    const store = TestBed.inject(AssistantStore);
+    expect(store.isOpen()).toBeFalse();
+
+    (
+      (fixture.nativeElement as HTMLElement).querySelector('#assistant-launcher') as HTMLButtonElement
+    ).click();
+
+    expect(store.isOpen()).toBeTrue();
   });
 });
