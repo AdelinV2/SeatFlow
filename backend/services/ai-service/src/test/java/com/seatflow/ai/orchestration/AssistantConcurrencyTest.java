@@ -50,10 +50,13 @@ class AssistantConcurrencyTest {
                 .build();
         var conversations = new ConversationStore(
                 new AssistantConversationProperties(24, Duration.ofMinutes(30), 500), clock, memory);
+        var proposals = new com.seatflow.ai.proposal.ProposalStore(
+                new com.seatflow.ai.proposal.ReservationProposalProperties(
+                        Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), clock);
         var orchestrator = new AssistantOrchestrator(conversations, memory, promptFactory,
                 toolRegistry, new AssistantCardAssembler(), modelClient,
                 new AssistantToolObservation(), new AssistantProviderErrorMapper(),
-                statusService, clock);
+                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals), clock);
 
         when(promptFactory.systemPrompt()).thenReturn("prompt");
         when(statusService.isChatAvailable()).thenReturn(true);
@@ -123,10 +126,13 @@ class AssistantConcurrencyTest {
                 .build();
         var conversations = new ConversationStore(
                 new AssistantConversationProperties(24, Duration.ofMinutes(30), 500), clock, memory);
+        var proposals = new com.seatflow.ai.proposal.ProposalStore(
+                new com.seatflow.ai.proposal.ReservationProposalProperties(
+                        Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), clock);
         var orchestrator = new AssistantOrchestrator(conversations, memory, promptFactory,
                 toolRegistry, new AssistantCardAssembler(), modelClient,
                 new AssistantToolObservation(), new AssistantProviderErrorMapper(),
-                statusService, clock);
+                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals), clock);
 
         when(promptFactory.systemPrompt()).thenReturn("prompt");
         when(statusService.isChatAvailable()).thenReturn(true);

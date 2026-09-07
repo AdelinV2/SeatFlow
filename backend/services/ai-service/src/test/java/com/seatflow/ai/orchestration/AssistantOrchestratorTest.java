@@ -3,7 +3,10 @@ package com.seatflow.ai.orchestration;
 import com.seatflow.ai.api.dto.AssistantChatErrorCode;
 import com.seatflow.ai.api.dto.AssistantChatResponse;
 import com.seatflow.ai.context.AiRequestContext;
+import com.seatflow.ai.proposal.ProposalStore;
+import com.seatflow.ai.proposal.ReservationProposalProperties;
 import com.seatflow.ai.service.AiStatusService;
+import com.seatflow.ai.service.impl.ProposalServiceImpl;
 import com.seatflow.ai.tool.dto.AvailableSeatItem;
 import com.seatflow.ai.tool.dto.FindBestSeatsResult;
 import com.seatflow.common.domain.exception.ResourceNotFoundException;
@@ -71,13 +74,17 @@ class AssistantOrchestratorTest {
         cardAssembler = new AssistantCardAssembler();
         observation = new AssistantToolObservation();
         errorMapper = new AssistantProviderErrorMapper();
+        var proposalStore = new ProposalStore(
+                new ReservationProposalProperties(
+                        Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), clock);
+        var proposalService = new ProposalServiceImpl(proposalStore);
         org.mockito.Mockito.lenient().when(promptFactory.systemPrompt())
                 .thenReturn("test system prompt p15-004-v1");
         org.mockito.Mockito.lenient().when(statusService.isChatAvailable()).thenReturn(true);
         org.mockito.Mockito.lenient().when(statusService.isEnabled()).thenReturn(true);
         orchestrator = new AssistantOrchestrator(conversations, chatMemory, promptFactory,
                 toolRegistry, cardAssembler, modelClient, observation, errorMapper,
-                statusService, clock);
+                statusService, proposalService, clock);
     }
 
     @Test
@@ -181,7 +188,7 @@ class AssistantOrchestratorTest {
         assertThat(request.toString()).doesNotContain("GROQ_API_KEY").doesNotContain("gsk_");
         assertThat(request.allowedToolNames())
                 .containsExactlyInAnyOrder("searchEvents", "getEvent", "getEventSessions",
-                        "getAvailableSeats", "findBestSeats");
+                        "getAvailableSeats", "findBestSeats", "getReservation");
     }
 
     @Test
@@ -317,9 +324,12 @@ class AssistantOrchestratorTest {
                 .build();
         var shortStore = new ConversationStore(
                 new AssistantConversationProperties(24, Duration.ofMinutes(1), 500), mutable, shortMemory);
+        var shortProposals = new ProposalStore(
+                new ReservationProposalProperties(
+                        Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), mutable);
         var expiredOrchestrator = new AssistantOrchestrator(shortStore, shortMemory, promptFactory,
                 toolRegistry, cardAssembler, modelClient, observation, errorMapper,
-                statusService, mutable);
+                statusService, new ProposalServiceImpl(shortProposals), mutable);
         org.mockito.Mockito.lenient().when(modelClient.execute(any())).thenReturn(
                 new AssistantModelClient.ModelTurnResult("hi", null, null, null, null, null));
 

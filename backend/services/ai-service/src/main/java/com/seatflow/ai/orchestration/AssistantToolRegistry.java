@@ -11,14 +11,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Explicit allow-list for ordinary {@code /api/ai/chat} execution (TASK-P15-004 section 6).
+ * Explicit allow-list for ordinary {@code /api/ai/chat} execution (TASK-P15-004 section 6,
+ * TASK-P15-005 section 3).
  *
  * <p>Ordinary chat exposes exactly:
- * {@code searchEvents, getEvent, getEventSessions, getAvailableSeats, findBestSeats}.
- * {@code getReservation} is added in P15-005; {@code createReservation} is never registered in the
- * ordinary chat set. No payment, refund, admin analytics, staff scanner, user-management, arbitrary
- * HTTP, SQL, filesystem, shell, Groq browser search, Groq code execution, or remote MCP tool is
- * exposed.
+ * {@code searchEvents, getEvent, getEventSessions, getAvailableSeats, findBestSeats,
+ * getReservation}.
+ * {@code createReservation} is never registered in the ordinary chat set. No payment, refund,
+ * admin analytics, staff scanner, user-management, arbitrary HTTP, SQL, filesystem, shell, Groq
+ * browser search, Groq code execution, or remote MCP tool is exposed.
  *
  * <p>The registry is explicit, not component auto-discovery: a future bean cannot accidentally
  * become a chat tool simply because it has {@code @Tool}. The chat path passes only these
@@ -36,11 +37,12 @@ public class AssistantToolRegistry {
             "getEvent",
             "getEventSessions",
             "getAvailableSeats",
-            "findBestSeats");
+            "findBestSeats",
+            "getReservation");
 
     private final List<ToolCallbackProvider> toolCallbackProviders;
 
-    /** Returns exactly the five P15-004 ordinary chat callbacks, in stable name order. */
+    /** Returns exactly the six P15-005 ordinary chat callbacks, in stable name order. */
     public List<ToolCallback> ordinaryChatToolCallbacks() {
         List<ToolCallback> all = toolCallbackProviders.stream()
                 .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
