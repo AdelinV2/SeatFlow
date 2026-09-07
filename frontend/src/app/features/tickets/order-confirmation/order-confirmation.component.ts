@@ -244,9 +244,4 @@ export class OrderConfirmationComponent implements OnInit {
       });
   }
 
-  printReceipt(): void {
-    if (isPlatformBrowser(this.platformId)) {
-      window.print();
-    }
-  }
 }
