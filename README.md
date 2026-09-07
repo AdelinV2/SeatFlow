@@ -462,6 +462,8 @@ SeatFlow/
 │       ├── eureka-server/
 │       ├── event-service/
 │       ├── notification-service/
+│       ├── analytics-service/
+│       ├── ai-service/
 │       ├── payment-service/
 │       ├── realtime-service/
 │       ├── reservation-service/

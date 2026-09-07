@@ -38,6 +38,7 @@ class PrometheusConfigurationContractTest {
                 "realtime-service",
                 "notification-service",
                 "analytics-service",
+                "ai-service",
                 "kafka-exporter",
                 "otel-collector",
                 "tempo",
@@ -48,7 +49,7 @@ class PrometheusConfigurationContractTest {
             targetCount++;
         }
 
-        assertThat(targetCount).isEqualTo(16);
+        assertThat(targetCount).isEqualTo(17);
         assertThat(prometheus).contains("eureka-server:8761");
         assertThat(prometheus).contains(
                 "regex: 'seatflow_reservations_created_events_total'",
@@ -80,6 +81,7 @@ class PrometheusConfigurationContractTest {
                 repository.resolve("backend/services/event-service/src/main/java/com/seatflow/event/config/SecurityConfig.java"),
                 repository.resolve("backend/services/notification-service/src/main/java/com/seatflow/notification/config/SecurityConfig.java"),
                 repository.resolve("backend/services/analytics-service/src/main/java/com/seatflow/analytics/config/SecurityConfig.java"),
+                repository.resolve("backend/services/ai-service/src/main/java/com/seatflow/ai/config/SecurityConfig.java"),
                 repository.resolve("backend/services/payment-service/src/main/java/com/seatflow/payment/config/SecurityConfig.java"),
                 repository.resolve("backend/services/realtime-service/src/main/java/com/seatflow/realtime/config/SecurityConfig.java"),
                 repository.resolve("backend/services/reservation-service/src/main/java/com/seatflow/reservation/config/SecurityConfig.java"),

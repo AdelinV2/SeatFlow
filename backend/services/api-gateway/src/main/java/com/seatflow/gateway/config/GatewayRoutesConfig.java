@@ -103,6 +103,12 @@ public class GatewayRoutesConfig {
                         .path("/api/admin/analytics/**")
                         .uri("lb://analytics-service"))
 
+                // 10. AI Service (TASK-P15-001: narrow customer AI surface only).
+                // Placed last so no broader matcher shadows it; never use /api/** here.
+                .route("ai-service", r -> r
+                        .path("/api/ai/**")
+                        .uri("lb://ai-service"))
+
                 .build();
     }
 }

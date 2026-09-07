@@ -33,6 +33,7 @@ jobs:
           - { image: realtime-service, context: ./backend, dockerfile: ./backend/services/realtime-service/Dockerfile }
           - { image: notification-service, context: ./backend, dockerfile: ./backend/services/notification-service/Dockerfile }
           - { image: analytics-service, context: ./backend, dockerfile: ./backend/services/analytics-service/Dockerfile }
+          - { image: ai-service, context: ./backend, dockerfile: ./backend/services/ai-service/Dockerfile }
           - { image: frontend, context: ./frontend, dockerfile: ./frontend/Dockerfile }
           - { image: otel-collector, context: ./docker, dockerfile: ./docker/otel/Dockerfile.collector }
           - { image: tempo, context: ./docker, dockerfile: ./docker/otel/Dockerfile.tempo }
@@ -127,7 +128,7 @@ jobs:
             '{schemaVersion: 1, imageTag: $sha, registry: $registry, createdAt: $created,
               images: ["eureka-server","api-gateway","user-service","seat-map-service",
                 "event-service","reservation-service","payment-service","ticket-service",
-                "realtime-service","notification-service","analytics-service","frontend","otel-collector","tempo"]}' \
+                "realtime-service","notification-service","analytics-service","ai-service","frontend","otel-collector","tempo"]}' \
             > deployment-manifest.json
 
       - name: Upload deployment manifest

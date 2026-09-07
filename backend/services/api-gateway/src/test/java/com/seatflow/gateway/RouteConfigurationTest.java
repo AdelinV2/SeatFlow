@@ -47,7 +47,8 @@ class RouteConfigurationTest {
                 .containsEntry("ticket-service", URI.create("lb://ticket-service"))
                 .containsEntry("realtime-service", URI.create("lb://realtime-service"))
                 .containsEntry("notification-service", URI.create("lb://notification-service"))
-                .containsEntry("analytics-service", URI.create("lb://analytics-service"));
+                .containsEntry("analytics-service", URI.create("lb://analytics-service"))
+                .containsEntry("ai-service", URI.create("lb://ai-service"));
     }
 
     @Test
@@ -142,6 +143,12 @@ class RouteConfigurationTest {
         assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/events");
         assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/sessions");
         assertRouteMatches("analytics-service", "/api/admin/analytics/export/daily.csv");
+    }
+
+    @Test
+    @DisplayName("Verify ai-service route predicate matches narrow AI surface without shadowing")
+    void aiServiceRoutePredicateMatches() {
+        assertRouteMatches("ai-service", "/api/ai/status");
     }
 
     private void assertRouteMatches(String expectedRouteId, String path) {

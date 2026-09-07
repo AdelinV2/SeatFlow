@@ -9,7 +9,7 @@ Local orchestration is intentionally split into composable files that mirror the
 | File | Purpose | Key Services |
 |------|---------|--------------|
 | `docker/docker-compose.yml` | Core infrastructure + service discovery + edge gateway | `postgres:16.6-alpine`, `apache/kafka:3.9.0` (KRaft), `redis:7.4-alpine`, `eureka-server`, `api-gateway` |
-| `docker/docker-compose.services.yml` | Nine business microservices + Angular/Nginx frontend | `user-service:8081` … `analytics-service:8089`, `frontend:8080` |
+| `docker/docker-compose.services.yml` | Ten business microservices + Angular/Nginx frontend | `user-service:8081` … `ai-service:8090`, `frontend:8080` |
 | `docker/docker-compose.monitoring.yml` | Self-hosted observability stack | `otel-collector:4317/4318`, `prometheus:9090`, `grafana:3000`, `tempo:3200`, `loki:3100`, `promtail`, `kafka-exporter` |
 | `docker/docker-compose.prod.yml` | **Production override** for GCP `e2-highmem-2` (2 vCPU / 16 GiB) | Immutable AR images, `prod` profile, private ports, resource limits, persistence, security hardening |
 
@@ -105,6 +105,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.services.ym
 | realtime-service | `seatflow/realtime-service:local` | 8087 | private | WebSocket STOMP |
 | notification-service | `seatflow/notification-service:local` | 8088 | private | Email / notification fan-out |
 | analytics-service | `seatflow/analytics-service:local` | 8089 | private | Admin analytics read model (Stripe Test Mode / Demo) |
+| ai-service | `seatflow/ai-service:local` | 8090 | private | AI assistant (Groq via Spring AI; no DB; disabled without key) |
 | frontend | `seatflow/frontend:local` | 4200 → 8080 | **80 public** | Angular SPA + Nginx reverse proxy (`/api/`, `/ws/`) |
 | otel-collector | `otel/opentelemetry-collector-contrib:0.128.0` | 4317/4318 | private | OTLP → Tempo |
 | prometheus | `prom/prometheus:v2.51.0` | 9090 | private | `/actuator/prometheus` scraping (Docker DNS) |

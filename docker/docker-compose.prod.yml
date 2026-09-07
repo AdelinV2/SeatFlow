@@ -505,6 +505,42 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  ai-service:
+    image: ${AR_BASE}/ai-service:${SEATFLOW_IMAGE_TAG:?required}
+    ports: !reset []
+    expose:
+      - "8090"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SEATFLOW_DEPLOYMENT_ENV: prod
+      SEATFLOW_SERVICE_NAME: ai-service
+      SEATFLOW_VERSION: ${SEATFLOW_IMAGE_TAG}
+      SERVER_PORT: 8090
+      AI_ENABLED: ${AI_ENABLED:-false}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      EUREKA_SERVER_URL: http://eureka-server:8761/eureka/
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:-https://txyyirobwnomhxygbacq.supabase.co/auth/v1/.well-known/jwks.json}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:-authenticated}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      JAVA_TOOL_OPTIONS: "-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar -Xms128m -Xmx256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    mem_limit: 384m
+    cpus: 0.4
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   frontend:
     image: ${AR_BASE}/frontend:${SEATFLOW_IMAGE_TAG:?required}
     # The host Nginx edge owns public 80/443. The SPA container is reachable only
