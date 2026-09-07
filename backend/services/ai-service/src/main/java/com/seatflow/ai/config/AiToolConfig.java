@@ -1,6 +1,7 @@
 package com.seatflow.ai.config;
 
 import com.seatflow.ai.tool.EventDiscoveryTools;
+import com.seatflow.ai.tool.SeatAvailabilityTools;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +23,13 @@ public class AiToolConfig {
     public ToolCallbackProvider eventDiscoveryToolCallbacks(EventDiscoveryTools eventDiscoveryTools) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(eventDiscoveryTools)
+                .build();
+    }
+
+    @Bean
+    public ToolCallbackProvider seatAvailabilityToolCallbacks(SeatAvailabilityTools seatAvailabilityTools) {
+        return MethodToolCallbackProvider.builder()
+                .toolObjects(seatAvailabilityTools)
                 .build();
     }
 

@@ -23,6 +23,9 @@ server:
 event-service:
   base-url: ${EVENT_SERVICE_URL:http://event-service}
 
+reservation-service:
+  base-url: ${RESERVATION_SERVICE_URL:http://reservation-service}
+
 resilience4j:
   circuitbreaker:
     instances:
@@ -35,6 +38,13 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         ignore-exceptions:
           - com.seatflow.ai.client.exception.EventServiceNotFoundException
+      reservationService:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
 
 seatflow:
   ai:

@@ -4,6 +4,8 @@ import com.seatflow.ai.client.EventServiceClient;
 import com.seatflow.ai.client.dto.EventDetailClientDto;
 import com.seatflow.ai.client.dto.EventSessionClientDto;
 import com.seatflow.ai.client.dto.EventSummaryClientDto;
+import com.seatflow.ai.client.dto.SeatMapClientDto;
+import com.seatflow.ai.client.dto.SessionBookingContextClientDto;
 import com.seatflow.ai.client.exception.EventServiceNotFoundException;
 import com.seatflow.ai.client.exception.EventServiceUnavailableException;
 import com.seatflow.ai.context.AiRequestContext;
@@ -112,6 +114,40 @@ public class EventServiceClientImpl implements EventServiceClient {
             log.warn("event-service circuit open for listSessions: eventId={}", eventId);
             throw new EventServiceUnavailableException(AiToolError.DOWNSTREAM_UNAVAILABLE,
                     "Event sessions are temporarily unavailable. Please try again shortly.", e);
+        }
+    }
+
+    @Override
+    public SessionBookingContextClientDto getSessionBookingContext(
+            UUID eventSessionId, AiRequestContext context) {
+        requireContext(context);
+        if (eventSessionId == null) {
+            throw new AiToolException(AiToolError.INVALID_TOOL_ARGUMENT,
+                    "An eventSessionId is required to resolve the session booking context.");
+        }
+        try {
+            return circuitBreaker.executeSupplier(() -> fetchBookingContext(eventSessionId, context));
+        } catch (CallNotPermittedException e) {
+            log.warn("event-service circuit open for getSessionBookingContext: eventSessionId={}",
+                    eventSessionId);
+            throw new EventServiceUnavailableException(AiToolError.DOWNSTREAM_UNAVAILABLE,
+                    "Session lookup is temporarily unavailable. Please try again shortly.", e);
+        }
+    }
+
+    @Override
+    public SeatMapClientDto getSeatMap(UUID eventId, AiRequestContext context) {
+        requireContext(context);
+        if (eventId == null) {
+            throw new AiToolException(AiToolError.INVALID_TOOL_ARGUMENT,
+                    "An eventId is required to read the seat map.");
+        }
+        try {
+            return circuitBreaker.executeSupplier(() -> fetchSeatMap(eventId, context));
+        } catch (CallNotPermittedException e) {
+            log.warn("event-service circuit open for getSeatMap: eventId={}", eventId);
+            throw new EventServiceUnavailableException(AiToolError.DOWNSTREAM_UNAVAILABLE,
+                    "Seat map lookup is temporarily unavailable. Please try again shortly.", e);
         }
     }
 
@@ -246,6 +282,91 @@ public class EventServiceClientImpl implements EventServiceClient {
             return response;
         } catch (ResourceAccessException e) {
             throw mapTransportFailure("Event session lookup", e);
+        }
+    }
+
+    private SessionBookingContextClientDto fetchBookingContext(
+            UUID eventSessionId, AiRequestContext context) {
+        log.debug("Resolving session booking context from event-service: eventSessionId={}",
+                eventSessionId);
+        try {
+            SessionBookingContextClientDto response = client().get()
+                    .uri("/internal/event-sessions/{sessionId}/booking-context", eventSessionId)
+                    .headers(headers -> applyPropagation(headers, context))
+                    .retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new AiToolException(AiToolError.INVALID_TOOL_ARGUMENT,
+                                "Unknown event session: " + eventSessionId);
+                    })
+                    .onStatus(status -> status.value() == 400, (req, res) -> {
+                        throw new AiToolException(AiToolError.INVALID_TOOL_ARGUMENT,
+                                "The session lookup was rejected by the event catalog.");
+                    })
+                    .onStatus(status -> status.value() == 401, (req, res) -> {
+                        throw new AiToolException(AiToolError.UNAUTHENTICATED,
+                                "Authentication is required to resolve the event session.");
+                    })
+                    .onStatus(status -> status.value() == 403, (req, res) -> {
+                        throw new AiToolException(AiToolError.FORBIDDEN,
+                                "You are not allowed to resolve this session with these credentials.");
+                    })
+                    .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
+                        throw new EventServiceUnavailableException(AiToolError.DOWNSTREAM_UNAVAILABLE,
+                                "Session lookup is temporarily unavailable. Please try again shortly.");
+                    })
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new EventServiceUnavailableException(AiToolError.UNEXPECTED_TOOL_FAILURE,
+                                "Session lookup failed unexpectedly.");
+                    })
+                    .body(SessionBookingContextClientDto.class);
+            if (response == null || response.eventSessionId() == null || response.eventId() == null) {
+                throw new EventServiceUnavailableException(AiToolError.UNEXPECTED_TOOL_FAILURE,
+                        "Session lookup returned an incomplete response.");
+            }
+            if (!eventSessionId.equals(response.eventSessionId())) {
+                throw new EventServiceUnavailableException(AiToolError.UNEXPECTED_TOOL_FAILURE,
+                        "Session lookup returned data for a different session.");
+            }
+            return response;
+        } catch (ResourceAccessException e) {
+            throw mapTransportFailure("Session lookup", e);
+        }
+    }
+
+    private SeatMapClientDto fetchSeatMap(UUID eventId, AiRequestContext context) {
+        log.debug("Fetching priced seat map from event-service: eventId={}", eventId);
+        try {
+            SeatMapClientDto response = client().get()
+                    .uri("/api/events/{eventId}/seat-map", eventId)
+                    .headers(headers -> applyPropagation(headers, context))
+                    .retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new EventServiceNotFoundException("Event", eventId);
+                    })
+                    .onStatus(status -> status.value() == 401, (req, res) -> {
+                        throw new AiToolException(AiToolError.UNAUTHENTICATED,
+                                "Authentication is required to read the seat map.");
+                    })
+                    .onStatus(status -> status.value() == 403, (req, res) -> {
+                        throw new AiToolException(AiToolError.FORBIDDEN,
+                                "You are not allowed to read this seat map with these credentials.");
+                    })
+                    .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
+                        throw new EventServiceUnavailableException(AiToolError.DOWNSTREAM_UNAVAILABLE,
+                                "Seat map lookup is temporarily unavailable. Please try again shortly.");
+                    })
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new EventServiceUnavailableException(AiToolError.UNEXPECTED_TOOL_FAILURE,
+                                "Seat map lookup failed unexpectedly.");
+                    })
+                    .body(SeatMapClientDto.class);
+            if (response == null || response.sections() == null) {
+                throw new EventServiceUnavailableException(AiToolError.UNEXPECTED_TOOL_FAILURE,
+                        "Seat map lookup returned an incomplete response.");
+            }
+            return response;
+        } catch (ResourceAccessException e) {
+            throw mapTransportFailure("Seat map lookup", e);
         }
     }
 
