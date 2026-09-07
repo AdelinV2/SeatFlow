@@ -34,6 +34,7 @@ jobs:
           - { image: realtime-service, context: ./backend, dockerfile: ./backend/services/realtime-service/Dockerfile }
           - { image: notification-service, context: ./backend, dockerfile: ./backend/services/notification-service/Dockerfile }
           - { image: analytics-service, context: ./backend, dockerfile: ./backend/services/analytics-service/Dockerfile }
+          - { image: ai-service, context: ./backend, dockerfile: ./backend/services/ai-service/Dockerfile }
           - { image: frontend, context: ./frontend, dockerfile: ./frontend/Dockerfile }
           - { image: otel-collector, context: ./docker, dockerfile: ./docker/otel/Dockerfile.collector }
           - { image: tempo, context: ./docker, dockerfile: ./docker/otel/Dockerfile.tempo }

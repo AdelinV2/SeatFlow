@@ -39,6 +39,7 @@ scrape_configs:
           - 'realtime-service:8087'
           - 'notification-service:8088'
           - 'analytics-service:8089'
+          - 'ai-service:8090'
     metric_relabel_configs:
       - source_labels: [__name__]
         regex: 'seatflow_reservations_created_events_total'

@@ -20,7 +20,7 @@ compose=(docker compose
 required_services=(
   postgres redis kafka eureka-server api-gateway
   user-service seat-map-service event-service reservation-service
-  payment-service ticket-service realtime-service notification-service analytics-service frontend
+  payment-service ticket-service realtime-service notification-service analytics-service ai-service frontend
   otel-collector prometheus kafka-exporter grafana tempo loki promtail
 )
 

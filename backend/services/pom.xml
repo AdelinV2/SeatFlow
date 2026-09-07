@@ -28,6 +28,7 @@
         <module>realtime-service</module>
         <module>notification-service</module>
         <module>analytics-service</module>
+        <module>ai-service</module>
     </modules>
 
     <!-- Additional microservice modules are added here as they are created
