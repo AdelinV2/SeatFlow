@@ -5,7 +5,9 @@ import com.seatflow.ai.api.dto.AssistantChatErrorCode;
 import com.seatflow.ai.api.dto.AssistantChatResponse;
 import com.seatflow.ai.api.dto.AssistantError;
 import com.seatflow.ai.context.AiRequestContext;
+import com.seatflow.ai.proposal.ReservationProposal;
 import com.seatflow.ai.service.AiStatusService;
+import com.seatflow.ai.service.ProposalService;
 import com.seatflow.ai.tool.dto.AvailableSeatsResult;
 import com.seatflow.ai.tool.dto.EventSessionsToolResult;
 import com.seatflow.ai.tool.dto.EventToolResult;
@@ -29,12 +31,16 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Conversational orchestration around Groq + Spring AI read-only tools (TASK-P15-004).
+ * Conversational orchestration around Groq + Spring AI read-only tools (TASK-P15-004,
+ * TASK-P15-005).
  *
  * <p>Accepts a user message, maintains bounded user-owned conversational context, lets the model
  * invoke only approved read-only tools, and returns a structured application response.
- * Stops at {@code PROPOSAL_READY / CONFIRMATION_REQUIRED}; never executes {@code createReservation}
- * (P15-005 adds the confirmed boundary). No reservation is created by this task.
+ * Stops at {@code PROPOSAL_READY / CONFIRMATION_REQUIRED}; the {@code findBestSeats} turn also
+ * stores one exact server-side secure proposal for the explicit
+ * {@code POST /api/ai/proposals/{proposalId}/confirm} boundary. Chat text such as {@code yes}
+ * and model tool calls can never create a reservation — only the dedicated confirmation action
+ * authorizes the single Reservation Service write.
  *
  * <p>Security highlights: server generates UUIDs; owner is the authenticated subject; cross-owner
  * access yields {@code 404} (anti-enumeration, never context); concurrent turns are serialized with
@@ -60,6 +66,7 @@ public class AssistantOrchestrator {
     private final AssistantToolObservation observation;
     private final AssistantProviderErrorMapper errorMapper;
     private final AiStatusService statusService;
+    private final ProposalService proposalService;
     private final Clock clock;
 
     /**
@@ -229,9 +236,39 @@ public class AssistantOrchestrator {
                 ProposalDraft existing = latest == null ? null : latest.draft();
                 ProposalDraft draft;
                 if (existing != null && fingerprint.equals(existing.constraintsFingerprint())) {
-                    draft = existing;
+                    // Same constraints: reuse the draft only when its secure proposal is still
+                    // ACTIVE and owner-bound. An expired/consumed/superseded (or restart-lost)
+                    // secure proposal must not be re-presented as confirmable — mint a fresh one
+                    // so the card always carries a live confirmation ID.
+                    ReservationProposal liveSecure =
+                            proposalService.peekForOwner(existing.draftId(), ownerSubject);
+                    if (liveSecure != null && liveSecure.status()
+                            == com.seatflow.ai.proposal.ProposalStatus.ACTIVE) {
+                        draft = existing;
+                    } else {
+                        ReservationProposal secure = createSecureProposal(
+                                conversationId, ownerSubject, bestSeats, best, bestSeatsFingerprint);
+                        if (secure == null) {
+                            return providerErrorResponse(conversationId, current,
+                                    AssistantChatErrorCode.AI_RESPONSE_INVALID,
+                                    "Could not create a proposal. Please try again.");
+                        }
+                        draft = buildDraftWithId(bestSeats, best, fingerprint, secure.proposalId());
+                        conversations.putDraft(conversationId, draft);
+                    }
                 } else {
-                    draft = buildDraft(bestSeats, best, fingerprint);
+                    // Secure server proposal first (explicit-confirmation boundary): the card
+                    // carries the secure proposal ID so only the dedicated confirm endpoint can
+                    // authorize the single Reservation Service write. Draft and secure proposal
+                    // share the ID so reset/supersede stays coherent.
+                    ReservationProposal secure = createSecureProposal(
+                            conversationId, ownerSubject, bestSeats, best, bestSeatsFingerprint);
+                    if (secure == null) {
+                        return providerErrorResponse(conversationId, current,
+                                AssistantChatErrorCode.AI_RESPONSE_INVALID,
+                                "Could not create a proposal. Please try again.");
+                    }
+                    draft = buildDraftWithId(bestSeats, best, fingerprint, secure.proposalId());
                     conversations.putDraft(conversationId, draft);
                 }
                 responseCards.add(cards.seatSetCard(best, bestSeats.eventSessionId()));
@@ -287,7 +324,8 @@ public class AssistantOrchestrator {
      *
      * <p>Busy/interrupted resets fail with {@code 409} (same single-flight semantics as chat turns)
      * instead of a false {@code 204}: nothing is partially cleared, and an in-flight turn cannot be
-     * raced by a concurrent reset.
+     * raced by a concurrent reset. Reset supersedes the conversation's active secure proposal
+     * (P15-005) but never cancels an already-created Reservation Service hold.
      *
      * @return {@code true} when an owned conversation was cleared; {@code false} when unknown
      *     (callers answer {@code 404} without leaking cross-owner existence).
@@ -318,6 +356,7 @@ public class AssistantOrchestrator {
         }
         try {
             conversations.clearDraft(conversationId);
+            proposalService.supersedeForConversation(conversationId, ownerSubject);
             chatMemory.clear(conversationId.toString());
             conversations.remove(conversationId);
             log.info("AI conversation reset by owner: conversationId={}", conversationId);
@@ -396,6 +435,11 @@ public class AssistantOrchestrator {
 
     ProposalDraft buildDraft(FindBestSeatsResult result, FindBestSeatsResult.SeatCandidate best,
                               String fingerprint) {
+        return buildDraftWithId(result, best, fingerprint, UUID.randomUUID());
+    }
+
+    ProposalDraft buildDraftWithId(FindBestSeatsResult result, FindBestSeatsResult.SeatCandidate best,
+                                    String fingerprint, UUID draftId) {
         List<String> labels = best.seats() == null ? List.of() : best.seats().stream()
                 .map(seat -> {
                     String row = seat.rowLabel() == null ? "?" : seat.rowLabel();
@@ -413,11 +457,66 @@ public class AssistantOrchestrator {
                     .orElse("?");
             sectionSummary = "Section(s) " + sections;
         }
-        return new ProposalDraft(UUID.randomUUID(), null, result.eventSessionId(),
+        return new ProposalDraft(draftId, null, result.eventSessionId(),
                 List.copyOf(best.seatIds()), labels, sectionSummary, best.totalPriceMinor(),
                 best.currency(), best.contiguous(),
                 best.reasons() == null ? List.of() : List.copyOf(best.reasons()),
                 best.seatIds().size(), fingerprint, Instant.now(clock));
+    }
+
+    /**
+     * Creates the authoritative secure proposal for the explicit-confirmation boundary from the
+     * validated best-seats candidate. Returns {@code null} when creation fails so the caller can
+     * answer a recoverable error instead of presenting an unconfirmable card.
+     */
+    ReservationProposal createSecureProposal(
+            UUID conversationId,
+            String ownerSubject,
+            FindBestSeatsResult result,
+            FindBestSeatsResult.SeatCandidate best,
+            AssistantToolObservation.FindBestSeatsRequestSnapshot snapshot) {
+        try {
+            UUID eventId = parseOptionalUuid(snapshot == null ? null : snapshot.eventId());
+            Long budget = snapshot == null ? null : snapshot.maxTotalPriceMinor();
+            String category = snapshot == null ? null : snapshot.preferredCategory();
+            String strategy = snapshot == null ? null : snapshot.strategy();
+            List<ReservationProposal.SeatDisplay> displays =
+                    best.seats() == null ? List.of() : best.seats().stream()
+                            .filter(seat -> seat != null && seat.seatId() != null)
+                            .map(seat -> new ReservationProposal.SeatDisplay(
+                                    seat.seatId(),
+                                    seatLabel(seat.sectionName(), seat.rowLabel(), seat.seatNumber()),
+                                    seat.sectionName(), seat.rowLabel(), seat.seatNumber()))
+                            .toList();
+            List<UUID> tierIds = best.seats() == null ? List.of() : best.seats().stream()
+                    .filter(seat -> seat != null)
+                    .map(seat -> seat.pricingTierId())
+                    .toList();
+            return proposalService.createSecureProposal(
+                    conversationId, ownerSubject, eventId, result.eventSessionId(),
+                    List.copyOf(best.seatIds()), displays, tierIds, budget, category, strategy,
+                    best.totalPriceMinor(), best.currency());
+        } catch (RuntimeException ex) {
+            log.warn("AI secure proposal creation failed: conversationId={}", conversationId, ex);
+            return null;
+        }
+    }
+
+    private String seatLabel(String sectionName, String rowLabel, int seatNumber) {
+        String row = rowLabel == null ? "?" : rowLabel;
+        String section = sectionName == null ? "" : sectionName + " ";
+        return (section + "Row " + row + " Seat " + seatNumber).trim();
+    }
+
+    private UUID parseOptionalUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.trim());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     String fingerprintOf(AssistantToolObservation.FindBestSeatsRequestSnapshot snapshot) {

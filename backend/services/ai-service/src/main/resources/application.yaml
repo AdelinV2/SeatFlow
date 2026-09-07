@@ -55,6 +55,12 @@ seatflow:
       ttl: ${AI_CONVERSATION_TTL:30m}
       max-active-conversations: ${AI_MAX_ACTIVE_CONVERSATIONS:500}
       cleanup-interval: ${AI_CONVERSATION_CLEANUP_INTERVAL:PT5M}
+    proposal:
+      # Secure proposal bounds (TASK-P15-005 section 5): 5m TTL / 500 active, single-instance.
+      # The TTL is not a seat hold; seats stay free until Reservation Service creates the hold.
+      ttl: ${AI_PROPOSAL_TTL:5m}
+      max-active-proposals: ${AI_MAX_ACTIVE_PROPOSALS:500}
+      cleanup-interval: ${AI_PROPOSAL_CLEANUP_INTERVAL:PT1M}
 
 management:
   tracing:
