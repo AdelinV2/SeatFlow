@@ -220,6 +220,55 @@ class AnalyticsCsvExportIntegrationTest {
     }
 
     @Test
+    @DisplayName("OPERATIONS rows carry counts only; REVENUE rows carry money, currency, and Test Mode")
+    void shouldKeepOperationalAndFinancialGrainsExclusive() {
+        // TASK-P14-007 §7.14: S1/SEP_06 owns RON + EUR activity, so the export must hold
+        // exactly one OPERATIONS row plus one REVENUE row per currency, with no mixed
+        // total and no double-countable repetition of operational counts.
+        byte[] bytes = exportService.exportDailyCsv(new AnalyticsDateRange(SEP_05, SEP_06), null, null);
+        String csv = new String(bytes, StandardCharsets.UTF_8);
+        List<String> rows = csv.lines()
+                .filter(line -> line.startsWith("OPERATIONS,") || line.startsWith("REVENUE,"))
+                .toList();
+
+        List<String> s1Sep6 = rows.stream()
+                .filter(line -> line.contains(S1.toString()) && line.contains("2026-09-06"))
+                .toList();
+        assertThat(s1Sep6).hasSize(3);
+
+        String operations = s1Sep6.stream()
+                .filter(line -> line.startsWith("OPERATIONS,")).toList().getFirst();
+        String[] opsCells = operations.split(",", -1);
+        assertThat(opsCells[6]).isEmpty(); // currency empty on OPERATIONS
+        assertThat(opsCells[7]).isEqualTo("10"); // reservations_created once, not per currency
+        // Financial cells (16..20) empty on OPERATIONS.
+        for (int i = 16; i <= 20; i++) {
+            assertThat(opsCells[i]).isEmpty();
+        }
+        assertThat(opsCells[21]).isEmpty(); // stripe_test_mode only on REVENUE
+
+        List<String> revenues = s1Sep6.stream()
+                .filter(line -> line.startsWith("REVENUE,")).toList();
+        assertThat(revenues).hasSize(2);
+        for (String revenue : revenues) {
+            String[] cells = revenue.split(",", -1);
+            // Operational count cells (7..15) empty on REVENUE so counts cannot double-count.
+            for (int i = 7; i <= 15; i++) {
+                assertThat(cells[i]).isEmpty();
+            }
+            assertThat(cells[21]).isEqualTo("true"); // stripe_test_mode on every REVENUE row
+        }
+        assertThat(revenues.get(0)).contains(",EUR,");
+        assertThat(revenues.get(1)).contains(",RON,");
+        assertThat(revenues.get(1)).contains(",900000,"); // RON net = 1000000 - 100000
+        // No mixed-currency total (1000000 + 500000) exists anywhere in the export.
+        assertThat(csv).doesNotContain(",1500000,");
+        // No PII anywhere in the export.
+        assertThat(csv).doesNotContain("customerEmail");
+        assertThat(csv).doesNotContain("customerName");
+    }
+
+    @Test
     @DisplayName("exactly 10_000 real rows are accepted with a complete file")
     void shouldAcceptExactly10000RealRows() {
         // REV-001: isolated October date, so the September fixtures cannot leak in.

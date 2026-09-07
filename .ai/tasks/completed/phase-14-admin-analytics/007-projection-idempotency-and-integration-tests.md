@@ -88,7 +88,8 @@ A deliberately broken implementation should fail tests if it:
 ## 4. Dependencies / Prerequisites
 
 - P14-001 through P14-006 implementation complete on the task integration branch.
-- Phase 12 and 13 producer event contracts/tests complete.
+- Phase 12 producer event contracts/tests complete.
+- Phase 13 producer contracts: `PLANNED`, not implemented (see `.ai/tasks/phase-13-refunds-ticket-cancellation/000-phase-overview.md` Status). Supervisor scope decision (2026-09-07, RE-REVIEW-2 verdict): scan/refund/revocation analytics coverage in this task is projection-reducer coverage for P14-003-owned future contracts (builders `reservationRefunded`, `paymentRefunded`, `revokedForTicket`, `revokedForReservation`, `scanned`/`scannedAs` are explicitly labeled as such in `AnalyticsEnvelopeFactory`/`AnalyticsCanonicalFixtures`); producer-bound proof covers the 7 existing families via `AnalyticsProducerEnvelopeContractTest` (8/8). Concrete rebind exit dependency: `TASK-P13-008` (`phase-13-refunds-ticket-cancellation/008-analytics-rebind-scan-refund-revocation.md`) rebinds those 5 builders to real producer serialization when Phase 13 lands. No Phase 13 production behavior is invented on this branch.
 - Local Docker and test infrastructure can start PostgreSQL and Kafka.
 - The implementation agent must first inventory existing test utilities so this task reuses shared containers/build conventions rather than creating conflicting parallel infrastructure.
 

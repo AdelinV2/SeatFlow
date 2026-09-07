@@ -135,6 +135,17 @@ class StripeWebhookServiceImplTest {
         JsonNode payloadNode = outbox.getPayload();
         assertThat(payloadNode.get("payload").get("taxAmount").decimalValue()).isEqualByComparingTo("2.00");
         assertThat(payloadNode.get("payload").get("netAmount").decimalValue()).isEqualByComparingTo("8.00");
+        // TASK-P14-007: analytics consumes these PaymentCompleted correlation fields.
+        assertThat(payloadNode.get("payload").get("paymentId").asText())
+                .isEqualTo(payment.getId().toString());
+        assertThat(payloadNode.get("payload").get("reservationId").asText())
+                .isEqualTo(payment.getReservationId().toString());
+        assertThat(payloadNode.get("payload").get("amount").decimalValue())
+                .isEqualByComparingTo("10.00");
+        assertThat(payloadNode.get("payload").get("currency").asText()).isEqualTo("USD");
+        assertThat(payloadNode.get("payload").get("eventId").asText())
+                .isEqualTo(payment.getEventId().toString());
+        assertThat(payloadNode.get("payload").get("occurredAt").asText()).isNotBlank();
     }
 
     @Test
