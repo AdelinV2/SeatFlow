@@ -2,6 +2,7 @@ package com.seatflow.analytics.projection;
 
 import com.seatflow.analytics.model.entity.AnalyticsTicketFact;
 import com.seatflow.analytics.model.entity.AnalyticsTicketRevocationFact;
+import com.seatflow.analytics.repository.AnalyticsPaymentFactRepository;
 import com.seatflow.analytics.repository.AnalyticsReservationFactRepository;
 import com.seatflow.analytics.repository.AnalyticsTicketFactRepository;
 import com.seatflow.analytics.repository.AnalyticsTicketRevocationFactRepository;
@@ -47,6 +48,7 @@ public class TicketProjectionHandler {
     private final AnalyticsTicketFactRepository ticketFacts;
     private final AnalyticsTicketRevocationFactRepository revocationFacts;
     private final AnalyticsReservationFactRepository reservationFacts;
+    private final AnalyticsPaymentFactRepository paymentFacts;
     private final EventSessionProjectionHandler sessions;
 
     @Transactional
@@ -219,9 +221,43 @@ public class TicketProjectionHandler {
             eventId = reservationFacts.findById(ticket.getReservationId())
                     .map(r -> r.getEventId()).orElse(null);
         }
-        if (eventId != null && ticket.getEventSessionId() != null) {
-            sessions.ensureSession(eventId, ticket.getEventSessionId(), ticket.getLastSourceEventAt());
+        if (eventId == null && ticket.getEventSessionId() != null) {
+            // Scan-family payloads carry session identity but no parent-event identity. When
+            // reservation correlation is not yet resolvable (scan consumed before held), fall
+            // back to the already-known parent event for this session so the watermark below
+            // still converges instead of being skipped (REV-005: 10:10 vs 11:00 race).
+            eventId = sessions.sessionEventId(ticket.getEventSessionId()).orElse(null);
         }
+        if (eventId != null && ticket.getEventSessionId() != null) {
+            sessions.ensureSession(eventId, ticket.getEventSessionId(), correlatedWatermark(ticket));
+        }
+    }
+
+    /**
+     * Order-independent session watermark for one ticket's session (REV-005).
+     *
+     * <p>The maximum source-event time over the correlated analytics facts for that session
+     * (this ticket, its reservation fact, and that reservation's payment facts). Folding the
+     * max — rather than the triggering event's time — makes late correlation repair converge
+     * to the same watermark regardless of cross-topic delivery order. Served freshness is
+     * unaffected: APIs serve {@code latestOf(metric.lastProjectedEventAt, session.lastSourceEventAt)}
+     * and the metric watermark is already reconciler-maxed.
+     */
+    private Instant correlatedWatermark(AnalyticsTicketFact ticket) {
+        Instant watermark = ticket.getLastSourceEventAt();
+        if (ticket.getReservationId() != null) {
+            Instant reservationTime = reservationFacts.findById(ticket.getReservationId())
+                    .map(r -> r.getLastSourceEventAt()).orElse(null);
+            if (reservationTime != null) {
+                watermark = latest(watermark, reservationTime);
+            }
+            for (var payment : paymentFacts.findByReservationId(ticket.getReservationId())) {
+                if (payment.getLastSourceEventAt() != null) {
+                    watermark = latest(watermark, payment.getLastSourceEventAt());
+                }
+            }
+        }
+        return watermark;
     }
 
     private ProjectionImpact impactFor(AnalyticsTicketFact ticket, UUID payloadEventId) {

@@ -85,7 +85,7 @@ class ReservationServiceIntegrationTest {
     private SeatHoldRepository seatHoldRepository;
 
     @Test
-    void createReservationWritesOutboxAndPublisherDeliversToKafka() {
+    void createReservationWritesOutboxAndPublisherDeliversToKafka() throws Exception {
         UUID sessionId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         UUID seatId1 = UUID.randomUUID();
@@ -127,6 +127,16 @@ class ReservationServiceIntegrationTest {
         assertThat(pending.getAggregateId()).isEqualTo(response.id());
         assertThat(pending.getPublishedAt()).isNull();
         assertThat(pending.getRetryCount()).isZero();
+
+        // TASK-P14-007: analytics consumes these ReservationHeldEvent correlation fields.
+        com.fasterxml.jackson.databind.JsonNode heldPayload =
+                new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                        .readTree(pending.getPayload()).get("payload");
+        assertThat(heldPayload.get("reservationId").asText()).isEqualTo(response.id().toString());
+        assertThat(heldPayload.get("eventSessionId").asText()).isEqualTo(sessionId.toString());
+        assertThat(heldPayload.get("eventId").asText()).isEqualTo(eventId.toString());
+        assertThat(heldPayload.get("seatIds").size()).isEqualTo(2);
+        assertThat(heldPayload.get("occurredAt").asText()).isNotBlank();
 
         // 3. Manually trigger the outbox publisher
         outboxEventPublisher.publishPendingEvents();

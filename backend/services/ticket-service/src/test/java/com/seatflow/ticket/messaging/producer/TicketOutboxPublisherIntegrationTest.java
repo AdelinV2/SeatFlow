@@ -73,6 +73,7 @@ class TicketOutboxPublisherIntegrationTest {
         UUID reservationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
+        UUID eventSessionId = UUID.randomUUID();
         UUID seatId = UUID.randomUUID();
         BigDecimal price = new BigDecimal("120.00");
         BigDecimal taxAmount = new BigDecimal("20.00");
@@ -86,7 +87,7 @@ class TicketOutboxPublisherIntegrationTest {
                 userId,
                 "attendee@example.com",
                 "Alice Attendee",
-                UUID.randomUUID(),
+                eventSessionId,
                 eventId,
                 Instant.parse("2026-10-05T19:00:00Z"),
                 Instant.parse("2026-10-05T21:00:00Z"),
@@ -131,6 +132,13 @@ class TicketOutboxPublisherIntegrationTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> eventPayload = (Map<String, Object>) envelope.payload();
             assertThat(eventPayload.get("ticketCode")).isEqualTo(ticketCode);
+            // TASK-P14-007: analytics consumes these correlation fields from TicketIssued.
+            assertThat(eventPayload.get("ticketId")).isEqualTo(ticketId.toString());
+            assertThat(eventPayload.get("reservationId")).isEqualTo(reservationId.toString());
+            assertThat(eventPayload.get("eventSessionId")).isEqualTo(eventSessionId.toString());
+            assertThat(eventPayload.get("eventId")).isEqualTo(eventId.toString());
+            assertThat(eventPayload.get("occurredAt")).isNotNull();
+            assertThat(envelope.occurredAt()).isNotNull();
             assertThat(new BigDecimal(eventPayload.get("price").toString())).isEqualByComparingTo(price);
             assertThat(new BigDecimal(eventPayload.get("taxAmount").toString())).isEqualByComparingTo(taxAmount);
             assertThat(new BigDecimal(eventPayload.get("netAmount").toString())).isEqualByComparingTo(netAmount);

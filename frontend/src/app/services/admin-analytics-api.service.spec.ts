@@ -131,6 +131,78 @@ describe('AdminAnalyticsApiService', () => {
     req.flush(mock);
   });
 
+  it('should pass the currency through for financial session sorts', () => {
+    const mock: PagedResult<never> = {
+      content: [],
+      page: 0,
+      size: 25,
+      totalElements: 0,
+      totalPages: 0,
+      isFirst: true,
+      isLast: true,
+    };
+
+    service
+      .getSessions({ page: 0, size: 25, sort: 'grossRevenue,desc', currency: 'RON' })
+      .subscribe();
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/sessions' && r.method === 'GET',
+    );
+    expect(req.request.params.get('sort')).toBe('grossRevenue,desc');
+    expect(req.request.params.get('currency')).toBe('RON');
+    req.flush(mock);
+  });
+
+  it('should preserve separate per-currency revenue entries without merging', () => {
+    const mock: AnalyticsSummary = {
+      from: '2026-09-06',
+      to: '2026-09-06',
+      filters: { eventId: null, eventSessionId: null },
+      reservations: { created: 2, confirmed: 2, expired: 0, refunded: 0 },
+      tickets: { issued: 2, revoked: 0, scanned: 0 },
+      payments: {
+        succeeded: 2,
+        withFailure: 0,
+        refundsCompleted: 0,
+        revenueByCurrency: [
+          { currency: 'RON', grossMinor: 10000, refundedMinor: 0, netMinor: 10000, testMode: true },
+          { currency: 'EUR', grossMinor: 2000, refundedMinor: 0, netMinor: 2000, testMode: true },
+        ],
+      },
+      rates: {
+        reservationToPayment: { numerator: 2, denominator: 2, ratio: 1 },
+        expiration: { numerator: 0, denominator: 2, ratio: 0 },
+        refund: { numerator: 0, denominator: 2, ratio: 0 },
+      },
+      freshness: {
+        generatedAt: '2026-09-06T12:00:00Z',
+        lastProjectedEventAt: '2026-09-06T11:59:42Z',
+        lastProcessedAt: '2026-09-06T11:59:43Z',
+        eventuallyConsistent: true,
+      },
+    };
+
+    service.getSummary({ from: '2026-09-06', to: '2026-09-06' }).subscribe((res) => {
+      expect(res.payments.revenueByCurrency.length).toBe(2);
+      expect(
+        res.payments.revenueByCurrency.find((r) => r.currency === 'RON')?.grossMinor,
+      ).toBe(10000);
+      expect(
+        res.payments.revenueByCurrency.find((r) => r.currency === 'EUR')?.grossMinor,
+      ).toBe(2000);
+      // no mixed-currency total is ever synthesized client-side
+      expect(
+        res.payments.revenueByCurrency.find((r) => r.currency === 'TOTAL'),
+      ).toBeUndefined();
+      expect(res.payments.revenueByCurrency.every((r) => r.testMode)).toBeTrue();
+    });
+
+    const req = httpMock.expectOne(
+      (r) => r.url === '/api/admin/analytics/summary' && r.method === 'GET',
+    );
+    req.flush(mock);
+  });
+
   it('should call the event filter-options path with the date range unchanged', () => {
     service.getEventFilterOptions({ from: '2026-09-05', to: '2026-09-06' }).subscribe((res) => {
       expect(res.truncated).toBeFalse();

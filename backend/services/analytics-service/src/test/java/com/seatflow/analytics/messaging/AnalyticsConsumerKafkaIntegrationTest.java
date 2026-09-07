@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.seatflow.analytics.config.KafkaConsumerConfig;
 import com.seatflow.analytics.messaging.handlers.PaymentCompletedProjectionHandler;
+import com.seatflow.analytics.metrics.AnalyticsConsumerMetrics;
 import com.seatflow.common.events.EventEnvelope;
 import com.seatflow.common.events.EventTopics;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -120,6 +121,9 @@ class AnalyticsConsumerKafkaIntegrationTest {
     @Autowired
     private MeterRegistry meterRegistry;
 
+    @Autowired
+    private AnalyticsConsumerMetrics consumerMetrics;
+
     @BeforeEach
     void resetSpies() {
         reset(paymentHandler);
@@ -229,8 +233,15 @@ class AnalyticsConsumerKafkaIntegrationTest {
         await(Duration.ofSeconds(15), () -> processedMarkerCount(eventId) == 1);
         verify(paymentHandler, times(1)).project(forEvent(eventId), any());
 
+        // TASK-P14-007 §8: synchronize on the observable duplicate signal, never a blind
+        // sleep, so a delayed second delivery cannot false-pass (REV-004).
+        double duplicatesBefore = meterRegistry.counter(
+                "seatflow.analytics.events.duplicate", "event_type", "PaymentCompleted").count();
         send(EventTopics.PAYMENT_EVENTS, json);
-        Thread.sleep(3000);
+        await(Duration.ofSeconds(15), () ->
+                meterRegistry.counter(
+                        "seatflow.analytics.events.duplicate", "event_type", "PaymentCompleted")
+                        .count() > duplicatesBefore);
 
         verify(paymentHandler, times(1)).project(forEvent(eventId), any());
         assertThat(processedMarkerCount(eventId)).isEqualTo(1);
@@ -244,6 +255,96 @@ class AnalyticsConsumerKafkaIntegrationTest {
 
         await(Duration.ofSeconds(15), () -> processedMarkerCount(eventId) == 1);
         verify(paymentHandler, times(1)).project(forEvent(eventId), any());
+    }
+
+    @Test
+    @DisplayName("DLQ record preserves original topic, partition, and offset headers")
+    void dlqRecordPreservesSourceHeaders() throws Exception {
+        String eventId = "evt-hdr-" + UUID.randomUUID();
+        ObjectNode root = baseEnvelope("PaymentCompleted", eventId);
+        ObjectNode payload = root.putObject("payload");
+        payload.put("reservationId", UUID.randomUUID().toString());
+        payload.put("amount", "10.00");
+        payload.put("currency", "RON");
+        send(EventTopics.PAYMENT_EVENTS, objectMapper.writeValueAsString(root));
+
+        ConsumerRecord<String, String> dlq = awaitDlqRecord(eventId, Duration.ofSeconds(20));
+        assertThat(dlq).isNotNull();
+        assertThat(new String(dlq.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_TOPIC).value(),
+                StandardCharsets.UTF_8)).isEqualTo(EventTopics.PAYMENT_EVENTS);
+        assertThat(dlq.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_PARTITION)).isNotNull();
+        assertThat(dlq.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_OFFSET)).isNotNull();
+        assertThat(java.nio.ByteBuffer.wrap(
+                dlq.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_PARTITION).value()).getInt())
+                .isZero();
+        assertThat(java.nio.ByteBuffer.wrap(
+                dlq.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_OFFSET).value()).getLong())
+                .isGreaterThanOrEqualTo(0L);
+
+        assertThat(processedMarkerCount(eventId)).isZero();
+    }
+
+    @Test
+    @DisplayName("DLQ recovery lets later valid records continue on the same consumer")
+    void dlqRecoveryAllowsLaterRecords() throws Exception {
+        doThrow(new IllegalStateException("always broken"))
+                .when(paymentHandler).project(any(), any());
+
+        String poison = "evt-poison-seq-" + UUID.randomUUID();
+        send(EventTopics.PAYMENT_EVENTS, paymentCompletedEnvelope(poison));
+
+        ConsumerRecord<String, String> dlq = awaitDlqRecord(poison, Duration.ofSeconds(40));
+        assertThat(dlq).isNotNull();
+        assertThat(processedMarkerCount(poison)).isZero();
+
+        // The poisoned record was recovered to the DLQ; the same consumer must still
+        // process a later valid record instead of stalling on the poison.
+        reset(paymentHandler);
+        String followUp = "evt-after-dlq-" + UUID.randomUUID();
+        send(EventTopics.PAYMENT_EVENTS, paymentCompletedEnvelope(followUp));
+
+        await(Duration.ofSeconds(15), () -> processedMarkerCount(followUp) == 1);
+        verify(paymentHandler, times(1)).project(forEvent(followUp), any());
+    }
+
+    @Test
+    @DisplayName("DLQ publishing failure stays visible: retried, never marked processed")
+    void dlqPublishFailureStaysVisible() {
+        // Simulate a DLQ outage behind the production recoverer wiring: every send
+        // overload fails synchronously, so recovery cannot be mistaken for success.
+        org.mockito.stubbing.Answer<Object> failOnSend = invocation -> {
+            if (invocation.getMethod().getName().equals("send")) {
+                throw new IllegalStateException("DLQ unavailable");
+            }
+            return org.mockito.Mockito.RETURNS_DEFAULTS.answer(invocation);
+        };
+        @SuppressWarnings("unchecked")
+        org.springframework.kafka.core.KafkaTemplate<String, String> failingTemplate =
+                org.mockito.Mockito.mock(
+                        org.springframework.kafka.core.KafkaTemplate.class, failOnSend);
+
+        // Rebuild the production recoverer against the failing DLQ seam and drive it
+        // directly with a poisoned record: the failure must propagate (visible) rather
+        // than being acknowledged as a successful recovery.
+        org.springframework.kafka.listener.DeadLetterPublishingRecoverer recoverer =
+                new KafkaConsumerConfig(objectMapper, consumerMetrics)
+                        .analyticsDeadLetterRecoverer(failingTemplate);
+        org.apache.kafka.clients.consumer.ConsumerRecord<String, String> poison =
+                new org.apache.kafka.clients.consumer.ConsumerRecord<>(
+                        EventTopics.PAYMENT_EVENTS, 0, 0L, "key", "not-json{{{");
+        try {
+            recoverer.accept(poison, new IllegalStateException("cause",
+                    new AnalyticsEventValidationException(
+                            "evt-dlq-fail", "PaymentCompleted", "bad payload")));
+            throw new AssertionError("Expected DLQ publish failure to propagate");
+        } catch (RuntimeException expected) {
+            // Visible, never swallowed: the production recoverer throws a failure naming
+            // the DLQ publish instead of returning normally (which the container would
+            // acknowledge as a successful recovery). The framework does not attach the
+            // broker cause, so the seam permits asserting the named failure only.
+            assertThat(expected).hasMessageContaining("Dead-letter publication");
+            assertThat(expected.getMessage()).contains(KafkaConsumerConfig.ANALYTICS_DLQ_TOPIC);
+        }
     }
 
     private static EventEnvelope<JsonNode> forEvent(String eventId) {

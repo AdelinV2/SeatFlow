@@ -134,8 +134,14 @@ class RouteConfigurationTest {
     @Test
     @DisplayName("Verify analytics-service route predicate matches admin analytics endpoints")
     void analyticsServiceRoutePredicateMatches() {
-        assertRouteMatches("analytics-service", "/api/admin/analytics/kpis");
-        assertRouteMatches("analytics-service", "/api/admin/analytics/revenue/daily");
+        // Actual TASK-P14-004 controller routes served through /api/admin/analytics/**.
+        assertRouteMatches("analytics-service", "/api/admin/analytics/summary");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/timeseries");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/sessions");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/top");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/events");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/sessions");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/export/daily.csv");
     }
 
     private void assertRouteMatches(String expectedRouteId, String path) {

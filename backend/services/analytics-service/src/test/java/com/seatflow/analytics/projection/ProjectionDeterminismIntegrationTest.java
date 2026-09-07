@@ -110,8 +110,9 @@ class ProjectionDeterminismIntegrationTest {
                 AnalyticsTicketFactRepository tickets,
                 AnalyticsTicketRevocationFactRepository revocations,
                 AnalyticsReservationFactRepository reservations,
+                AnalyticsPaymentFactRepository payments,
                 EventSessionProjectionHandler sessionHandler) {
-            return new TicketProjectionHandler(tickets, revocations, reservations, sessionHandler);
+            return new TicketProjectionHandler(tickets, revocations, reservations, payments, sessionHandler);
         }
 
         @Bean
