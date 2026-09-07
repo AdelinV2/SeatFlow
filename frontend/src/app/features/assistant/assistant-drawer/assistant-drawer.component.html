@@ -1,0 +1,158 @@
+@if (store.isOpen()) {
+  <div
+    class="assistant-backdrop"
+    aria-hidden="true"
+    (click)="onBackdropClick()"
+  ></div>
+
+  <aside
+    class="assistant-drawer"
+    role="dialog"
+    aria-modal="false"
+    aria-label="SeatFlow Assistant"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="assistant-drawer__header">
+      <div class="assistant-drawer__title-wrap">
+        <h2 class="assistant-drawer__title">SeatFlow Assistant</h2>
+        <p
+          class="assistant-drawer__status"
+          role="status"
+          [attr.aria-label]="store.isAvailable() ? 'Assistant available' : 'Assistant unavailable'"
+        >
+          <span
+            class="assistant-drawer__dot"
+            [class.assistant-drawer__dot--ready]="store.isAvailable()"
+            aria-hidden="true"
+          ></span>
+          @if (store.statusLoading()) {
+            <span>Checking availability…</span>
+          } @else if (store.isAvailable()) {
+            <span>Available</span>
+          } @else {
+            <span>Unavailable</span>
+          }
+        </p>
+      </div>
+      <div class="assistant-drawer__header-actions">
+        <button
+          type="button"
+          class="assistant-drawer__header-btn"
+          [disabled]="store.isResetting()"
+          (click)="onReset()"
+        >
+          @if (store.isResetting()) {
+            <span>Resetting…</span>
+          } @else {
+            <span>Reset conversation</span>
+          }
+        </button>
+        <button
+          type="button"
+          class="assistant-drawer__header-btn"
+          aria-label="Close assistant"
+          (click)="onClose()"
+        >
+          <span>Close</span>
+        </button>
+      </div>
+    </header>
+
+    @if (!store.isAvailable() && store.statusLoaded()) {
+      <div class="assistant-drawer__unavailable" role="status">
+        <p>
+          The SeatFlow Assistant is currently unavailable. You can continue browsing events and
+          booking as usual.
+        </p>
+        <button
+          type="button"
+          class="assistant-drawer__header-btn"
+          [disabled]="store.statusLoading()"
+          (click)="onRetryStatus()"
+        >
+          <span>Try again</span>
+        </button>
+      </div>
+    }
+
+    <section
+      #threadRegion
+      class="assistant-drawer__body"
+      aria-label="Conversation"
+      aria-live="polite"
+    >
+      @if (!store.hasMessages()) {
+        <div class="assistant-drawer__empty">
+          <p>Ask about events, sessions, and seats. The assistant shows exact options as cards.</p>
+          <ul class="assistant-drawer__starters" aria-label="Starter prompts">
+            @for (prompt of starterPrompts; track prompt) {
+              <li>
+                <button
+                  type="button"
+                  class="assistant-drawer__starter"
+                  [disabled]="!store.canSend()"
+                  (click)="sendStarter(prompt)"
+                >
+                  {{ prompt }}
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      } @else {
+        @for (message of store.messages(); track trackMessage($index, message)) {
+          <app-assistant-message [message]="message" />
+        }
+      }
+
+      @if (store.isSending()) {
+        <p class="assistant-drawer__activity" role="status">
+          {{ store.activityMessage() || 'Working…' }}
+        </p>
+      }
+
+      @if (store.lastError() && store.hasMessages()) {
+        <p class="assistant-drawer__error" role="alert">{{ store.lastError() }}</p>
+      }
+    </section>
+
+    <footer class="assistant-drawer__composer">
+      @if (store.lastError() && !store.hasMessages()) {
+        <p class="assistant-drawer__error" role="alert">{{ store.lastError() }}</p>
+      }
+      <label class="assistant-drawer__label" for="assistant-composer">Message the assistant</label>
+      <div class="assistant-drawer__input-row">
+        <textarea
+          #composer
+          id="assistant-composer"
+          class="assistant-drawer__input"
+          rows="2"
+          maxlength="2100"
+          placeholder="Ask for events or seats… (Enter sends, Shift+Enter adds a line)"
+          [ngModel]="draft()"
+          (ngModelChange)="draft.set($event)"
+          [disabled]="!store.canSend()"
+          (keydown)="onComposerKeydown($event)"
+        ></textarea>
+        <button
+          type="button"
+          class="assistant-drawer__send"
+          [disabled]="!store.canSend() || !draft().trim() || isOverLimit()"
+          (click)="send()"
+        >
+          @if (store.isSending()) {
+            <span>Sending…</span>
+          } @else {
+            <span>Send</span>
+          }
+        </button>
+      </div>
+      <p
+        class="assistant-drawer__hint"
+        [class.assistant-drawer__hint--over]="isOverLimit()"
+      >
+        {{ remainingChars() }} characters left • {{ store.maxMessageLength }} max
+      </p>
+    </footer>
+  </aside>
+}

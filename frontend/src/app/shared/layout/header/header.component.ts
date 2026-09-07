@@ -12,6 +12,7 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
 import { ThemeService } from '../../../core/theme/theme.service';
+import { AssistantStore } from '../../../services/assistant-store.service';
 
 @Component({
   selector: 'app-header',
@@ -32,6 +33,7 @@ export class HeaderComponent {
   readonly auth = inject(AuthService);
   readonly userContext = inject(UserContextService);
   readonly theme = inject(ThemeService);
+  readonly assistant = inject(AssistantStore);
   readonly mobileMenuOpen = signal(false);
 
   readonly userInitials = computed(() => {
@@ -78,6 +80,12 @@ export class HeaderComponent {
 
   signOut(): void {
     this.closeMobileMenu();
+    this.assistant.clearLocalState();
     void this.auth.logout().catch(() => undefined);
+  }
+
+  toggleAssistant(): void {
+    this.closeMobileMenu();
+    this.assistant.toggleDrawer();
   }
 }
