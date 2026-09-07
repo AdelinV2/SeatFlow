@@ -49,6 +49,12 @@ resilience4j:
 seatflow:
   ai:
     enabled: ${AI_ENABLED:false}
+    conversation:
+      # Bounded memory defaults (TASK-P15-004 section 4): 24 messages / 30m idle TTL / 500 active.
+      max-messages: ${AI_CHAT_MAX_MESSAGES:24}
+      ttl: ${AI_CONVERSATION_TTL:30m}
+      max-active-conversations: ${AI_MAX_ACTIVE_CONVERSATIONS:500}
+      cleanup-interval: ${AI_CONVERSATION_CLEANUP_INTERVAL:PT5M}
 
 management:
   tracing:
