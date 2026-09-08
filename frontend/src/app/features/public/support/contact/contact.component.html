@@ -1,0 +1,86 @@
+<app-content-page
+  eyebrow="Support"
+  title="Contact"
+  lead="How to reach the SeatFlow demo maintainer, what this demo cannot support, and where privacy and security requests go."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="No staffed support desk"
+  calloutMessage="SeatFlow is a portfolio demonstration. There is no staffed support desk, no response-time promise, and no service-level commitment. Messages are handled on a best-effort basis by the maintainer."
+>
+  <section id="demo-feedback" aria-labelledby="demo-feedback-heading">
+    <h2 id="demo-feedback-heading">Portfolio and demo feedback</h2>
+    @if (supportContact.configured && supportContact.mailtoLink) {
+      <p>
+        For demo feedback, broken pages, or booking questions, email the maintainer at
+        <a [href]="supportContact.mailtoLink">{{ supportContact.email }}</a>.
+        Your email app opens with a prefilled subject; describe what you tried and what
+        you expected.
+      </p>
+    } @else {
+      <p>
+        <strong>Owner configuration required before production use:</strong> the
+        maintainer contact address is not configured in this deployment. Set
+        <code>SUPPORT_EMAIL</code> in <code>frontend/public/env.js</code> (see
+        <code>frontend/public/env.example.js</code>) and redeploy before presenting this
+        page as production-ready. Until then, no demo feedback address is advertised and
+        no message sent from this page can reach anyone.
+      </p>
+    }
+    <p>
+      There is no contact form on this page because no form backend, email workflow, or
+      ticket queue exists behind it. A form that appears to submit successfully while
+      dropping the message would be dishonest, so this page offers links only.
+    </p>
+  </section>
+
+  <section id="event-support" aria-labelledby="event-support-heading">
+    <h2 id="event-support-heading">Event-specific support</h2>
+    <p>
+      SeatFlow does not operate a verified organizer-support directory: the application
+      neither stores nor displays organizer contact information for events. Do not expect
+      an organizer email, phone number, or support link here. For questions about a
+      specific event (lineup, venue access, entry decisions), use the organizer channel
+      stated on that event's official page, not this demo contact.
+    </p>
+  </section>
+
+  <section id="privacy-requests" aria-labelledby="privacy-requests-heading">
+    <h2 id="privacy-requests-heading">Privacy and data-rights requests</h2>
+    <p>
+      There is no automated data-rights portal and no data protection officer identity
+      stated for this demo. To request access, rectification, erasure, restriction,
+      objection, or portability where applicable, use the maintainer channel above and
+      identify yourself proportionately. How SeatFlow handles account, booking, payment,
+      ticket, and browser-storage data is described in the
+      <a routerLink="/legal/privacy">privacy notice</a> and the
+      <a routerLink="/legal/cookies">cookies and similar technologies page</a>.
+    </p>
+  </section>
+
+  <section id="security-reports" aria-labelledby="security-reports-heading">
+    <h2 id="security-reports-heading">Security reports</h2>
+    <p>
+      To report a suspected vulnerability, use the maintainer channel above with a
+      careful description of what you observed. Do not include passwords, payment
+      secrets, authentication tokens, or ticket QR codes, and do not probe admin,
+      scanner, or payment endpoints without authorization. High-level protections are
+      summarized on the <a routerLink="/legal/security">security page</a>.
+    </p>
+  </section>
+
+  <section id="what-to-include" aria-labelledby="what-to-include-heading">
+    <h2 id="what-to-include-heading">What to include</h2>
+    <ul>
+      <li>Which page you were on (for example the FAQ, an event page, or checkout).</li>
+      <li>What you tried and what you expected to happen.</li>
+      <li>For refund questions, the binding rule is the <a routerLink="/legal/refunds">refund and cancellation policy</a>.</li>
+    </ul>
+    <p>
+      Never include passwords, payment secrets, or ticket QR data beyond what entry
+      requires. Related pages:
+      <a routerLink="/support/faq">frequently asked questions</a>,
+      <a routerLink="/legal/privacy">privacy notice</a>,
+      <a routerLink="/status">platform status</a>.
+    </p>
+  </section>
+</app-content-page>

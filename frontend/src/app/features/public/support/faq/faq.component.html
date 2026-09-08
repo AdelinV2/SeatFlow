@@ -1,0 +1,389 @@
+<app-content-page
+  eyebrow="Support"
+  title="Frequently Asked Questions"
+  lead="Short answers about booking, tickets, test payments, refunds, accounts, and the AI assistant. Each answer links to the authoritative page with the full rule."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Summaries, not the rule"
+  calloutMessage="Where another page owns the rule, this page summarizes it and links there. If any summary and the linked page disagree, the linked page wins."
+>
+  <section id="booking" aria-labelledby="booking-heading">
+    <h2 id="booking-heading">Booking and holds</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('seats-holds')"
+          aria-controls="faq-panel-seats-holds"
+          (click)="toggle('seats-holds')"
+        >
+          How do seat selection and temporary holds work?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-seats-holds"
+        role="region"
+        [hidden]="!isExpanded('seats-holds')"
+      >
+        <p>
+          Choosing seats creates a temporary hold of up to 10 seats per reservation for
+          15 minutes. Availability is decided by the server: another customer may take the
+          same seats first, and refreshing reconciles your view against the authoritative
+          state. Details live in the
+          <a routerLink="/legal/terms">Terms and Conditions</a>.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('seat-limit')"
+          aria-controls="faq-panel-seat-limit"
+          (click)="toggle('seat-limit')"
+        >
+          How many seats can I reserve at once?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-seat-limit"
+        role="region"
+        [hidden]="!isExpanded('seat-limit')"
+      >
+        <p>
+          Each reservation is limited to 10 seats. The limit is enforced by the server, not
+          just the seat map interface. See
+          <a routerLink="/legal/terms">Terms and Conditions</a> and the
+          <a routerLink="/legal/security">security page</a> for the booking-integrity summary.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('guest-vs-account')"
+          aria-controls="faq-panel-guest-vs-account"
+          (click)="toggle('guest-vs-account')"
+        >
+          Should I check out as a guest or with an account?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-guest-vs-account"
+        role="region"
+        [hidden]="!isExpanded('guest-vs-account')"
+      >
+        <p>
+          Both paths use the same server-side booking rules. Guest checkout asks for a name
+          and email and keeps that email in the same browser tab only so you can continue
+          that checkout; an account keeps your tickets under
+          <a routerLink="/profile/tickets">My Digital Tickets</a> after sign-in. How each
+          path stores data is described in the
+          <a routerLink="/legal/privacy">privacy notice</a> and the
+          <a routerLink="/legal/cookies">cookies and similar technologies page</a>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tickets" aria-labelledby="tickets-heading">
+    <h2 id="tickets-heading">Tickets and access</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('tickets-qr')"
+          aria-controls="faq-panel-tickets-qr"
+          (click)="toggle('tickets-qr')"
+        >
+          How do digital tickets, QR codes, and guest access work?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-tickets-qr"
+        role="region"
+        [hidden]="!isExpanded('tickets-qr')"
+      >
+        <p>
+          Paid reservations produce tickets with a ticket code and QR access data. Anyone
+          holding the ticket link or code can present it at the gate, so keep it private
+          and do not post it publicly. Signed-in customers find their tickets under
+          <a routerLink="/profile/tickets">My Digital Tickets</a>; guests use the ticket
+          link or code issued at checkout in the same browser session. Ticket handling is
+          also summarized in the <a routerLink="/legal/terms">Terms and Conditions</a>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="payments" aria-labelledby="payments-heading">
+    <h2 id="payments-heading">Payments, tax, and refunds</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('stripe-test')"
+          aria-controls="faq-panel-stripe-test"
+          (click)="toggle('stripe-test')"
+        >
+          Is this site charging real money?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-stripe-test"
+        role="region"
+        [hidden]="!isExpanded('stripe-test')"
+      >
+        <p>
+          No. The public portfolio deployment uses Stripe Test Mode: confirming payment
+          with the provided test card completes a test transaction only and no real money
+          moves. Card details are entered into Stripe Elements and are never stored by
+          SeatFlow. See <a routerLink="/legal/tax">Tax and Test Payments</a>.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('payment-tax')"
+          aria-controls="faq-panel-payment-tax"
+          (click)="toggle('payment-tax')"
+        >
+          How are payment totals and tax previews calculated?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-payment-tax"
+        role="region"
+        [hidden]="!isExpanded('payment-tax')"
+      >
+        <p>
+          Checkout shows the authoritative total for the held seats. Optionally entering a
+          billing address asks Stripe Tax for a tax-inclusive breakdown of that total into
+          tax and net portions; the preview is informational and never locks the final
+          amount. SeatFlow is not a tax adviser and issues no invoices on this demo. Full
+          detail: <a routerLink="/legal/tax">Tax and Test Payments</a>.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('refunds')"
+          aria-controls="faq-panel-refunds"
+          (click)="toggle('refunds')"
+        >
+          Can I get a refund if my plans change?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-refunds"
+        role="region"
+        [hidden]="!isExpanded('refunds')"
+      >
+        <p>
+          A confirmed, paid reservation is eligible for a full reservation refund only when
+          at least {{ refundCutoffLabel }} remain before the event session starts. The
+          server decides eligibility; submitting a request means processing has started,
+          not that money has moved. The binding rule, scope, and workflow live in the
+          <a routerLink="/legal/refunds">refund and cancellation policy</a>, which takes
+          precedence over this summary.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('revoked-tickets')"
+          aria-controls="faq-panel-revoked-tickets"
+          (click)="toggle('revoked-tickets')"
+        >
+          What happens to tickets after a refund or cancellation?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-revoked-tickets"
+        role="region"
+        [hidden]="!isExpanded('revoked-tickets')"
+      >
+        <p>
+          Cancelling a pending hold releases the seats. A successful refund revokes the
+          affected tickets and, when the session remains bookable, releases the seats so
+          they can be booked again. A failed refund leaves the tickets valid. See the
+          <a routerLink="/legal/refunds">refund and cancellation policy</a>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="account" aria-labelledby="account-heading">
+    <h2 id="account-heading">Accounts and staff tools</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('account-login')"
+          aria-controls="faq-panel-account-login"
+          (click)="toggle('account-login')"
+        >
+          How do accounts, login, and password reset work?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-account-login"
+        role="region"
+        [hidden]="!isExpanded('account-login')"
+      >
+        <p>
+          Register or sign in with email and password, or with an enabled OAuth provider
+          where offered. If you forget your password, use the
+          <a routerLink="/auth/forgot-password">password reset page</a> to start recovery.
+          Signing out ends the local session. Account data handling is described in the
+          <a routerLink="/legal/privacy">privacy notice</a>.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('staff-scanner')"
+          aria-controls="faq-panel-staff-scanner"
+          (click)="toggle('staff-scanner')"
+        >
+          What is the staff scanner? Can I use it?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-staff-scanner"
+        role="region"
+        [hidden]="!isExpanded('staff-scanner')"
+      >
+        <p>
+          The scanner is a role-protected staff capability for validating ticket codes at
+          entry. It requires a staff role enforced by the server; it is not a customer
+          support channel and signing in as a customer does not grant access. Entry
+          decisions remain with the event organizer.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="ai-privacy" aria-labelledby="ai-privacy-heading">
+    <h2 id="ai-privacy-heading">AI assistant and privacy</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('ai-assistant')"
+          aria-controls="faq-panel-ai-assistant"
+          (click)="toggle('ai-assistant')"
+        >
+          What can the AI assistant do, and what can it not do?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-ai-assistant"
+        role="region"
+        [hidden]="!isExpanded('ai-assistant')"
+      >
+        <p>
+          Where enabled and after sign-in, the assistant is optional and assistive: it can
+          explain events and propose bookings through the same server rules as the rest of
+          the site, using authoritative tool results for availability. It cannot bypass
+          availability, holds, authorization, or payment confirmation, and it cannot create
+          a payment on its own: only an explicit confirmation action finalizes a proposed
+          booking. Conversations live in memory only; refreshing or signing out starts a
+          new conversation, and prompts are still processed by the configured AI provider.
+          If the assistant is unavailable, use event browsing and checkout directly.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('privacy-data')"
+          aria-controls="faq-panel-privacy-data"
+          (click)="toggle('privacy-data')"
+        >
+          What data does SeatFlow collect about me?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-privacy-data"
+        role="region"
+        [hidden]="!isExpanded('privacy-data')"
+      >
+        <p>
+          Depending on how you use the site: account identity, booking and guest-checkout
+          details, payment and ticket records, security and operational records, and
+          assistant messages where the assistant is enabled. Browser storage behind these
+          flows is itemized separately. See the
+          <a routerLink="/legal/privacy">privacy notice</a> and the
+          <a routerLink="/legal/cookies">cookies and similar technologies page</a>; the
+          high-level protections are summarized on the
+          <a routerLink="/legal/security">security page</a>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="demo-help" aria-labelledby="demo-help-heading">
+    <h2 id="demo-help-heading">Demo help</h2>
+
+    <div class="faq-item">
+      <h3 class="faq-question-heading">
+        <button
+          type="button"
+          class="faq-question"
+          [attr.aria-expanded]="isExpanded('demo-issue')"
+          aria-controls="faq-panel-demo-issue"
+          (click)="toggle('demo-issue')"
+        >
+          How do I report a demo issue?
+        </button>
+      </h3>
+      <div
+        id="faq-panel-demo-issue"
+        role="region"
+        [hidden]="!isExpanded('demo-issue')"
+      >
+        <p>
+          Use the <a routerLink="/support/contact">contact page</a> and describe what you
+          tried and what you expected. This is a portfolio demonstration with no staffed
+          support desk and no response-time promise. Never include passwords, payment
+          secrets, or ticket QR codes in a report.
+        </p>
+      </div>
+    </div>
+  </section>
+</app-content-page>

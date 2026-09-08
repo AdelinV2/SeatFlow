@@ -61,15 +61,16 @@ describe('Public routes (TASK-P16-001)', () => {
     }
   });
 
-  it('adds no placeholder support/status/api-docs route beyond TASK-P16-003', () => {
+  it('adds no placeholder route beyond TASK-P16-004', () => {
     const paths = routes.map((route: Route) => route.path ?? '');
-    // TASK-P16-002 owns four legal routes; TASK-P16-003 adds refunds + tax; later tasks own the rest.
+    // TASK-P16-002 owns four legal routes; TASK-P16-003 adds refunds + tax;
+    // TASK-P16-004 adds support/faq, support/contact, status, api-docs.
     for (const allowed of ['legal/terms', 'legal/privacy', 'legal/cookies', 'legal/security', 'legal/refunds', 'legal/tax']) {
       expect(paths).withContext(`P16-002/P16-003 route ${allowed} exists`).toContain(allowed);
     }
-    expect(paths.some((p: string) => p.startsWith('support/'))).toBeFalse();
-    expect(paths).not.toContain('status');
-    expect(paths).not.toContain('api-docs');
+    for (const allowed of ['support/faq', 'support/contact', 'status', 'api-docs']) {
+      expect(paths).withContext(`P16-004 route ${allowed} exists`).toContain(allowed);
+    }
   });
 
   it('navigates an unknown URL to the 404 instead of the home page', async () => {

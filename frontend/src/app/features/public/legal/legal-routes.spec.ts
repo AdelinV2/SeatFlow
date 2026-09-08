@@ -52,15 +52,16 @@ describe('Legal routes (TASK-P16-002 + TASK-P16-003)', () => {
     }
   });
 
-  it('adds no consent banner route and no P16-004/P16-005 placeholder route', () => {
+  it('adds no consent banner route and no P16-005 placeholder route', () => {
     const paths = routes.map((route: Route) => route.path ?? '');
     expect(paths).not.toContain('legal/consent');
     expect(paths).toContain('legal/tax');
     expect(paths).toContain('legal/refunds');
-    expect(paths).not.toContain('support/faq');
-    expect(paths).not.toContain('support/contact');
-    expect(paths).not.toContain('status');
-    expect(paths).not.toContain('api-docs');
+    // TASK-P16-004 owns the support/status/api-docs routes.
+    expect(paths).toContain('support/faq');
+    expect(paths).toContain('support/contact');
+    expect(paths).toContain('status');
+    expect(paths).toContain('api-docs');
   });
 
   it('navigates signed-out to each legal page', async () => {

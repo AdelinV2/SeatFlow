@@ -1,0 +1,16 @@
+/* TASK-P16-004: safe wrapping for API path examples on narrow viewports. */
+.api-example {
+  margin: 1rem 0 1.25rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.api-example code {
+  white-space: pre;
+  overflow-wrap: anywhere;
+}
