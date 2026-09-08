@@ -1,0 +1,207 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Privacy Notice"
+  lead="What SeatFlow actually collects, why, who else processes it, how long it is kept, and which rights you have. Built from the verified implementation inventory."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="No invented facts"
+  calloutMessage="Where the operator, retention, or provider configuration is not confirmed, this notice says so explicitly instead of inventing company, DPO, residency, or duration claims."
+>
+  <section id="demo-context" aria-labelledby="demo-context-heading">
+    <h2 id="demo-context-heading">Demo context</h2>
+    <p>
+      SeatFlow is currently a portfolio demonstration of event booking and
+      ticketing. This notice describes the data flows implemented in the demo
+      deployment. It is engineering transparency, not a lawyer-certified policy:
+      before any commercial production use, the operator must confirm the
+      controller identity, contact channel, hosting and provider configuration,
+      and retention decisions listed below.
+    </p>
+  </section>
+
+  <section id="controller" aria-labelledby="controller-heading">
+    <h2 id="controller-heading">Controller and contact</h2>
+    <p>
+      The data controller and contact channel for privacy requests are not yet
+      confirmed for a production deployment, so no company name, address, or
+      data protection officer is stated here. Do not send passwords, payment
+      secrets, or ticket QR codes by email when making a request. The contact
+      route for requests is described on the
+      <a routerLink="/support/contact">contact page</a>; no automated GDPR
+      self-service portal exists in this phase.
+    </p>
+  </section>
+
+  <section id="data-categories" aria-labelledby="data-categories-heading">
+    <h2 id="data-categories-heading">Data categories</h2>
+    <p>Depending on how you use SeatFlow, the demo processes:</p>
+    <ul>
+      <li>
+        <strong>Account and identity:</strong> user ID, email, display name,
+        role assignments, OAuth provider identity where login is used, and
+        account timestamps. No phone number is claimed as collected because the
+        deployed UI and API audit did not verify it.
+      </li>
+      <li>
+        <strong>Guest and authenticated bookings:</strong> customer email and
+        attendee name where supplied, optional linked user ID, reservation ID,
+        event and session identifiers, selected seat IDs, price and tier
+        selections, reservation status, hold expiry, and timestamps.
+      </li>
+      <li>
+        <strong>Payments and tax:</strong> payment and reservation identifiers,
+        customer email linkage, amount, tax amount, net amount, currency,
+        payment and refund status, timestamps, and Stripe payment-intent and
+        integration identifiers persisted server-side. Card numbers and CVC are
+        entered into Stripe Elements and are never stored by SeatFlow. Address
+        fields typed for a tax preview are transmitted for that preview; durable
+        persistence beyond the payment record is not confirmed and is not claimed.
+      </li>
+      <li>
+        <strong>Tickets:</strong> ticket code and ID, links to the reservation,
+        payment, user, event, session, and seat, customer email, attendee name,
+        display details, amounts, status, QR and ticket access data, and
+        issuance, use, and cancellation timestamps.
+      </li>
+      <li>
+        <strong>Security and operations:</strong> transient rate-limit processing
+        keyed by verified identity or client IP, request and correlation
+        identifiers, application logs, traces and metrics, authentication and
+        security events, and scanner validation records where identifiable. No
+        durable IP-address storage is claimed; transient rate-limit keys are not
+        the same as durable logs.
+      </li>
+      <li>
+        <strong>Assistant data (only where AI is enabled):</strong> the messages
+        you send, the compact event, session, and seat context included to
+        answer, and the in-memory conversation ID and owner metadata. Refreshing
+        or signing out starts a new conversation; there is no persistent
+        SeatFlow chat database in this phase, but prompts are still processed by
+        the configured AI provider.
+      </li>
+    </ul>
+    <p>
+      Browser storage behind these flows (authentication session, theme choice,
+      guest checkout proof, Stripe payment state) is itemized on the
+      <a routerLink="/legal/cookies">cookies and similar technologies page</a>.
+    </p>
+  </section>
+
+  <section id="purposes-bases" aria-labelledby="purposes-bases-heading">
+    <h2 id="purposes-bases-heading">Purposes and legal bases</h2>
+    <p>
+      Each purpose is mapped separately. Consent is not used as a blanket basis
+      because no optional analytics, advertising, or profiling purpose exists in
+      the verified runtime. Proposed bases below need legal confirmation before
+      commercial use.
+    </p>
+    <ul>
+      <li>Provide sign-in sessions and account access: performance of the requested service.</li>
+      <li>Create, hold, price, and confirm guest or authenticated bookings: pre-contractual and contractual steps.</li>
+      <li>Process test or live payments and tax preview: contract, plus legal obligations for financial records where applicable.</li>
+      <li>Issue and validate tickets and QR access: contract.</li>
+      <li>Keep the service secure (rate limiting, fraud prevention, audit): legitimate interest, limited to deployed controls.</li>
+      <li>Remember an explicit theme choice: legitimate interest in honoring the setting.</li>
+      <li>Answer assistant questions where AI is enabled: performance of the requested assistance.</li>
+    </ul>
+  </section>
+
+  <section id="recipients" aria-labelledby="recipients-heading">
+    <h2 id="recipients-heading">Recipients and providers</h2>
+    <p>
+      Providers are described as service providers or recipients because GDPR
+      processor status is not confirmed for each deployment:
+    </p>
+    <ul>
+      <li><strong>Supabase:</strong> authentication and account identity; project region and terms to be confirmed.</li>
+      <li><strong>Stripe:</strong> payment processing, card UI, tax preview, fraud and security functions, webhooks; Test Mode applies to the portfolio demo.</li>
+      <li><strong>OpenStreetMap Nominatim:</strong> venue geocoding through direct browser requests, which disclose the typed query and network metadata to that endpoint.</li>
+      <li><strong>Groq (only where AI is enabled):</strong> assistant model processing of prompts and tool context; provider retention and training policy to be confirmed for the deployed account.</li>
+      <li><strong>Google Fonts:</strong> typeface delivery; page loads fetch stylesheets from Google Fonts infrastructure.</li>
+      <li><strong>Hosting, email, and observability:</strong> the actual production providers are to be confirmed; local Docker topology is not presented as the deployed processing map.</li>
+    </ul>
+  </section>
+
+  <section id="transfers" aria-labelledby="transfers-heading">
+    <h2 id="transfers-heading">International transfers</h2>
+    <p>
+      No transfer safeguard, adequacy claim, or residency guarantee (including
+      any Romania or EU-only storage claim) is made here because provider
+      regions and data-processing terms are not verified for each deployment.
+      The operator must confirm Supabase, Stripe, Groq (where enabled), and
+      hosting regions and terms before making any transfer statement.
+    </p>
+  </section>
+
+  <section id="retention" aria-labelledby="retention-heading">
+    <h2 id="retention-heading">Retention</h2>
+    <ul>
+      <li>Reservation holds expire automatically after 15 minutes.</li>
+      <li>Guest checkout email in the same browser tab ends with the tab session and is also cleared on cancellation, payment handoff, hold expiry, and stale-hold cleanup.</li>
+      <li>Theme choice persists in the browser until you change or clear it.</li>
+      <li>Authentication session copies follow the Supabase session lifetime and logout.</li>
+      <li>Assistant conversation state is bounded in memory and clears on refresh or sign-out.</li>
+      <li>
+        Durable account, booking, payment, ticket, log, and metric retention
+        periods are not stated as day counts because no automatic deletion rule
+        is implemented for them in this phase. The operator must decide and
+        document those periods before commercial use; until then, retention
+        follows operational and legal necessity for a demo.
+      </li>
+    </ul>
+  </section>
+
+  <section id="rights" aria-labelledby="rights-heading">
+    <h2 id="rights-heading">Your rights</h2>
+    <p>
+      Depending on the applicable law, you may request access, rectification,
+      erasure, restriction, objection (where applicable), and portability (where
+      applicable). No processing purpose in the verified runtime relies on
+      consent, so there is no consent withdrawal flow; if an optional purpose is
+      added later, withdrawal will be offered at that time. You also have the
+      right to lodge a complaint with the competent supervisory authority. Use
+      the <a routerLink="/support/contact">contact page</a> for requests and
+      identify yourself proportionately.
+    </p>
+  </section>
+
+  <section id="necessity" aria-labelledby="necessity-heading">
+    <h2 id="necessity-heading">Is providing data required?</h2>
+    <p>
+      An email and attendee name are necessary to create the requested booking
+      and deliver tickets; without them checkout cannot continue. Account
+      creation data is necessary only if you choose to register. Payment data is
+      necessary only if you proceed to pay. Optional analytics or marketing data
+      is not requested because no such feature exists in the verified runtime.
+    </p>
+  </section>
+
+  <section id="automated" aria-labelledby="automated-heading">
+    <h2 id="automated-heading">Automated decisions</h2>
+    <p>
+      SeatFlow does not use automated decision-making or profiling with legal or
+      similarly significant effects. The AI assistant is assistive: it cannot
+      approve bookings, set prices, or move money by itself.
+    </p>
+  </section>
+
+  <section id="security" aria-labelledby="security-heading">
+    <h2 id="security-heading">Security</h2>
+    <p>
+      Authentication, role checks, server-side booking rules, Stripe-handled card
+      entry, and rate limiting are summarized without sensitive detail on the
+      <a routerLink="/legal/security">security page</a>.
+    </p>
+  </section>
+
+  <section id="related" aria-labelledby="related-heading">
+    <h2 id="related-heading">Related pages</h2>
+    <ul>
+      <li><a routerLink="/legal/cookies">Cookies and similar technologies</a></li>
+      <li><a routerLink="/legal/terms">Terms and Conditions</a></li>
+      <li><a routerLink="/legal/refunds">Refund and cancellation policy</a></li>
+      <li><a routerLink="/legal/security">Security</a></li>
+      <li><a routerLink="/support/contact">Contact</a></li>
+    </ul>
+  </section>
+</app-content-page>

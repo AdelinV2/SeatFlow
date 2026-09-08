@@ -1,0 +1,134 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Terms and Conditions"
+  lead="The rules for using this SeatFlow portfolio demo: accounts, guest checkout, temporary seat holds, test payments, tickets, and acceptable use."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Portfolio demo"
+  calloutMessage="SeatFlow is currently a portfolio demonstration, not a commercial ticketing service. Do not treat these terms as an offer from a trading company."
+>
+  <section id="demo-nature" aria-labelledby="demo-nature-heading">
+    <h2 id="demo-nature-heading">Portfolio demo nature</h2>
+    <p>
+      SeatFlow is a portfolio project that demonstrates event discovery, seat
+      reservation, payment confirmation, and ticket delivery. There is no
+      commercial operator identity stated on this page: no company name,
+      registration number, VAT number, or headquarters is claimed. Before any
+      real public or commercial deployment, the operator must confirm the
+      controller identity, contact channel, jurisdiction, and whether the site
+      remains a non-commercial demo.
+    </p>
+  </section>
+
+  <section id="accounts-guest" aria-labelledby="accounts-guest-heading">
+    <h2 id="accounts-guest-heading">Accounts and guest checkout</h2>
+    <p>
+      You may book as a registered user (email and password, or an enabled
+      OAuth provider) or as a guest with a name and email address. Guest
+      checkout stores your email in the same browser tab only, so you can
+      continue that checkout; it is never added to the page address and is
+      removed when the order is cancelled, paid, or the hold expires. Guest
+      email is a convenience proof for that browser session, not a strong
+      credential: keep your ticket link or code private instead.
+    </p>
+    <p>
+      How SeatFlow handles account, guest, and session data is described in the
+      <a routerLink="/legal/privacy">privacy notice</a> and the
+      <a routerLink="/legal/cookies">cookies and similar technologies page</a>.
+    </p>
+  </section>
+
+  <section id="reservations" aria-labelledby="reservations-heading">
+    <h2 id="reservations-heading">Reservations and availability</h2>
+    <p>
+      Choosing seats creates a temporary hold of up to 10 seats per reservation
+      for 15 minutes. Availability is decided by the server, not by what your
+      browser last displayed: another customer may take the same seats first,
+      and refreshing always reconciles against the authoritative state. When a
+      hold expires or is cancelled, the seats are released for everyone else.
+    </p>
+  </section>
+
+  <section id="payments" aria-labelledby="payments-heading">
+    <h2 id="payments-heading">Payments and test mode</h2>
+    <p>
+      The public portfolio deployment uses Stripe Test Mode. Confirming payment
+      with the provided test card completes a test transaction only: no real
+      money moves. Card details are entered into Stripe Elements and are never
+      stored by SeatFlow. Amounts, tax preview figures, and payment states shown
+      at checkout are informational demo values unless the operator confirms a
+      live deployment.
+    </p>
+  </section>
+
+  <section id="tickets" aria-labelledby="tickets-heading">
+    <h2 id="tickets-heading">Tickets and QR access</h2>
+    <p>
+      Paid reservations produce tickets with a ticket code and QR access data.
+      Anyone holding the ticket link or code can present it at the gate, so
+      treat it like a paper ticket: do not post it publicly, forward it to
+      strangers, or include it in support messages beyond what entry requires.
+      Staff scanning validates the ticket code; SeatFlow does not replace the
+      organizer's entry decision.
+    </p>
+  </section>
+
+  <section id="refunds" aria-labelledby="refunds-heading">
+    <h2 id="refunds-heading">Refunds and cancellations</h2>
+    <p>
+      Cancelling a pending reservation releases the held seats. The binding
+      refund and cancellation rules live in the dedicated
+      <a routerLink="/legal/refunds">refund and cancellation policy</a>, which
+      takes precedence over this summary. This page states no additional refund
+      promise.
+    </p>
+  </section>
+
+  <section id="acceptable-use" aria-labelledby="acceptable-use-heading">
+    <h2 id="acceptable-use-heading">Acceptable use</h2>
+    <p>Do not abuse reservations, scanning, APIs, or the AI assistant. This includes:</p>
+    <ul>
+      <li>automated seat locking or denial-of-service behavior;</li>
+      <li>circumventing authentication, role checks, or ticket validation;</li>
+      <li>probing admin, scanner, or payment endpoints without authorization;</li>
+      <li>submitting unlawful, misleading, or infringing content through forms or the assistant.</li>
+    </ul>
+    <p>
+      Security controls that protect these flows are summarized on the
+      <a routerLink="/legal/security">security page</a>.
+    </p>
+  </section>
+
+  <section id="ai-assistant" aria-labelledby="ai-assistant-heading">
+    <h2 id="ai-assistant-heading">AI assistant</h2>
+    <p>
+      Where the AI assistant is enabled, it is assistive only. It can explain
+      events and propose bookings through the same server rules as the rest of
+      the site, but it cannot bypass availability, holds, authorization, or
+      payment confirmation, and it cannot create a payment on its own. Its
+      answers may be incomplete: verify times, prices, and availability on the
+      booking pages before paying.
+    </p>
+  </section>
+
+  <section id="ip-availability" aria-labelledby="ip-availability-heading">
+    <h2 id="ip-availability-heading">Intellectual property and availability</h2>
+    <p>
+      Event content belongs to its organizers; the SeatFlow demo interface is
+      provided as-is for evaluation. No uptime, support-hours, or service-level
+      commitment is offered, and no certification (ISO 27001, SOC 2, PCI DSS,
+      GDPR certification, penetration testing, zero trust) is claimed anywhere
+      on this site.
+    </p>
+  </section>
+
+  <section id="governing-law" aria-labelledby="governing-law-heading">
+    <h2 id="governing-law-heading">Governing law</h2>
+    <p>
+      No governing-law or jurisdiction clause is stated here because the
+      operator deployment context is not confirmed. The deployer must add a
+      verified clause before any commercial use; until then this demo makes no
+      jurisdictional claim.
+    </p>
+  </section>
+</app-content-page>

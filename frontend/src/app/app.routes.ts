@@ -8,11 +8,21 @@ import { staffGuard } from './core/guards/staff.guard';
 export const routes: Routes = [
   {
     path: '',
+    title: 'SeatFlow — Discover Live Events',
+    data: {
+      description:
+        'SeatFlow makes discovering events and reserving the right seats effortless.',
+    },
     loadComponent: () =>
       import('./features/events/event-list/event-list.component').then((m) => m.EventListComponent),
   },
   {
     path: 'events',
+    title: 'SeatFlow — Event Catalog',
+    data: {
+      description:
+        'SeatFlow makes discovering events and reserving the right seats effortless.',
+    },
     loadComponent: () =>
       import('./features/events/event-list/event-list.component').then((m) => m.EventListComponent),
   },
@@ -199,8 +209,130 @@ export const routes: Routes = [
         (m) => m.AdminSessionManagerComponent,
       ),
   },
+  // P16-002: public legal pages (signed-out, lazy-loaded, no guards).
+  // P16-005: distinct static titles + descriptions; no certification claims.
+  {
+    path: 'legal/terms',
+    title: 'Terms & Conditions — SeatFlow',
+    data: {
+      description:
+        'Portfolio demo terms for SeatFlow event booking, test payments, tickets, and refunds.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/terms/terms.component').then(
+        (m) => m.TermsComponent,
+      ),
+  },
+  {
+    path: 'legal/privacy',
+    title: 'Privacy Notice — SeatFlow',
+    data: {
+      description:
+        'How SeatFlow handles account, booking, payment, and browser-storage data in this demo deployment.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/privacy/privacy.component').then(
+        (m) => m.PrivacyComponent,
+      ),
+  },
+  {
+    path: 'legal/cookies',
+    title: 'Cookies & Storage — SeatFlow',
+    data: {
+      description:
+        'Cookies and similar browser storage used by SeatFlow, and why no consent banner is shown.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/cookies/cookies.component').then(
+        (m) => m.CookiesComponent,
+      ),
+  },
+  {
+    path: 'legal/security',
+    title: 'Security Overview — SeatFlow',
+    data: {
+      description:
+        'High-level overview of SeatFlow authentication, booking integrity, and payment boundaries.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/security/security.component').then(
+        (m) => m.SecurityComponent,
+      ),
+  },
+  // P16-003: refund/tax disclosures (signed-out, lazy-loaded, no guards).
+  {
+    path: 'legal/refunds',
+    title: 'Refund & Cancellation Policy — SeatFlow',
+    data: {
+      description:
+        'When a SeatFlow reservation is eligible for a full-reservation refund: the 24-hour rule.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/refunds/refunds.component').then(
+        (m) => m.RefundsComponent,
+      ),
+  },
+  {
+    path: 'legal/tax',
+    title: 'Tax & Test Payments — SeatFlow',
+    data: {
+      description:
+        'How Stripe Tax previews and Test Mode payments work in the SeatFlow demo.',
+    },
+    loadComponent: () =>
+      import('./features/public/legal/tax/tax.component').then((m) => m.TaxComponent),
+  },
+  // P16-004: public support/status/API-doc pages (signed-out, lazy-loaded, no guards).
+  {
+    path: 'support/faq',
+    title: 'Help Center & FAQ — SeatFlow',
+    data: {
+      description:
+        'Short answers about SeatFlow booking, tickets, test payments, refunds, and accounts.',
+    },
+    loadComponent: () =>
+      import('./features/public/support/faq/faq.component').then((m) => m.FaqComponent),
+  },
+  {
+    path: 'support/contact',
+    title: 'Contact Support — SeatFlow',
+    data: {
+      description:
+        'How to reach the SeatFlow demo maintainer and what this demo cannot support.',
+    },
+    loadComponent: () =>
+      import('./features/public/support/contact/contact.component').then(
+        (m) => m.ContactComponent,
+      ),
+  },
+  {
+    // Static title on purpose: never encodes transient live probe results.
+    path: 'status',
+    title: 'Platform Status — SeatFlow',
+    data: {
+      description:
+        'Best-effort live view of SeatFlow demo availability. No uptime promise.',
+    },
+    loadComponent: () =>
+      import('./features/public/status/status.component').then((m) => m.StatusComponent),
+  },
+  {
+    path: 'api-docs',
+    title: 'API Documentation — SeatFlow',
+    data: {
+      description:
+        'Portfolio overview of the SeatFlow API domains, authentication, and protected surfaces.',
+    },
+    loadComponent: () =>
+      import('./features/public/api-docs/api-docs.component').then((m) => m.ApiDocsComponent),
+  },
   {
     path: '**',
-    redirectTo: '',
+    title: 'Page Not Found — SeatFlow',
+    data: { noindex: true },
+    loadComponent: () =>
+      import('./features/public/not-found/not-found.component').then(
+        (m) => m.NotFoundComponent,
+      ),
   },
 ];

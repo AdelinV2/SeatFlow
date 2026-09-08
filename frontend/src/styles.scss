@@ -545,3 +545,240 @@ html {
   border-width: 0;
 }
 
+/* P16-001: projected public-content anchors sit below the sticky header. */
+.content-page__body [id] {
+  scroll-margin-top: 5.5rem;
+}
+
+/* ==========================================================================
+   P16 UI polish: projected long-form typography (global so it reaches
+   ng-content from lawful/legal/support/status/api-docs pages).
+   Copy is untouched — this is presentation only.
+   ========================================================================== */
+
+.content-page__body > section {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 1.25rem;
+  padding: 1.5rem 1.5rem 1.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  box-shadow: var(--shadow-diffuse);
+  scroll-margin-top: 5.5rem;
+  transition:
+    transform 200ms var(--motion-spring),
+    box-shadow 200ms ease-out,
+    border-color 200ms ease-out;
+}
+
+.content-page__body > section:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+}
+
+.content-page__body > section::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  height: 3px;
+  background: linear-gradient(to right, var(--color-primary), var(--color-accent-violet), transparent 85%);
+  opacity: 0.85;
+}
+
+.content-page__body h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0 0 0.625rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+
+.content-page__body h2::before {
+  content: '';
+  flex: none;
+  width: 0.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-accent-violet));
+}
+
+.content-page__body h3 {
+  margin: 1.25rem 0 0.375rem;
+  font-size: 1.0625rem;
+  font-weight: 750;
+  color: var(--color-text-primary);
+}
+
+.content-page__body p {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-secondary);
+}
+
+.content-page__body p:first-child,
+.content-page__body h2 + p,
+.content-page__body ul + p {
+  margin-top: 0.5rem;
+}
+
+.content-page__body ul,
+.content-page__body ol {
+  margin: 0.875rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.content-page__body ol {
+  counter-reset: polished-ol;
+}
+
+.content-page__body ul > li {
+  position: relative;
+  padding-left: 1.625rem;
+}
+
+.content-page__body ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: 0.62em;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent-violet));
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.content-page__body ol > li {
+  position: relative;
+  counter-increment: polished-ol;
+  padding-left: 2.5rem;
+}
+
+.content-page__body ol > li::before {
+  content: counter(polished-ol, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.15em;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+  background: var(--color-primary-glow);
+  border-radius: 0.5rem;
+  padding: 0.125rem 0.375rem;
+}
+
+.content-page__body a {
+  font-weight: 650;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  border-radius: 0.25rem;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.content-page__body a:hover {
+  background: var(--color-primary-glow);
+}
+
+.content-page__body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-canvas-subtle);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.content-page__body pre {
+  margin: 1rem 0 0;
+  padding: 2.75rem 1.125rem 1.125rem;
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 1.1rem 1.1rem, #f87171 0.32rem, transparent 0.34rem),
+    radial-gradient(circle at 2.1rem 1.1rem, #fbbf24 0.32rem, transparent 0.34rem),
+    radial-gradient(circle at 3.1rem 1.1rem, #34d399 0.32rem, transparent 0.34rem),
+    linear-gradient(180deg, var(--color-canvas-subtle), var(--color-surface));
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  box-shadow: var(--shadow-diffuse);
+}
+
+.content-page__body pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.content-page__body a[href^='mailto:'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.625rem 1.125rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-primary), var(--color-accent-violet));
+  color: #fff;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: var(--shadow-diffuse);
+  transition:
+    transform 150ms var(--motion-spring),
+    box-shadow 150ms ease-out,
+    filter 150ms ease-out;
+}
+
+.content-page__body a[href^='mailto:']:hover {
+  transform: translateY(-1px) scale(1.01);
+  filter: brightness(1.06);
+}
+
+.content-page__body a[href^='mailto:']:active {
+  transform: scale(0.97);
+}
+
+/* Staggered section entrance for long-form pages. */
+.content-page__body > section {
+  animation: fade-in-up 550ms var(--motion-reveal) both;
+}
+
+.content-page__body > section:nth-child(2) {
+  animation-delay: 60ms;
+}
+.content-page__body > section:nth-child(3) {
+  animation-delay: 120ms;
+}
+.content-page__body > section:nth-child(4) {
+  animation-delay: 180ms;
+}
+.content-page__body > section:nth-child(5) {
+  animation-delay: 240ms;
+}
+.content-page__body > section:nth-child(n + 6) {
+  animation-delay: 300ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-page__body > section {
+    animation: none;
+  }
+}
+

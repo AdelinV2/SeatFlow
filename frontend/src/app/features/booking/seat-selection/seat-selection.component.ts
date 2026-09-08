@@ -598,7 +598,7 @@ export class SeatSelectionComponent implements OnInit {
     const holdGeneration = ++this.holdRequestGeneration;
     const holdSessionId = session.id;
     this.reservationApi
-      .createReservation(request)
+      .createReservation(request, { persistGuestProof: !this.isAuthenticated() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (reservation) => {
@@ -607,6 +607,8 @@ export class SeatSelectionComponent implements OnInit {
             this.selectedSession()?.id !== holdSessionId
           ) {
             this.isCreatingHold.set(false);
+            // P16-002: a stale hold must not leave a guest-proof entry behind.
+            this.reservationApi.clearStoredCustomerEmailProof(reservation.id);
             this.reservationApi
               .cancelReservation(reservation.id)
               .pipe(catchError(() => of(undefined)))

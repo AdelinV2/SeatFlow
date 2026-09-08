@@ -1,0 +1,82 @@
+<article class="content-page" aria-labelledby="content-page-title">
+  <div class="content-page__backdrop" aria-hidden="true">
+    <span class="content-page__orb content-page__orb--indigo"></span>
+    <span class="content-page__orb content-page__orb--violet"></span>
+  </div>
+
+  <header class="content-page__header animate-fade-in-up">
+    @if (eyebrow()) {
+      <p class="content-page__eyebrow">
+        <span class="content-page__eyebrow-dot" aria-hidden="true"></span>{{ eyebrow() }}
+      </p>
+    }
+    <h1 #heading id="content-page-title" class="content-page__title" tabindex="-1">{{ title() }}</h1>
+    <span class="content-page__title-accent" aria-hidden="true"></span>
+    @if (lead()) {
+      <p class="content-page__lead">{{ lead() }}</p>
+    }
+    @if (lastUpdated()) {
+      <p class="content-page__updated">
+        <svg viewBox="0 0 24 24" class="content-page__updated-icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        Last updated: <time>{{ lastUpdated() }}</time>
+      </p>
+    }
+  </header>
+
+  @if (hasCallout()) {
+    <aside
+      class="content-page__callout animate-fade-in-up content-page__stagger-1"
+      role="note"
+      [ngClass]="{
+        'content-page__callout--warning': calloutTone() === 'warning',
+        'content-page__callout--info': calloutTone() !== 'warning',
+      }"
+      [attr.aria-label]="calloutHeading()"
+    >
+      <p class="content-page__callout-title">
+        <span class="content-page__callout-icon" aria-hidden="true">{{
+          calloutTone() === 'warning' ? '!' : 'i'
+        }}</span>
+        <strong>{{ calloutHeading() }}</strong>
+      </p>
+      <p class="content-page__callout-message">{{ calloutMessage() }}</p>
+    </aside>
+  }
+
+  <div
+    class="content-page__layout"
+    [ngClass]="{ 'content-page__layout--with-toc': hasToc() }"
+  >
+    @if (hasToc()) {
+      <nav class="content-page__toc animate-fade-in-up content-page__stagger-1" aria-label="On this page">
+        <h2 class="content-page__toc-title">On this page</h2>
+        <ul class="content-page__toc-list">
+          @for (entry of normalizedToc(); track entry.id; let idx = $index) {
+            <li
+              class="content-page__toc-item"
+              [ngClass]="{ 'content-page__toc-item--nested': entry.level === 3 }"
+            >
+              <span class="content-page__toc-index" aria-hidden="true">{{
+                (idx + 1).toString().padStart(2, '0')
+              }}</span>
+              <a
+                class="content-page__toc-link"
+                [href]="'#' + entry.id"
+                [appFragmentScroll]="entry.id"
+                >{{ entry.label }}</a
+              >
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+    <div class="content-page__body animate-fade-in-up content-page__stagger-2">
+      <ng-content />
+    </div>
+  </div>
+</article>

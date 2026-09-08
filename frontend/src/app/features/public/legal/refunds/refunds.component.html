@@ -1,0 +1,108 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Refund and Cancellation Policy"
+  lead="When a SeatFlow booking can be refunded, what a refund covers, and what happens after a request. The server decides eligibility; this page only explains the rule."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Portfolio demo in Stripe Test Mode"
+  calloutMessage="SeatFlow currently runs as a portfolio demonstration in Stripe Test Mode. Test payments and test refunds move no real money and create no real-world transfer."
+>
+  <section id="eligibility" aria-labelledby="eligibility-heading">
+    <h2 id="eligibility-heading">The 24-hour eligibility rule</h2>
+    <p>
+      A confirmed, paid reservation is eligible for a full reservation refund
+      only when at least 24 hours remain before the event session starts. The
+      cutoff is enforced by the server using its own clock: the session start
+      instant minus the authoritative server time must be 24 hours or more.
+    </p>
+    <p>
+      Exactly 24 hours (24:00:00) remaining is eligible; anything below 24
+      hours is not eligible. Do not read this as an approximate
+      &ldquo;one day before the event&rdquo; promise: 23:59:59 remaining is
+      already outside the policy. Displayed session times may be localized for
+      readability, but the comparison itself uses instants, and the server
+      response is authoritative when any display and the server disagree.
+    </p>
+    <p>
+      As an abstract example only: if a session starts Saturday at 20:00 in the
+      session&rsquo;s instant interpretation, the refund request must be
+      accepted by the server no later than Friday at 20:00 in that same
+      interpretation. Pending reservations are a separate case: cancelling a
+      pending hold simply releases the held seats and is not a payment refund.
+    </p>
+  </section>
+
+  <section id="scope" aria-labelledby="scope-heading">
+    <h2 id="scope-heading">Full reservation scope</h2>
+    <p>
+      The current policy covers a full reservation refund only. There is no
+      partial refund and no per-ticket refund: a successful refund reverses the
+      whole reservation amount, not a subset of its seats. This page does not
+      offer a way to refund individual tickets while keeping the rest of the
+      reservation.
+    </p>
+    <p>
+      A successful refund revokes the affected tickets and, when the session
+      remains bookable, releases the seats according to the implemented
+      workflow so they can be booked again. Seats are not released while a
+      refund is merely pending, and a failed provider refund never counts as
+      completed just because a request was submitted.
+    </p>
+  </section>
+
+  <section id="who" aria-labelledby="who-heading">
+    <h2 id="who-heading">Who can request a refund</h2>
+    <p>
+      Refunds apply to the owner of a confirmed, paid, eligible reservation.
+      Sign in with the account that made the booking and use the contact page
+      linked below. No authorization mechanics, internal
+      identifiers, or admin bypass details are published on this page.
+    </p>
+    <p>
+      There is no guest refund self-service button in this phase. If you
+      checked out as a guest, do not look for a hidden refund endpoint: use
+      the <a routerLink="/support/contact">contact page</a> instead and include
+      only what support needs to find the booking, never passwords, payment
+      secrets, or ticket QR data beyond what entry requires.
+    </p>
+  </section>
+
+  <section id="workflow" aria-labelledby="workflow-heading">
+    <h2 id="workflow-heading">What happens after you request</h2>
+    <p>In plain language, a refund request moves through these states:</p>
+    <p><strong>request submitted &rarr; processing &rarr; completed or failed.</strong></p>
+    <p>
+      &ldquo;Submitted&rdquo; means the server accepted the request for
+      processing, not that money has moved. &ldquo;Completed&rdquo; means the
+      provider and domain records confirm success and the tickets are revoked.
+      &ldquo;Failed&rdquo; means no refund transfer occurred: the tickets stay
+      valid and the seats stay sold. Internal provider identifiers, event
+      names, retry details, and idempotency mechanics are intentionally not
+      published here.
+    </p>
+  </section>
+
+  <section id="demo" aria-labelledby="demo-heading">
+    <h2 id="demo-heading">Portfolio demo and Test Mode</h2>
+    <p>
+      This site is a portfolio/demo deployment using Stripe Test Mode.
+      Payments, tax previews, and refunds shown here are demonstration
+      behavior: test card flows do not represent real charges or real
+      transfers, and displayed amounts must not be treated as commercial
+      invoices. If the deployment ever switches to live payments, this policy
+      becomes a mandatory release-review item and will be updated before any
+      real-money use.
+    </p>
+  </section>
+
+  <section id="related" aria-labelledby="related-heading">
+    <h2 id="related-heading">Related pages</h2>
+    <ul>
+      <li><a routerLink="/legal/terms">Terms and Conditions</a></li>
+      <li><a routerLink="/legal/privacy">Privacy Notice</a></li>
+      <li><a routerLink="/legal/tax">Tax and Test Mode explanation</a></li>
+      <li><a routerLink="/support/contact">Contact</a></li>
+      <li><a routerLink="/events">Browse events</a></li>
+    </ul>
+  </section>
+</app-content-page>

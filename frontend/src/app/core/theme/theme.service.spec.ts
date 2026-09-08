@@ -93,4 +93,12 @@ describe('ThemeService', () => {
     expect(service.mode()).toBe('light');
     expect(service.activeTheme()).toBe('light');
   });
+
+  it('does not write theme storage before an explicit user choice (P16-002)', () => {
+    const service = TestBed.inject(ThemeService);
+    TestBed.tick();
+
+    expect(service.mode()).toBe('system');
+    expect(localStorage.getItem('seatflow_theme_mode')).toBeNull();
+  });
 });

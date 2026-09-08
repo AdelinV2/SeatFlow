@@ -54,11 +54,16 @@ describe('SystemHealthService', () => {
     );
   }
 
-  it('should be created and have operational default state', () => {
-    flushInitialRequests();
+  it('should start in CHECKING with no last-checked time before the first probe', () => {
     expect(service).toBeTruthy();
+    expect(service.status()).toBe('CHECKING');
+    expect(service.statusLabel()).toBe('Checking System Health...');
+    expect(service.lastChecked()).toBeNull();
+
+    flushInitialRequests();
     expect(service.status()).toBe('OPERATIONAL');
     expect(service.statusLabel()).toBe('All Systems Operational');
+    expect(service.lastChecked()).not.toBeNull();
   });
 
   it('should transition to DEGRADED and DOWN appropriately', () => {

@@ -50,6 +50,20 @@
           <span>Catalog</span>
         </a>
 
+        <a
+          routerLink="/support/faq"
+          routerLinkActive="nav-pill--active"
+          class="nav-pill"
+          (click)="closeMobileMenu()"
+        >
+          <svg class="size-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>Help</span>
+        </a>
+
         @if (userContext.isAuthenticated()) {
           <a
             routerLink="/profile/tickets"
@@ -343,6 +357,20 @@
           <line x1="3" x2="21" y1="10" y2="10" />
         </svg>
         <span>Catalog</span>
+      </a>
+
+      <a
+        routerLink="/support/faq"
+        routerLinkActive="mobile-nav-link--active"
+        class="mobile-nav-link"
+        (click)="closeMobileMenu()"
+      >
+        <svg class="size-5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <span>Help & FAQ</span>
       </a>
 
       @if (userContext.isAuthenticated()) {

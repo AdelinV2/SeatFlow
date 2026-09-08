@@ -1,0 +1,37 @@
+/* P16 UI polish: contact page configuration gate + what-to-include checklist.
+   Copy and mailto logic are untouched — presentation only. */
+
+/* Owner-configuration gate paragraph emphasis. */
+:host strong {
+  color: var(--color-text-primary);
+}
+
+/* Checklist inside "What to include" as stepped cards. */
+:host #what-to-include ul {
+  counter-reset: contact-step;
+}
+
+:host #what-to-include ul > li {
+  counter-increment: contact-step;
+  padding: 0.875rem 1rem 0.875rem 3rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+}
+
+:host #what-to-include ul > li::before {
+  content: counter(contact-step, decimal-leading-zero);
+  position: absolute;
+  left: 0.875rem;
+  top: 0.8rem;
+  width: auto;
+  height: auto;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+  background: var(--color-primary-glow);
+  padding: 0.125rem 0.4375rem;
+  box-shadow: none;
+}

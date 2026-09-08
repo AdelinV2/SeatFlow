@@ -77,6 +77,8 @@ describe('AppComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('app-header')).not.toBeNull();
     expect(element.querySelector('app-footer')).not.toBeNull();
-    expect(element.textContent).toContain('All Systems Operational');
+    // TASK-P16-005: the shell never claims health before the first probe.
+    expect(element.textContent).toContain('Checking System Health...');
+    expect(element.textContent).not.toContain('All Systems Operational');
   });
 });

@@ -25,14 +25,20 @@ export class SystemHealthService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly status = signal<SystemHealthStatus>('OPERATIONAL');
+  /**
+   * Initial state is CHECKING so the footer and `/status` never claim health
+   * before the first probe completes (TASK-P16-005). The first completed probe
+   * transitions to OPERATIONAL / DEGRADED / DOWN. `lastChecked` stays null
+   * until that first probe so no check time is implied prematurely.
+   */
+  readonly status = signal<SystemHealthStatus>('CHECKING');
   readonly serviceReport = signal<ServiceHealthReport>({
     gateway: 'UP',
     venues: 'UP',
     events: 'UP',
     users: 'UP',
   });
-  readonly lastChecked = signal<Date>(new Date());
+  readonly lastChecked = signal<Date | null>(null);
 
   readonly statusLabel = computed(() => {
     switch (this.status()) {

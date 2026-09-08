@@ -1,0 +1,122 @@
+/* P16 UI polish: API docs domain grid + invariant checks + terminal code.
+   Copy and links are untouched — presentation only. */
+
+/* Domain cards: override the global list treatment inside #domains only. */
+.api-grid {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+.api-grid > li {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 0.875rem 1rem 0.875rem 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  font-size: 0.9375rem;
+  transition:
+    transform 200ms var(--motion-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    border-color 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.api-grid > li:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  box-shadow: var(--shadow-diffuse);
+}
+
+.api-grid > li::before {
+  content: '◆';
+  position: absolute;
+  left: 1rem;
+  top: 0.95rem;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: var(--color-primary-glow);
+  border-radius: 0.5rem;
+  padding: 0.125rem 0.375rem;
+  line-height: 1.4;
+}
+
+/* Invariant checklist with gradient check badges. */
+.api-checks {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.api-checks > li {
+  position: relative;
+  margin: 0;
+  padding: 0.875rem 1rem 0.875rem 2.75rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent-emerald) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-emerald) 7%, var(--color-surface));
+  font-size: 0.9375rem;
+}
+
+.api-checks > li::before {
+  content: '✓';
+  position: absolute;
+  left: 1rem;
+  top: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--color-accent-emerald), var(--color-primary));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+/* Terminal-style endpoint example. */
+.api-example {
+  margin: 1rem 0 1.25rem;
+  padding: 2.75rem 1.125rem 1.125rem;
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 1.1rem 1.15rem, #f87171 0.32rem, transparent 0.34rem),
+    radial-gradient(circle at 2.1rem 1.15rem, #fbbf24 0.32rem, transparent 0.34rem),
+    radial-gradient(circle at 3.1rem 1.15rem, #34d399 0.32rem, transparent 0.34rem),
+    linear-gradient(180deg, #0f172a, #1e293b);
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  box-shadow: var(--shadow-diffuse);
+}
+
+.api-example code {
+  white-space: pre;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+@media (min-width: 48rem) {
+  .api-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .api-grid > li {
+    transition: none;
+  }
+}
