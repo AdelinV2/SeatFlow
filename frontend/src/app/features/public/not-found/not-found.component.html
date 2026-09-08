@@ -1,17 +1,44 @@
 <section class="not-found" aria-labelledby="not-found-title">
-  <p class="not-found__eyebrow">Error 404</p>
-  <h1 #heading id="not-found-title" class="not-found__title" tabindex="-1">
+  <div class="not-found__orbs" aria-hidden="true">
+    <span class="not-found__orb not-found__orb--indigo"></span>
+    <span class="not-found__orb not-found__orb--violet"></span>
+  </div>
+
+  <p class="not-found__eyebrow animate-fade-in-up">
+    <span class="not-found__pulse" aria-hidden="true"></span>
+    Error 404
+  </p>
+  <div class="not-found__code animate-scale-in" aria-hidden="true">404</div>
+  <h1 #heading id="not-found-title" class="not-found__title animate-fade-in-up" tabindex="-1">
     This page could not be found
   </h1>
-  <p class="not-found__lead">
+  <p class="not-found__lead animate-fade-in-up">
     The page you are looking for does not exist or was moved. Check the address or
     continue with one of the options below.
   </p>
-  <div class="not-found__actions">
-    <a routerLink="/" class="not-found__button not-found__button--primary">Back to home</a>
-    <a routerLink="/events" class="not-found__button not-found__button--secondary"
-      >Browse events</a
-    >
+  <div class="not-found__actions animate-fade-in-up">
+    <a routerLink="/" class="not-found__button not-found__button--primary animate-sheen btn-spring">
+      <svg viewBox="0 0 24 24" class="not-found__button-icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.5V21h14V9.5" />
+      </svg>
+      Back to home
+    </a>
+    <a routerLink="/events" class="not-found__button not-found__button--secondary btn-spring">
+      <svg viewBox="0 0 24 24" class="not-found__button-icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="9" />
+        <path d="m15 9-2 5-4 1 2-5z" />
+      </svg>
+      Browse events
+    </a>
+  </div>
+  <div class="not-found__shortcuts animate-fade-in-up">
+    <span class="not-found__shortcuts-label">Or try:</span>
+    <a routerLink="/support/faq">Help Center</a>
+    <span aria-hidden="true">·</span>
+    <a routerLink="/support/contact">Contact</a>
+    <span aria-hidden="true">·</span>
+    <a routerLink="/status">Status</a>
   </div>
   <p class="not-found__hint">
     If you followed a link inside SeatFlow and ended up here, please report it through

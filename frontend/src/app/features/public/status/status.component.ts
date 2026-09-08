@@ -16,6 +16,7 @@ import { SystemHealthService } from '../../../services/system-health.service';
   standalone: true,
   imports: [ContentPageComponent, RouterLink, DatePipe],
   templateUrl: './status.component.html',
+  styleUrl: './status.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StatusComponent {

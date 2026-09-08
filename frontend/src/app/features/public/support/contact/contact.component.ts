@@ -14,6 +14,7 @@ import { PUBLIC_SUPPORT_CONTACT } from '../support-contact.config';
   standalone: true,
   imports: [ContentPageComponent, RouterLink],
   templateUrl: './contact.component.html',
+  styleUrl: './contact.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ContactComponent {

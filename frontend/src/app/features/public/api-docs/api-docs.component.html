@@ -10,7 +10,7 @@
   <section id="domains" aria-labelledby="domains-heading">
     <h2 id="domains-heading">API domains</h2>
     <p>The public API surface is organized around the booking journey:</p>
-    <ul>
+    <ul class="api-grid">
       <li>events and event sessions, including search and detail views;</li>
       <li>venues and seats for browsing availability;</li>
       <li>reservations, including temporary holds and pricing preview;</li>
@@ -43,7 +43,7 @@ GET /api/venues?size=1</code></pre>
 
   <section id="invariants" aria-labelledby="invariants-heading">
     <h2 id="invariants-heading">Server-authoritative invariants</h2>
-    <ul>
+    <ul class="api-checks">
       <li>Each reservation is limited to 10 seats.</li>
       <li>Seat holds expire after 15 minutes against the server clock.</li>
       <li>Seat ownership is decided by the database; browser state is reconciled against it.</li>
