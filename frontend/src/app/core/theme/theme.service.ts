@@ -15,6 +15,13 @@ export class ThemeService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly destroyRef = inject(DestroyRef);
   private readonly storageKey = 'seatflow_theme_mode';
+  /**
+   * P16-002: persistent theme storage is written only after the user makes an
+   * explicit theme choice (`setMode`/`toggleTheme`). The initial automatic
+   * render only reads an existing value (or falls back to `system`) so a first
+   * signed-out visit does not create terminal storage before any user action.
+   */
+  private hasExplicitChoice = false;
 
   readonly mode = signal<ThemeMode>(this.getInitialMode());
   private readonly systemPrefersDark = signal(this.getSystemDarkPreference());
@@ -55,15 +62,19 @@ export class ThemeService {
       document
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute('content', activeTheme === 'dark' ? '#0B0F19' : '#F8FAFC');
-      localStorage.setItem(this.storageKey, this.mode());
+      if (this.hasExplicitChoice) {
+        localStorage.setItem(this.storageKey, this.mode());
+      }
     });
   }
 
   setMode(mode: ThemeMode): void {
+    this.hasExplicitChoice = true;
     this.mode.set(mode);
   }
 
   toggleTheme(): void {
+    this.hasExplicitChoice = true;
     this.mode.update((currentMode) => {
       if (currentMode === 'dark') {
         return 'light';

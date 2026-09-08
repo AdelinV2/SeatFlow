@@ -109,6 +109,61 @@ describe('ReservationApiService', () => {
     req.flush(null);
   });
 
+  it('should persist the guest email proof only for guest checkout (P16-002)', () => {
+    sessionStorage.clear();
+    const request: CreateReservationRequest = {
+      eventSessionId: 'sess-101',
+      customerEmail: 'guest@example.com',
+      seatIds: ['s-1'],
+      seatPrices: [50],
+      idempotencyKey: 'idem-guest-1',
+    };
+    const mockResponse: ReservationResponse = {
+      id: 'res-guest-1',
+      eventId: 'ev-101',
+      eventSessionId: 'sess-101',
+      customerEmail: 'guest@example.com',
+      status: 'PENDING',
+      expiresAt: '2026-10-10T18:15:00Z',
+      totalAmount: 50,
+      seats: [{ seatId: 's-1', price: 50 }],
+    };
+
+    service.createReservation(request).subscribe();
+    httpMock.expectOne('/api/reservations').flush(mockResponse);
+    expect(service.getStoredCustomerEmailProof('res-guest-1')).toBe('guest@example.com');
+
+    service.clearStoredCustomerEmailProof('res-guest-1');
+    expect(service.getStoredCustomerEmailProof('res-guest-1')).toBeUndefined();
+    sessionStorage.clear();
+  });
+
+  it('should not create a guest proof entry for authenticated checkout (P16-002)', () => {
+    sessionStorage.clear();
+    const request: CreateReservationRequest = {
+      eventSessionId: 'sess-101',
+      customerEmail: 'member@example.com',
+      seatIds: ['s-1'],
+      seatPrices: [50],
+      idempotencyKey: 'idem-auth-1',
+    };
+    const mockResponse: ReservationResponse = {
+      id: 'res-auth-1',
+      eventId: 'ev-101',
+      eventSessionId: 'sess-101',
+      customerEmail: 'member@example.com',
+      status: 'PENDING',
+      expiresAt: '2026-10-10T18:15:00Z',
+      totalAmount: 50,
+      seats: [{ seatId: 's-1', price: 50 }],
+    };
+
+    service.createReservation(request, { persistGuestProof: false }).subscribe();
+    httpMock.expectOne('/api/reservations').flush(mockResponse);
+    expect(service.getStoredCustomerEmailProof('res-auth-1')).toBeUndefined();
+    sessionStorage.clear();
+  });
+
   it('should update ticket types with optional guest proof header', () => {
     const request: UpdateReservationPricingRequest = {
       seats: [{ seatId: 's-1', pricingTierId: 'tier-student' }],
