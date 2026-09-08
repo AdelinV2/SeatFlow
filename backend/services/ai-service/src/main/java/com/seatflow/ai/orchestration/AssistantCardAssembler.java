@@ -89,15 +89,11 @@ public class AssistantCardAssembler {
     }
 
     private String publicSummary(Object item) {
+        // The card already renders the category on its own line: keep the summary to the
+        // next session and currency only so customers do not read the category twice.
         if (item instanceof com.seatflow.ai.tool.dto.EventSearchItem searchItem) {
             StringBuilder summary = new StringBuilder();
-            if (searchItem.category() != null) {
-                summary.append(searchItem.category());
-            }
             if (searchItem.nextSessionStartsAt() != null) {
-                if (!summary.isEmpty()) {
-                    summary.append(" · ");
-                }
                 summary.append("Next session ").append(searchItem.nextSessionStartsAt());
             }
             if (searchItem.currency() != null) {

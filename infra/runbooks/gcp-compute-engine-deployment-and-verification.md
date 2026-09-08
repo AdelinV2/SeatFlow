@@ -94,7 +94,7 @@ Inspect the plan output to ensure only the approved resources are being provisio
 - 1 Artifact Registry repository (`seatflow`)
 - 2 Service Accounts (`seatflow-vm-runtime`, `seatflow-github-deploy`)
 - 1 Workload Identity Pool + Provider for `AdelinV2/SeatFlow`
-- 8 Secret Manager containers
+- 11 Secret Manager containers
 
 ### 4.4 Apply Infrastructure
 ```bash
@@ -157,16 +157,19 @@ echo -n "sk_live_..." | gcloud secrets versions add stripe-api-key --data-file=-
 # 5. Stripe Webhook Signing Secret (maps to STRIPE_WEBHOOK_SECRET)
 echo -n "whsec_..." | gcloud secrets versions add stripe-webhook-secret --data-file=- --project=${PROJECT_ID}
 
-# 6. Resend Email API Key (maps to RESEND_API_KEY)
+# 6. Groq API Key (maps to GROQ_API_KEY; presence enables AI by default)
+echo -n "gsk_..." | gcloud secrets versions add groq-api-key --data-file=- --project=${PROJECT_ID}
+
+# 7. Resend Email API Key (maps to RESEND_API_KEY)
 echo -n "re_..." | gcloud secrets versions add resend-api-key --data-file=- --project=${PROJECT_ID}
 
-# 7. Grafana Admin Password (maps to GRAFANA_ADMIN_PASSWORD)
+# 8. Grafana Admin Password (maps to GRAFANA_ADMIN_PASSWORD)
 echo -n "CHANGE_ME_GRAFANA_ADMIN_PASSWORD" | gcloud secrets versions add grafana-admin-password --data-file=- --project=${PROJECT_ID}
 
-# 8. Prometheus Actuator Scrape JWT Token (maps to PROMETHEUS_SCRAPE_TOKEN / /run/secrets/prometheus-scrape-token)
+# 9. Prometheus Actuator Scrape JWT Token (maps to PROMETHEUS_SCRAPE_TOKEN / /run/secrets/prometheus-scrape-token)
 echo -n "CHANGE_ME_JWT_METRICS_READ_TOKEN" | gcloud secrets versions add prometheus-scrape-token --data-file=- --project=${PROJECT_ID}
 
-# 9. Dedicated monitoring identity credentials (used only by the VM token refresher)
+# 10. Dedicated monitoring identity credentials (used only by the VM token refresher)
 echo -n "prometheus@seat-flow.me" | gcloud secrets versions add prometheus-identity-email --data-file=- --project=${PROJECT_ID}
 echo -n "CHANGE_ME_MONITORING_IDENTITY_PASSWORD" | gcloud secrets versions add prometheus-identity-password --data-file=- --project=${PROJECT_ID}
 ```
@@ -406,5 +409,5 @@ If no `previous.env` exists, stop and investigate rather than inventing a mutabl
 
 ### 13.3 Runtime Secret Readiness
 
-All eight Secret Manager containers must have an enabled version before the first release. `prometheus-scrape-token` must contain an IdP-issued JWT with only `metrics.read`; do not use a random token. A Stripe webhook signing secret must come from the exact test-mode endpoint `https://seat-flow.me/api/payments/webhook`, not from a local Stripe CLI listener.
+All eleven Secret Manager containers must have an enabled version before the first release. `prometheus-scrape-token` must contain an IdP-issued JWT with only `metrics.read`; do not use a random token. A Stripe webhook signing secret must come from the exact test-mode endpoint `https://seat-flow.me/api/payments/webhook`, not from a local Stripe CLI listener.
 

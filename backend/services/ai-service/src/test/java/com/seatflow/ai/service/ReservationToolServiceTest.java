@@ -41,7 +41,8 @@ class ReservationToolServiceTest {
             new AiRequestContext("bearer-user-jwt", "corr-1", "owner-1");
 
     private ReservationToolServiceImpl service() {
-        return new ReservationToolServiceImpl(client);
+        return new ReservationToolServiceImpl(client,
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
 
     private ReservationServiceReservationDto dto(UUID id) {

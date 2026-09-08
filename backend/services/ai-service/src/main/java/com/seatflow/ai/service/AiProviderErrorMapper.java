@@ -6,11 +6,12 @@ import org.springframework.stereotype.Component;
 /**
  * Maps mocked/live provider HTTP failures to stable internal categories without leaking raw bodies.
  *
- * <p>Retry policy enforced by callers (TASK-P15-001 section 8.1):
+ * <p>Retry policy enforced by callers (TASK-P15-001 section 8.1; no automatic retry:
+ * {@code spring.ai.openai.max-retries=0} in {@code application.yaml}):
  * <ul>
  *   <li>{@code 400/401/403/404} → no retry;</li>
  *   <li>{@code 429} → fail fast to {@code RATE_LIMITED} (HTTP 429, no retry storm);</li>
- *   <li>transient network/5xx/timeout → at most one bounded retry, then
+ *   <li>transient network/5xx/timeout → no automatic retry; callers fail fast to
  *       {@code PROVIDER_UNAVAILABLE} (HTTP 503).</li>
  * </ul>
  * Do not assert exact provider free-tier limits in code.

@@ -26,6 +26,38 @@ function nextMessageId(): string {
   return `assistant-msg-${Date.now()}-${assistantMessageSequence}`;
 }
 
+interface AssistantHttpErrorBody {
+  readonly code?: unknown;
+  readonly errorCode?: unknown;
+  readonly message?: unknown;
+  readonly error?: { readonly code?: unknown; readonly message?: unknown } | null;
+}
+
+function readAssistantErrorCode(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const body = payload as AssistantHttpErrorBody;
+  if (typeof body.code === 'string') {
+    return body.code;
+  }
+  if (typeof body.errorCode === 'string') {
+    return body.errorCode;
+  }
+  return body.error && typeof body.error.code === 'string' ? body.error.code : null;
+}
+
+function readAssistantErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const body = payload as AssistantHttpErrorBody;
+  if (typeof body.message === 'string') {
+    return body.message;
+  }
+  return body.error && typeof body.error.message === 'string' ? body.error.message : null;
+}
+
 function isConfirmationError(
   payload: ReservationCreatedPayload | ProposalConfirmationError | null | undefined,
 ): payload is ProposalConfirmationError {
@@ -184,11 +216,10 @@ export class AssistantStore {
           }
           this.isSending.set(false);
           this.activityMessage.set(null);
-          const code =
-            (error.error as { code?: string } | null)?.code ??
-            (error.error as { error?: { code?: string } } | null)?.error?.code;
+          const code = readAssistantErrorCode(error.error);
           const friendly = code ? chatErrorMessage(code) : 'The assistant could not complete that request. Please try again.';
-          this.lastError.set(friendly);
+          // The thread message below already surfaces the failure: setting lastError
+          // as well renders the same text twice (message bubble + error bubble).
           this.appendMessage({
             role: 'assistant',
             text: friendly,
@@ -247,9 +278,8 @@ export class AssistantStore {
           return;
         }
         this.confirmingProposals.update((current) => current.filter((id) => id !== proposalId));
-        const body = error.error as ProposalConfirmationError | null;
-        const code = body?.code ?? `HTTP_${error.status}`;
-        this.applyConfirmationFailure(proposalId, code, body?.message ?? null);
+        const code = readAssistantErrorCode(error.error) ?? `HTTP_${error.status}`;
+        this.applyConfirmationFailure(proposalId, code, readAssistantErrorMessage(error.error));
       },
     });
   }
@@ -368,9 +398,8 @@ export class AssistantStore {
     const errorText = response.error
       ? response.error.message || chatErrorMessage(response.error.code)
       : null;
-    if (errorText) {
-      this.lastError.set(errorText);
-    }
+    // The appended thread message already surfaces the failure: setting lastError
+    // as well renders the same text twice (message bubble + error bubble).
     this.appendMessage({
       role: 'assistant',
       text: response.error ? errorText ?? '' : response.assistantMessage,

@@ -13,6 +13,18 @@ spring:
       api-key: ${GROQ_API_KEY:}
       chat:
         model: ${GROQ_MODEL:openai/gpt-oss-20b}
+        # Bounded model output for concise assistant replies (TASK-P15-007 section 12).
+        max-completion-tokens: ${GROQ_MAX_COMPLETION_TOKENS:600}
+        # Groq gpt-oss models return per-message reasoning by default and their
+        # OpenAI-compatible endpoint rejects that reasoning when it is echoed back
+        # on tool follow-up turns (400: property 'reasoning_content' is unsupported
+        # for role assistant). 'hidden' keeps tool calling working, keeps token
+        # usage bounded, and upholds the never-expose-reasoning invariant.
+        # 'low' effort further trims hidden reasoning tokens against free-tier
+        # rate limits; slot-filling tool turns do not need deep reasoning.
+        extra-body:
+          reasoning_format: hidden
+          reasoning_effort: low
       # Bounded interactive policy: explicit timeout, no retry storm (mapper fails fast on 429).
       timeout: 15s
       max-retries: 0
@@ -49,6 +61,12 @@ resilience4j:
 seatflow:
   ai:
     enabled: ${AI_ENABLED:false}
+    rate-limit:
+      # Local per-user abuse guard for AI endpoints only (TASK-P15-007 section 11).
+      # Confirmation retries within budget always pass (idempotent retry preserved).
+      chat-requests-per-minute: ${AI_CHAT_RATE_LIMIT_PER_MINUTE:60}
+      confirm-attempts-per-minute: ${AI_CONFIRM_RATE_LIMIT_PER_MINUTE:30}
+      max-tracked-users: ${AI_RATE_LIMIT_MAX_USERS:5000}
     conversation:
       # Bounded memory defaults (TASK-P15-004 section 4): 24 messages / 30m idle TTL / 500 active.
       max-messages: ${AI_CHAT_MAX_MESSAGES:24}

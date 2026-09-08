@@ -5,6 +5,7 @@ import com.seatflow.ai.api.dto.AssistantChatResponse;
 import com.seatflow.ai.context.AiRequestContext;
 import com.seatflow.ai.proposal.ProposalStore;
 import com.seatflow.ai.proposal.ReservationProposalProperties;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.AiStatusService;
 import com.seatflow.ai.service.impl.ProposalServiceImpl;
 import com.seatflow.ai.tool.dto.AvailableSeatItem;
@@ -77,14 +78,16 @@ class AssistantOrchestratorTest {
         var proposalStore = new ProposalStore(
                 new ReservationProposalProperties(
                         Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), clock);
-        var proposalService = new ProposalServiceImpl(proposalStore);
+        var proposalService = new ProposalServiceImpl(proposalStore,
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
         org.mockito.Mockito.lenient().when(promptFactory.systemPrompt())
-                .thenReturn("test system prompt p15-004-v1");
+                .thenReturn("test system prompt p15-007-v1");
         org.mockito.Mockito.lenient().when(statusService.isChatAvailable()).thenReturn(true);
         org.mockito.Mockito.lenient().when(statusService.isEnabled()).thenReturn(true);
         orchestrator = new AssistantOrchestrator(conversations, chatMemory, promptFactory,
                 toolRegistry, cardAssembler, modelClient, observation, errorMapper,
-                statusService, proposalService, clock);
+                statusService, proposalService,
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), clock);
     }
 
     @Test
@@ -329,7 +332,9 @@ class AssistantOrchestratorTest {
                         Duration.ofMinutes(5), 500, Duration.ofMinutes(1)), mutable);
         var expiredOrchestrator = new AssistantOrchestrator(shortStore, shortMemory, promptFactory,
                 toolRegistry, cardAssembler, modelClient, observation, errorMapper,
-                statusService, new ProposalServiceImpl(shortProposals), mutable);
+                statusService, new ProposalServiceImpl(shortProposals,
+                        new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry())),
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), mutable);
         org.mockito.Mockito.lenient().when(modelClient.execute(any())).thenReturn(
                 new AssistantModelClient.ModelTurnResult("hi", null, null, null, null, null));
 
