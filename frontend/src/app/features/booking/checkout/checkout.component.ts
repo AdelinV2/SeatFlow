@@ -495,6 +495,8 @@ export class CheckoutComponent implements OnInit, OnDestroy {
       .subscribe({
         next: () => {
           this.isCancellingOrder.set(false);
+          // P16-002: cancellation ends the guest-checkout need for the proof.
+          this.reservationApi.clearStoredCustomerEmailProof(reservation.id);
           this.destroyStripeElements();
           this.reservation.set({ ...reservation, status: 'CANCELLED' });
           this.snackBar.open('Order cancelled. Your held seats were released.', 'Close', {
@@ -697,6 +699,11 @@ export class CheckoutComponent implements OnInit, OnDestroy {
 
     this.isHoldExpired.set(true);
     this.isProcessingPayment.set(false);
+    // P16-002: an expired hold can no longer be checked out, so drop the proof.
+    const expiredReservationId = this.reservation()?.id;
+    if (expiredReservationId) {
+      this.reservationApi.clearStoredCustomerEmailProof(expiredReservationId);
+    }
     this.guestForm.disable();
     this.paymentElement?.update({ readOnly: true });
 
@@ -894,6 +901,13 @@ export class CheckoutComponent implements OnInit, OnDestroy {
     }
 
     if (status === 'succeeded' || status === 'processing' || status === 'requires_capture') {
+      // P16-002: the guest proof has served its checkout purpose once payment is
+      // confirmed; remove it before leaving checkout. Ticket access uses its own
+      // code/link afterwards.
+      const reservationId = this.reservation()?.id;
+      if (reservationId) {
+        this.reservationApi.clearStoredCustomerEmailProof(reservationId);
+      }
       void this.router.navigate(['/order-confirmation', this.currentPaymentId]);
       return;
     }

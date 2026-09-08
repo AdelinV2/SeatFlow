@@ -1,0 +1,152 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Cookies and Similar Technologies"
+  lead="Every cookie, localStorage entry, sessionStorage entry, and SDK storage SeatFlow actually uses, why it exists, and why no consent banner is shown."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="No consent banner"
+  calloutMessage="The verified runtime contains only storage needed for services you explicitly request. There is no analytics, advertising, or profiling storage to consent to, so no banner or preference modal is shown."
+>
+  <section id="decision" aria-labelledby="decision-heading">
+    <h2 id="decision-heading">Consent decision</h2>
+    <p>
+      Decision dated 2026-09-08:
+      <strong>NOT_REQUIRED_FOR_CURRENT_RUNTIME</strong>. Source and dependency
+      audits found no first-party marketing cookies, no Google Analytics, GTM,
+      PostHog, Hotjar, Clarity, pixel, or Sentry tracking, no
+      <code>document.cookie</code> writes by SeatFlow, and no IndexedDB,
+      service-worker, or cache storage introduced by SeatFlow. Each stored item
+      below documents its strictly-necessary, requested-service rationale. The
+      theme preference is written only after you explicitly choose a theme; the
+      startup script only reads an existing value. This decision must be
+      revisited before any analytics, advertising, profiling, or A/B testing SDK
+      is added. Details and evidence live in the version-controlled inventory
+      <code>.ai/compliance/phase-16-privacy-storage-provider-inventory.md</code>.
+    </p>
+  </section>
+
+  <section id="storage-table" aria-labelledby="storage-table-heading">
+    <h2 id="storage-table-heading">Storage in use</h2>
+    <p>
+      Token contents, guest emails, and secrets are never shown here. Names and
+      lifetimes below are categories, not values.
+    </p>
+    <div class="table-wrapper">
+      <table aria-label="Browser storage used by SeatFlow">
+        <thead>
+          <tr>
+            <th scope="col">Name / key</th>
+            <th scope="col">Technology</th>
+            <th scope="col">Provider</th>
+            <th scope="col">Purpose</th>
+            <th scope="col">Category</th>
+            <th scope="col">When created</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Relates to personal data?</th>
+            <th scope="col">Consent required?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>sb-&lt;project-ref&gt;-auth-token</code> family</td>
+            <td>localStorage (SDK-managed)</td>
+            <td>Supabase</td>
+            <td>Keep your requested sign-in session across reloads; refresh and OAuth detection</td>
+            <td>Strictly necessary / authentication</td>
+            <td>On sign-in, sign-up, or OAuth callback</td>
+            <td>Supabase session lifetime; removed on logout</td>
+            <td>Yes (session identifiers)</td>
+            <td>No; required for the requested session. Never behind an analytics toggle.</td>
+          </tr>
+          <tr>
+            <td><code>seatflow_theme_mode</code></td>
+            <td>localStorage</td>
+            <td>SeatFlow (first-party)</td>
+            <td>Remember an explicit dark, light, or system theme choice</td>
+            <td>Functional preference</td>
+            <td>Only after you change the theme; never on a first passive visit</td>
+            <td>Persistent until you change or clear it</td>
+            <td>Conditional (bare preference value)</td>
+            <td>No under explicit-choice behavior; classification to be legally confirmed if automatic writes return.</td>
+          </tr>
+          <tr>
+            <td><code>seatflow:reservation-email:&lt;reservationId&gt;</code></td>
+            <td>sessionStorage</td>
+            <td>SeatFlow (first-party)</td>
+            <td>Continue your guest checkout in the same browser tab</td>
+            <td>Strictly necessary / guest checkout</td>
+            <td>Only for guest hold creation; never for signed-in checkout and never in the page address</td>
+            <td>Browser-tab session; also cleared on cancellation, payment handoff, hold expiry, and stale-hold cleanup</td>
+            <td>Yes (guest email)</td>
+            <td>No; required for the requested guest checkout.</td>
+          </tr>
+          <tr>
+            <td>Stripe.js / Elements state</td>
+            <td>SDK storage (Stripe-controlled)</td>
+            <td>Stripe</td>
+            <td>Render and confirm the requested payment; fraud and security processing</td>
+            <td>Strictly necessary / payment</td>
+            <td>Only after you continue to payment on the checkout route</td>
+            <td>Per Stripe configuration</td>
+            <td>Yes (payment-related data; card details never stored by SeatFlow)</td>
+            <td>No for functional payment processing; reclassify if optional Stripe advertising or analytics is enabled.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="manage" aria-labelledby="manage-heading">
+    <h2 id="manage-heading">Manage storage</h2>
+    <p>
+      There are no optional categories to toggle, so this page ships no
+      preference switches. A modal with toggles that control nothing would be
+      dishonest and is deliberately absent. You can still:
+    </p>
+    <ul>
+      <li>sign out to remove the authentication session copy;</li>
+      <li>change the theme to overwrite the preference, or clear site data to remove it;</li>
+      <li>close the checkout tab, cancel, or let the 15-minute hold expire to drop the guest checkout proof;</li>
+      <li>use your browser's site-data controls to clear SeatFlow storage at any time; signing in or checking out again recreates only what that action needs.</li>
+    </ul>
+    <p>
+      Refusing hypothetical optional storage would never block sign-in, guest
+      checkout, event browsing, or accessibility, because no such storage exists
+      to refuse.
+    </p>
+  </section>
+
+  <section id="network-requests" aria-labelledby="network-requests-heading">
+    <h2 id="network-requests-heading">Network requests without storage</h2>
+    <ul>
+      <li>
+        <strong>Google Fonts</strong> stylesheets load on every page; the fetch
+        discloses ordinary network metadata but sets no SeatFlow-managed storage.
+      </li>
+      <li>
+        <strong>Nominatim geocoding</strong> is called directly from the browser
+        on venue pages and discloses the typed address or coordinates to that
+        endpoint; it sets no SeatFlow-managed storage.
+      </li>
+      <li>
+        <strong>AI provider (only where enabled):</strong> prompts are processed
+        server-side by the configured provider with no persistent SeatFlow
+        browser chat storage; provider retention follows that provider's terms.
+      </li>
+    </ul>
+  </section>
+
+  <section id="changes" aria-labelledby="changes-heading">
+    <h2 id="changes-heading">When this changes</h2>
+    <p>
+      If SeatFlow adds analytics, advertising, profiling, or any other optional
+      storage, this page and the inventory will name it, its provider, purpose,
+      and lifetime before it ships, and a real consent layer that blocks it
+      until you agree (and honors refusal and withdrawal) will ship with it.
+      Until then, the absence of a banner is the honest state. Related detail:
+      <a routerLink="/legal/privacy">privacy notice</a>,
+      <a routerLink="/legal/terms">terms</a>,
+      <a routerLink="/legal/security">security</a>.
+    </p>
+  </section>
+</app-content-page>

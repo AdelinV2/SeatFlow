@@ -135,6 +135,7 @@ describe('SeatSelectionComponent', () => {
     reservationApi = jasmine.createSpyObj<ReservationApiService>('ReservationApiService', [
       'createReservation',
       'cancelReservation',
+      'clearStoredCustomerEmailProof',
     ]);
     const reservation: ReservationResponse = {
       id: 'reservation-1',

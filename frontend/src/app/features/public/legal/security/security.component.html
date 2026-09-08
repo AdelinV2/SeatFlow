@@ -1,0 +1,94 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Security"
+  lead="How SeatFlow protects accounts, bookings, payments, and tickets at a high level, without publishing anything an attacker could reuse."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="High level only"
+  calloutMessage="This page describes security behavior in general terms. Exact limits, keys, hosts, token details, and bypass paths are never published here."
+>
+  <section id="authentication" aria-labelledby="authentication-heading">
+    <h2 id="authentication-heading">Authentication and authorization</h2>
+    <p>
+      Sign-in uses Supabase authentication with JSON Web Token based sessions.
+      Password, OAuth, and session-refresh flows run through that provider;
+      SeatFlow keeps only the session it needs to call its own APIs. Protected
+      customer, staff, and admin areas enforce role checks on the server, so
+      hiding a button in the interface never grants access by itself. Signing
+      out invalidates the local session copy.
+    </p>
+  </section>
+
+  <section id="booking-integrity" aria-labelledby="booking-integrity-heading">
+    <h2 id="booking-integrity-heading">Booking integrity</h2>
+    <p>
+      Reservations are limited to 10 seats each and held for 15 minutes against
+      server-authoritative availability. The database remains the source of
+      truth for seat ownership; browser state is reconciled against it and never
+      trusted over it. Expired or cancelled holds release their seats for
+      everyone else.
+    </p>
+  </section>
+
+  <section id="payments" aria-labelledby="payments-heading">
+    <h2 id="payments-heading">Payments</h2>
+    <p>
+      Card entry and confirmation run inside Stripe Elements in the checkout
+      page. SeatFlow never receives or stores card numbers or CVC values; it
+      keeps only payment identifiers, email linkage, amounts, currency, and
+      status needed to reconcile the order. The portfolio deployment runs in
+      Stripe Test Mode, so the provided test card moves no real money. Payment
+      secrets, webhook secrets, and raw provider payloads are never published.
+    </p>
+  </section>
+
+  <section id="guest-access" aria-labelledby="guest-access-heading">
+    <h2 id="guest-access-heading">Guest ticket access</h2>
+    <p>
+      Guest checkout keeps the guest email in the same browser tab only, sends
+      it as a request header for that reservation, and clears it on
+      cancellation, payment handoff, hold expiry, or tab close. It is never
+      placed in the page address. Treat the resulting ticket link or code as a
+      bearer credential: anyone holding it can present it, so keep it private.
+      See the <a routerLink="/legal/cookies">cookies and storage page</a> for
+      the exact key behavior and the
+      <a routerLink="/legal/privacy">privacy notice</a> for the data behind it.
+    </p>
+  </section>
+
+  <section id="platform-controls" aria-labelledby="platform-controls-heading">
+    <h2 id="platform-controls-heading">Platform controls</h2>
+    <p>
+      Public booking endpoints are protected by gateway rate limiting and
+      request correlation so automated seat locking is harder to abuse. Secrets
+      and configuration are separated from code and never embedded in public
+      pages, and checkout runs over encrypted transport in deployed
+      environments. Internal service addresses, dependency topology, stack
+      traces, and build secrets are never exposed through these pages.
+    </p>
+  </section>
+
+  <section id="ai-boundary" aria-labelledby="ai-boundary-heading">
+    <h2 id="ai-boundary-heading">AI assistant boundary</h2>
+    <p>
+      Where the assistant is enabled, it works through a narrow allow-list of
+      event, session, and seat tools. It has no direct database or payment
+      access, cannot bypass availability, holds, authorization, or payment
+      confirmation, and only an explicit confirmation action can finalize a
+      proposed booking through the normal server path.
+    </p>
+  </section>
+
+  <section id="not-claimed" aria-labelledby="not-claimed-heading">
+    <h2 id="not-claimed-heading">What is not claimed</h2>
+    <p>
+      SeatFlow claims no certification, audit, residency, or availability
+      commitment on this page: no ISO 27001, SOC 2, PCI DSS, or GDPR
+      certification; no penetration-test statement; no zero-trust architecture
+      claim; no uptime percentage; no Romania or EU-only storage promise; and no
+      end-to-end encryption claim. Report a suspected vulnerability through the
+      <a routerLink="/support/contact">contact page</a> without including
+      passwords, payment secrets, or ticket codes.
+    </p>
+  </section>
+</app-content-page>

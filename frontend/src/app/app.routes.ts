@@ -199,6 +199,35 @@ export const routes: Routes = [
         (m) => m.AdminSessionManagerComponent,
       ),
   },
+  // P16-002: public legal pages (signed-out, lazy-loaded, no guards).
+  {
+    path: 'legal/terms',
+    loadComponent: () =>
+      import('./features/public/legal/terms/terms.component').then(
+        (m) => m.TermsComponent,
+      ),
+  },
+  {
+    path: 'legal/privacy',
+    loadComponent: () =>
+      import('./features/public/legal/privacy/privacy.component').then(
+        (m) => m.PrivacyComponent,
+      ),
+  },
+  {
+    path: 'legal/cookies',
+    loadComponent: () =>
+      import('./features/public/legal/cookies/cookies.component').then(
+        (m) => m.CookiesComponent,
+      ),
+  },
+  {
+    path: 'legal/security',
+    loadComponent: () =>
+      import('./features/public/legal/security/security.component').then(
+        (m) => m.SecurityComponent,
+      ),
+  },
   {
     path: '**',
     loadComponent: () =>

@@ -316,6 +316,7 @@ describe('SessionFlow Router/DOM integration (TASK-P12-006 REV-006)', () => {
     reservationApi = jasmine.createSpyObj<ReservationApiService>('ReservationApiService', [
       'createReservation',
       'cancelReservation',
+      'clearStoredCustomerEmailProof',
     ]);
     reservationApi.cancelReservation.and.returnValue(of(undefined));
 

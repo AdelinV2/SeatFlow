@@ -54,6 +54,7 @@ describe('CheckoutComponent', () => {
     reservationApi = jasmine.createSpyObj<ReservationApiService>('ReservationApiService', [
       'getReservation',
       'getStoredCustomerEmailProof',
+      'clearStoredCustomerEmailProof',
       'updateReservationPricing',
       'cancelReservation',
     ]);
@@ -397,5 +398,35 @@ describe('CheckoutComponent', () => {
       jasmine.objectContaining({ disableClose: true }),
     );
     expect(paymentElement.update).toHaveBeenCalledWith({ readOnly: true });
+  });
+
+  it('clears the guest proof on order cancellation (P16-002)', async () => {
+    await initializeCheckout();
+    dialog.open.and.returnValue({ afterClosed: () => of(true) } as never);
+    spyOn(router, 'navigate').and.resolveTo(true);
+
+    component.cancelOrder();
+
+    expect(reservationApi.clearStoredCustomerEmailProof).toHaveBeenCalledWith('reservation-007');
+  });
+
+  it('clears the guest proof on successful payment handoff (P16-002)', async () => {
+    await initializeCheckout();
+    await startPayment();
+    component.applyTestCard();
+    spyOn(router, 'navigate').and.resolveTo(true);
+
+    await component.confirmPayment();
+
+    expect(reservationApi.clearStoredCustomerEmailProof).toHaveBeenCalledWith('reservation-007');
+  });
+
+  it('clears the guest proof when the hold expires (P16-002)', async () => {
+    await initializeCheckout();
+    await startPayment();
+
+    component.handleHoldExpired();
+
+    expect(reservationApi.clearStoredCustomerEmailProof).toHaveBeenCalledWith('reservation-007');
   });
 });

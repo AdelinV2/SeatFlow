@@ -57,9 +57,17 @@ export class ReservationApiService {
   private readonly baseUrl = '/api/reservations';
   private readonly guestProofStoragePrefix = 'seatflow:reservation-email:';
 
-  createReservation(request: CreateReservationRequest): Observable<ReservationResponse> {
+  createReservation(
+    request: CreateReservationRequest,
+    options?: { persistGuestProof?: boolean },
+  ): Observable<ReservationResponse> {
+    const persistGuestProof = options?.persistGuestProof ?? true;
     return this.http.post<ReservationResponse>(this.baseUrl, request).pipe(
-      tap((reservation) => this.rememberGuestProof(reservation.id, request.customerEmail)),
+      tap((reservation) => {
+        if (persistGuestProof) {
+          this.rememberGuestProof(reservation.id, request.customerEmail);
+        }
+      }),
     );
   }
 
