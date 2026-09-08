@@ -228,6 +228,19 @@ export const routes: Routes = [
         (m) => m.SecurityComponent,
       ),
   },
+  // P16-003: refund/tax disclosures (signed-out, lazy-loaded, no guards).
+  {
+    path: 'legal/refunds',
+    loadComponent: () =>
+      import('./features/public/legal/refunds/refunds.component').then(
+        (m) => m.RefundsComponent,
+      ),
+  },
+  {
+    path: 'legal/tax',
+    loadComponent: () =>
+      import('./features/public/legal/tax/tax.component').then((m) => m.TaxComponent),
+  },
   {
     path: '**',
     loadComponent: () =>

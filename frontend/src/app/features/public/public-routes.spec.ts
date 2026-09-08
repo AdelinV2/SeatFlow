@@ -61,15 +61,13 @@ describe('Public routes (TASK-P16-001)', () => {
     }
   });
 
-  it('adds no placeholder legal/support/status/api-docs route beyond TASK-P16-002', () => {
+  it('adds no placeholder support/status/api-docs route beyond TASK-P16-003', () => {
     const paths = routes.map((route: Route) => route.path ?? '');
-    // TASK-P16-002 owns exactly these four legal routes; later tasks own the rest.
-    for (const allowed of ['legal/terms', 'legal/privacy', 'legal/cookies', 'legal/security']) {
-      expect(paths).withContext(`P16-002 route ${allowed} exists`).toContain(allowed);
+    // TASK-P16-002 owns four legal routes; TASK-P16-003 adds refunds + tax; later tasks own the rest.
+    for (const allowed of ['legal/terms', 'legal/privacy', 'legal/cookies', 'legal/security', 'legal/refunds', 'legal/tax']) {
+      expect(paths).withContext(`P16-002/P16-003 route ${allowed} exists`).toContain(allowed);
     }
     expect(paths.some((p: string) => p.startsWith('support/'))).toBeFalse();
-    expect(paths).not.toContain('legal/tax');
-    expect(paths).not.toContain('legal/refunds');
     expect(paths).not.toContain('status');
     expect(paths).not.toContain('api-docs');
   });
