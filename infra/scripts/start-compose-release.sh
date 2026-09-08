@@ -88,8 +88,9 @@ start_batch 300 api-gateway
 start_batch 480 user-service seat-map-service event-service
 start_batch 480 reservation-service payment-service ticket-service
 start_batch 480 realtime-service notification-service
+start_batch 480 analytics-service ai-service
 
-# Frontend can only become useful after gateway readiness is proven.
+# Frontend can only become useful after gateway and all backend readiness is proven.
 start_batch 180 frontend
 
 # Observability is intentionally last so it cannot delay the customer-facing
