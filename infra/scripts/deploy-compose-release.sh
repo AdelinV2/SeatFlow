@@ -91,6 +91,8 @@ compose=(docker compose
 rollout() {
   "${compose[@]}" config --quiet
   "${compose[@]}" pull
+  "${seatflow_root}/infra/scripts/ensure-production-databases.sh" \
+    "${seatflow_root}"
   "${seatflow_root}/infra/scripts/run-production-migrations.sh" \
     "${seatflow_root}" "${image_tag}"
   "${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}"
