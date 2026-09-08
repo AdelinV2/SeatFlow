@@ -40,6 +40,10 @@
         <opentelemetry-agent.version>2.12.0</opentelemetry-agent.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+
+        <!-- Surefire live-tag exclusion default (overridable from the CLI:
+             -Dseatflow.excluded.groups= re-includes the "live" tag for opt-in runs) -->
+        <seatflow.excluded.groups>live</seatflow.excluded.groups>
     </properties>
 
     <dependencyManagement>
@@ -130,6 +134,13 @@
                     <systemPropertyVariables>
                         <spring.profiles.active>test</spring.profiles.active>
                     </systemPropertyVariables>
+                    <!-- Opt-in live provider tests (JUnit tag "live") never run in default CI;
+                         run them explicitly with -Dgroups=live -Dseatflow.excluded.groups= plus
+                         the required env gates (AI_LIVE_SMOKE=true AI_ENABLED=true
+                         GROQ_API_KEY=<secret>). -Dseatflow.excluded.groups= clears this default
+                         exclusion; -Dgroups=live alone selects zero tests because the exclude
+                         wins over the include. -->
+                    <excludedGroups>${seatflow.excluded.groups}</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>

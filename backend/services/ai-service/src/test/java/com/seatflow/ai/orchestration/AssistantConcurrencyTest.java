@@ -1,6 +1,7 @@
 package com.seatflow.ai.orchestration;
 
 import com.seatflow.ai.context.AiRequestContext;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.AiStatusService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,7 +57,9 @@ class AssistantConcurrencyTest {
         var orchestrator = new AssistantOrchestrator(conversations, memory, promptFactory,
                 toolRegistry, new AssistantCardAssembler(), modelClient,
                 new AssistantToolObservation(), new AssistantProviderErrorMapper(),
-                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals), clock);
+                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals,
+                        new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry())),
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), clock);
 
         when(promptFactory.systemPrompt()).thenReturn("prompt");
         when(statusService.isChatAvailable()).thenReturn(true);
@@ -132,7 +135,9 @@ class AssistantConcurrencyTest {
         var orchestrator = new AssistantOrchestrator(conversations, memory, promptFactory,
                 toolRegistry, new AssistantCardAssembler(), modelClient,
                 new AssistantToolObservation(), new AssistantProviderErrorMapper(),
-                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals), clock);
+                statusService, new com.seatflow.ai.service.impl.ProposalServiceImpl(proposals,
+                        new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry())),
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), clock);
 
         when(promptFactory.systemPrompt()).thenReturn("prompt");
         when(statusService.isChatAvailable()).thenReturn(true);

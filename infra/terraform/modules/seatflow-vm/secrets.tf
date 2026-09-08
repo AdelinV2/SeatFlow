@@ -11,6 +11,7 @@ locals {
     "redis-password",
     "stripe-api-key",
     "stripe-webhook-secret",
+    "groq-api-key",
     "resend-api-key",
     "grafana-admin-password",
     "prometheus-scrape-token",

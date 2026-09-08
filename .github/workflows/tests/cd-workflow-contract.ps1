@@ -106,7 +106,7 @@ Assert-Matches $rollbackScript 'database schema was not changed' 'Rollback must 
 # Secret-bearing values must never be printed to stdout/stderr. The only allowed
 # matching output statement is the deliberate write into the root-only temporary
 # runtime environment file, which is installed as mode 0600 immediately after.
-$secretOutputPattern = '^\s*(echo|printf)\s+[^\r\n]*(POSTGRES_PASSWORD|DB_PASSWORD|REDIS_PASSWORD|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|GRAFANA_ADMIN_PASSWORD|ACCESS_TOKEN)'
+$secretOutputPattern = '^\s*(echo|printf)\s+[^\r\n]*(POSTGRES_PASSWORD|DB_PASSWORD|REDIS_PASSWORD|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET|GROQ_API_KEY|RESEND_API_KEY|GRAFANA_ADMIN_PASSWORD|ACCESS_TOKEN)'
 foreach ($line in ($allText -split "`r?`n")) {
     if ($line -match $secretOutputPattern -and $line -notmatch '>>\s*"\$\{temp_runtime\}"\s*$') {
         throw "A secret-bearing variable may be written directly to logs: $line"

@@ -2,6 +2,7 @@ package com.seatflow.ai.service.impl;
 
 import com.seatflow.ai.proposal.ProposalStore;
 import com.seatflow.ai.proposal.ReservationProposal;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.ProposalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class ProposalServiceImpl implements ProposalService {
 
     private final ProposalStore proposalStore;
+    private final AiMetrics metrics;
 
     @Override
     public ReservationProposal createSecureProposal(
@@ -55,7 +57,8 @@ public class ProposalServiceImpl implements ProposalService {
                 conversationId, ownerSubject, eventId, eventSessionId, seatIds, seatDisplays,
                 pricingTierIds, maxTotalPriceMinor, preferredCategory, strategy,
                 totalPriceMinor, currency);
-        log.info("AI secure proposal stored: proposalId={}, conversationId={}, seats={}",
+        metrics.recordProposal(true);
+        log.info("AI_PROPOSAL_CREATED proposalId={} conversationId={} seats={}",
                 proposal.proposalId(), conversationId, seatIds.size());
         return proposal;
     }

@@ -12,6 +12,7 @@ import com.seatflow.ai.orchestration.ConversationStore;
 import com.seatflow.ai.proposal.ProposalStatus;
 import com.seatflow.ai.proposal.ProposalStore;
 import com.seatflow.ai.proposal.ReservationProposal;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.ConfirmedReservationService;
 import com.seatflow.ai.service.ProposalConfirmationCode;
 import com.seatflow.ai.api.dto.ReservationCreatedCard;
@@ -56,12 +57,16 @@ public class ConfirmedReservationServiceImpl implements ConfirmedReservationServ
     private final EventServiceClient eventServiceClient;
     private final SeatCandidateAssembler seatAssembler;
     private final ReservationServiceClient reservationServiceClient;
+    private final AiMetrics metrics;
     private final Clock clock;
 
     @Override
     public ConfirmationOutcome confirmProposal(
             UUID proposalId, String ownerSubject, AiRequestContext context) {
         requireAuthenticated(context, ownerSubject);
+        // Safe lifecycle event: IDs only, never seats/prices/secrets.
+        log.info("AI_PROPOSAL_CONFIRM_ATTEMPT proposalId={} correlationId={}",
+                proposalId, correlationId(context));
         if (proposalId == null) {
             return failure(ProposalConfirmationCode.PROPOSAL_NOT_FOUND,
                     "Proposal not found. Please request fresh seats.");
@@ -115,27 +120,32 @@ public class ConfirmedReservationServiceImpl implements ConfirmedReservationServ
                     proposal.eventSessionId(), proposal.seatIds(), ok.seatPrices(),
                     proposal.serverIdempotencyKey(), context);
             proposalStore.markConsumed(proposalId, created.id());
-            log.info("AI confirmed reservation created: proposalId={}, reservationId={}, seats={}",
-                    proposalId, created.id(), proposal.seatIds().size());
+            metrics.recordConfirmation(true);
+            log.info("AI_RESERVATION_CREATED proposalId={} reservationId={} seats={} correlationId={}",
+                    proposalId, created.id(), proposal.seatIds().size(), correlationId(context));
             return new ConfirmationOutcome.Success(toCard(proposal, created));
         } catch (ConflictException ex) {
-            log.warn("AI confirmed reservation conflicted: proposalId={}", proposalId);
+            log.warn("AI confirmed reservation conflicted: proposalId={} correlationId={}",
+                    proposalId, correlationId(context));
             return failure(ProposalConfirmationCode.RESERVATION_CONFLICT,
                     "Those seats were just taken. Please request fresh seats — no alternative was booked.");
         } catch (ReservationServiceUnavailableException ex) {
             if (ex.getError() == AiToolError.DOWNSTREAM_TIMEOUT) {
-                log.warn("AI confirmed reservation timed out after submit (ambiguous): proposalId={}", proposalId);
+                log.warn("AI confirmed reservation timed out after submit (ambiguous): proposalId={} correlationId={}",
+                        proposalId, correlationId(context));
                 return failure(ProposalConfirmationCode.RESERVATION_RESULT_UNKNOWN_RETRY_SAFE,
                         "The reservation result is unknown after a timeout. Retry the same confirmation — it is safe and will not double-book.");
             }
-            log.warn("AI confirmed reservation unavailable: proposalId={}", proposalId);
+            log.warn("AI confirmed reservation unavailable: proposalId={} correlationId={}",
+                    proposalId, correlationId(context));
             return failure(ProposalConfirmationCode.RESERVATION_SERVICE_UNAVAILABLE,
                     "Reservation service is temporarily unavailable. Please try again shortly.");
         } catch (AiToolException ex) {
             if (ex.getError() == AiToolError.UNAUTHENTICATED || ex.getError() == AiToolError.FORBIDDEN) {
                 throw ex;
             }
-            log.warn("AI confirmed reservation rejected: proposalId={}, error={}", proposalId, ex.getError());
+            log.warn("AI confirmed reservation rejected: proposalId={}, error={}, correlationId={}",
+                    proposalId, ex.getError(), correlationId(context));
             return failure(ProposalConfirmationCode.STALE_PROPOSAL,
                     "This proposal is no longer valid. Please request fresh seats.");
         }
@@ -149,8 +159,9 @@ public class ConfirmedReservationServiceImpl implements ConfirmedReservationServ
         try {
             ReservationServiceReservationDto current =
                     reservationServiceClient.getReservation(proposal.reservationId(), context);
-            log.info("AI duplicate confirm reconciled to same reservation: proposalId={}, reservationId={}",
-                    proposal.proposalId(), proposal.reservationId());
+            metrics.recordConfirmation(true);
+            log.info("AI duplicate confirm reconciled to same reservation: proposalId={}, reservationId={}, correlationId={}",
+                    proposal.proposalId(), proposal.reservationId(), correlationId(context));
             return new ConfirmationOutcome.Success(toCard(proposal, current));
         } catch (ReservationServiceUnavailableException ex) {
             return failure(ProposalConfirmationCode.RESERVATION_SERVICE_UNAVAILABLE,
@@ -300,7 +311,12 @@ public class ConfirmedReservationServiceImpl implements ConfirmedReservationServ
     }
 
     private ConfirmationOutcome.Failure failure(ProposalConfirmationCode code, String message) {
+        metrics.recordConfirmation(false);
         return new ConfirmationOutcome.Failure(code, message);
+    }
+
+    private static String correlationId(AiRequestContext context) {
+        return context == null ? "N/A" : context.correlationId();
     }
 
     private void requireAuthenticated(AiRequestContext context, String ownerSubject) {

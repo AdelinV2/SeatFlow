@@ -6,6 +6,7 @@ import com.seatflow.ai.api.dto.AssistantChatResponse;
 import com.seatflow.ai.api.dto.AssistantError;
 import com.seatflow.ai.context.AiRequestContext;
 import com.seatflow.ai.proposal.ReservationProposal;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.AiStatusService;
 import com.seatflow.ai.service.ProposalService;
 import com.seatflow.ai.tool.dto.AvailableSeatsResult;
@@ -67,6 +68,7 @@ public class AssistantOrchestrator {
     private final AssistantProviderErrorMapper errorMapper;
     private final AiStatusService statusService;
     private final ProposalService proposalService;
+    private final AiMetrics metrics;
     private final Clock clock;
 
     /**
@@ -130,6 +132,9 @@ public class AssistantOrchestrator {
                 }
                 throw new ResourceNotFoundException("Conversation not found: " + conversationId);
             }
+            // Safe lifecycle event: IDs and correlation only, never chat text or secrets.
+            log.info("AI_CHAT_STARTED conversationId={} correlationId={}",
+                    conversationId, toolContext == null ? null : toolContext.correlationId());
 
             if (!statusService.isChatAvailable()) {
                 return providerErrorResponse(conversationId, current,
@@ -152,17 +157,29 @@ public class AssistantOrchestrator {
                             List.copyOf(AssistantToolRegistry.ORDINARY_CHAT_TOOLS),
                             conversationId.toString());
 
-            AssistantModelClient.ModelTurnResult modelResult;
+            AssistantModelClient.ModelTurnResult modelResult = null;
+            AssistantProviderException providerFailure = null;
             AssistantToolObservation.ObservedTurn observedTurn = null;
             observation.bind(conversationId);
             try {
                 modelResult = modelClient.execute(modelRequest);
             } catch (AssistantProviderException ex) {
-                return providerErrorResponse(conversationId, current, ex.getErrorCode(),
-                        ex.getMessage());
+                providerFailure = ex;
             } finally {
                 observedTurn = observation.current();
                 observation.unbind();
+            }
+            if (providerFailure != null && !hasUsableToolData(observedTurn)) {
+                return providerErrorResponse(conversationId, current, providerFailure.getErrorCode(),
+                        providerFailure.getMessage());
+            }
+            if (providerFailure != null) {
+                // Prose generation failed (e.g. provider rate limit) after tools already
+                // produced authoritative data: answer deterministically from tool DTOs
+                // instead of discarding the turn as an error.
+                log.info("AI provider prose unavailable, continuing with observed tool data: "
+                        + "conversationId={} correlationId={}", conversationId,
+                        toolContext == null ? "N/A" : toolContext.correlationId());
             }
 
             // Prefer explicit mocked DTOs in tests; fall back to observed production tool DTOs.
@@ -249,6 +266,7 @@ public class AssistantOrchestrator {
                         ReservationProposal secure = createSecureProposal(
                                 conversationId, ownerSubject, bestSeats, best, bestSeatsFingerprint);
                         if (secure == null) {
+                            metrics.recordProposal(false);
                             return providerErrorResponse(conversationId, current,
                                     AssistantChatErrorCode.AI_RESPONSE_INVALID,
                                     "Could not create a proposal. Please try again.");
@@ -264,6 +282,7 @@ public class AssistantOrchestrator {
                     ReservationProposal secure = createSecureProposal(
                             conversationId, ownerSubject, bestSeats, best, bestSeatsFingerprint);
                     if (secure == null) {
+                        metrics.recordProposal(false);
                         return providerErrorResponse(conversationId, current,
                                 AssistantChatErrorCode.AI_RESPONSE_INVALID,
                                 "Could not create a proposal. Please try again.");
@@ -295,6 +314,13 @@ public class AssistantOrchestrator {
                 }
             }
 
+            if (modelResult == null) {
+                // Deterministic fallback prose: short, customer-friendly, no IDs or tables.
+                // Cards already carry titles, times, and prices.
+                assistantMessage = fallbackMessage(nextState, searchEvents, event, sessions,
+                        availableSeats, bestSeats);
+            }
+
             if (responseCards.isEmpty() && nextState == AssistantState.IDLE) {
                 responseCards.add(cards.infoCard("How I can help",
                         "Tell me the event, session, and how many seats you need (1..10). "
@@ -310,6 +336,7 @@ public class AssistantOrchestrator {
                     List.of(new UserMessage(userMessage), new AssistantMessage(assistantMessage)));
             conversations.touchWithState(conversationId, nextState);
 
+            metrics.recordChatRequest(true);
             log.info("AI chat turn completed: conversationId={}, state={}, cards={}",
                     conversationId, nextState, responseCards.size());
             return new AssistantChatResponse(conversationId, assistantMessage, nextState,
@@ -400,10 +427,63 @@ public class AssistantOrchestrator {
         }
     }
 
+    /**
+     * Answers from observed tool DTOs when model prose is unavailable but tools already
+     * succeeded (e.g. a rate limit hit on the follow-up turn). Never contains IDs, tables,
+     * prices, or times — cards carry the authoritative details.
+     */
+    String fallbackMessage(AssistantState nextState, SearchEventsResult searchEvents,
+                           EventToolResult event, EventSessionsToolResult sessions,
+                           AvailableSeatsResult availableSeats, FindBestSeatsResult bestSeats) {
+        if (bestSeats != null && "OK".equals(bestSeats.status())
+                && bestSeats.candidates() != null && !bestSeats.candidates().isEmpty()) {
+            return "I found seats that match your request. Please confirm the exact proposal "
+                    + "to continue. This proposal is not a hold.";
+        }
+        if (bestSeats != null) {
+            return "I checked live availability and could not offer a matching set — "
+                    + "see the details below.";
+        }
+        if (availableSeats != null && availableSeats.seats() != null
+                && !availableSeats.seats().isEmpty()) {
+            return "Here is the current availability for that session:";
+        }
+        if (sessions != null && sessions.sessions() != null && !sessions.sessions().isEmpty()) {
+            return "Here are the upcoming sessions:";
+        }
+        if (event != null) {
+            return "Here is what I found:";
+        }
+        if (searchEvents != null && searchEvents.events() != null && !searchEvents.events().isEmpty()) {
+            return "Here are the matching events — tell me which one to explore:";
+        }
+        return errorMapper.sanitizeAssistantMessage(null);
+    }
+
+    boolean hasUsableToolData(AssistantToolObservation.ObservedTurn observedTurn) {
+        if (observedTurn == null) {
+            return false;
+        }
+        if (observedTurn.bestSeats != null || observedTurn.event != null) {
+            return true;
+        }
+        if (observedTurn.searchEvents != null && observedTurn.searchEvents.events() != null
+                && !observedTurn.searchEvents.events().isEmpty()) {
+            return true;
+        }
+        if (observedTurn.sessions != null && observedTurn.sessions.sessions() != null
+                && !observedTurn.sessions.sessions().isEmpty()) {
+            return true;
+        }
+        return observedTurn.availableSeats != null && observedTurn.availableSeats.seats() != null
+                && !observedTurn.availableSeats.seats().isEmpty();
+    }
+
     private AssistantChatResponse providerErrorResponse(UUID conversationId,
-                                                        ConversationStore.ConversationRecord record,
-                                                        AssistantChatErrorCode code, String message) {
+                                                         ConversationStore.ConversationRecord record,
+                                                         AssistantChatErrorCode code, String message) {
         conversations.touchWithState(conversationId, AssistantState.ERROR_RECOVERABLE);
+        metrics.recordChatRequest(false);
         List<String> actions = List.of("Try again shortly", "Continue browsing events without AI");
         return new AssistantChatResponse(conversationId,
                 "The assistant is temporarily unavailable. Core booking remains available.",

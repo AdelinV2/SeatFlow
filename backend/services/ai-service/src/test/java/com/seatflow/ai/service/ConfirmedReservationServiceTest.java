@@ -92,7 +92,8 @@ class ConfirmedReservationServiceTest {
         conversations = new ConversationStore(
                 new AssistantConversationProperties(24, Duration.ofMinutes(30), 500), clock, memory);
         service = new ConfirmedReservationServiceImpl(
-                proposals, conversations, eventServiceClient, assembler, reservationClient, clock);
+                proposals, conversations, eventServiceClient, assembler, reservationClient,
+                new AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), clock);
 
         conversationId = conversations.create("owner-1").conversationId();
         sessionId = UUID.randomUUID();

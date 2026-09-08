@@ -5,6 +5,7 @@ import com.seatflow.ai.client.dto.ReservationServiceReservationDto;
 import com.seatflow.ai.context.AiRequestContext;
 import com.seatflow.ai.exception.AiToolError;
 import com.seatflow.ai.exception.AiToolException;
+import com.seatflow.ai.service.AiMetrics;
 import com.seatflow.ai.service.ReservationToolService;
 import com.seatflow.ai.tool.dto.GetReservationRequest;
 import com.seatflow.ai.tool.dto.ReservationToolResult;
@@ -31,9 +32,20 @@ import java.util.UUID;
 public class ReservationToolServiceImpl implements ReservationToolService {
 
     private final ReservationServiceClient reservationServiceClient;
+    private final AiMetrics metrics;
 
     @Override
     public ReservationToolResult getReservation(GetReservationRequest request, AiRequestContext context) {
+        try {
+            return lookup(request, context);
+        } catch (RuntimeException ex) {
+            metrics.recordToolCall("getReservation", false);
+            log.info("AI_TOOL_CALLED tool=getReservation result=error");
+            throw ex;
+        }
+    }
+
+    private ReservationToolResult lookup(GetReservationRequest request, AiRequestContext context) {
         requireAuthenticated(context);
         if (request == null || request.reservationId() == null || request.reservationId().isBlank()) {
             throw new AiToolException(AiToolError.INVALID_TOOL_ARGUMENT,
@@ -60,6 +72,8 @@ public class ReservationToolServiceImpl implements ReservationToolService {
                         .toList();
         log.info("AI reservation lookup completed: reservationId={}, status={}",
                 reservationId, dto.status());
+        metrics.recordToolCall("getReservation", true);
+        log.info("AI_TOOL_CALLED tool=getReservation result=success");
         return new ReservationToolResult(
                 dto.id(), dto.eventId(), dto.eventSessionId(), dto.status(), dto.expiresAt(),
                 dto.totalAmount(), null, seats,

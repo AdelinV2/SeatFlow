@@ -168,7 +168,7 @@ describe('AssistantStore', () => {
     expect(store.lastError()).toContain('safe to retry');
   });
 
-  it('maps rate-limit/provider failures to safe messages', () => {
+  it('maps rate-limit/provider failures to safe messages without a duplicate error bubble', () => {
     store.send('Hello');
 
     const req = httpMock.expectOne('/api/ai/chat');
@@ -180,8 +180,11 @@ describe('AssistantStore', () => {
       }),
     );
 
-    expect(store.lastError()).toContain('temporarily busy');
-    expect(store.lastError()).not.toContain('quota');
+    // The thread message already surfaces the failure: no separate error bubble.
+    expect(store.lastError()).toBeNull();
+    const last = store.messages().at(-1);
+    expect(last?.text).toContain('temporarily busy');
+    expect(last?.text).not.toContain('quota');
   });
 
   it('reset calls DELETE then clears UI and never cancels a reservation', () => {
