@@ -1,0 +1,124 @@
+<app-content-page
+  eyebrow="Legal"
+  title="Tax and Test Payments"
+  lead="How SeatFlow previews tax, what it stores about a payment, and why every figure on this demo is informational until a live deployment is configured and legally validated."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Portfolio demo in Stripe Test Mode"
+  calloutMessage="SeatFlow currently runs as a portfolio demonstration in Stripe Test Mode. Displayed tax calculations are demonstration behavior and are not suitable for real invoicing or accounting."
+>
+  <section id="demo" aria-labelledby="demo-heading">
+    <h2 id="demo-heading">Demo and Test Mode</h2>
+    <p>
+      This site is a portfolio/demo deployment using Stripe Test Mode. Test
+      payments, tax previews, and refunds move no real money. Nothing on this
+      page is an offer of live payment processing, and no promise is made that
+      demo tax values are suitable for real invoicing or accounting. If the
+      deployment ever switches to live mode, this page becomes a mandatory
+      release-review item and will be updated before any real-money use.
+    </p>
+  </section>
+
+  <section id="currency" aria-labelledby="currency-heading">
+    <h2 id="currency-heading">Currency and displayed prices</h2>
+    <p>
+      Seat prices carry their configured currency for display, and checkout
+      shows the currency it will actually charge. The current payment
+      implementation creates its Stripe payment intent in USD; where a seat
+      tier is configured differently, the checkout total and the payment
+      record are authoritative and this page states no conflicting currency
+      promise. Amounts, tax preview figures, and payment states shown at
+      checkout are informational demo values unless the operator confirms a
+      live deployment.
+    </p>
+  </section>
+
+  <section id="preview" aria-labelledby="preview-heading">
+    <h2 id="preview-heading">Tax preview: inputs and outputs</h2>
+    <p>
+      During checkout you may enter a billing address to preview the tax
+      included in the displayed total. The preview needs the street address,
+      city, postal code, and country; an apartment or suite line and a
+      state or province are optional where they apply. It answers one
+      question only: of the tax-inclusive total already shown, how much is the
+      tax portion and how much is the net portion, plus the effective rate
+      Stripe Tax derived for that address.
+    </p>
+    <p>
+      The preview uses Stripe Tax in Test Mode with tax-inclusive behavior:
+      it breaks the total down instead of adding an extra charge on top.
+      Entering an address never charges anything by itself; it only asks
+      Stripe Tax for that breakdown. A preview can fail (for example when the
+      test gateway is unreachable); checkout then continues without a tax
+      breakdown rather than inventing one.
+    </p>
+  </section>
+
+  <section id="records" aria-labelledby="records-heading">
+    <h2 id="records-heading">What SeatFlow keeps</h2>
+    <p>
+      A payment record keeps the identifiers needed to reconcile the order
+      (payment, reservation, event, and where present session linkage), the
+      customer email linkage, the amount, the derived tax amount and net
+      amount, the currency, the payment status with timestamps, and the Stripe
+      payment-intent and integration identifiers stored server-side. Card
+      numbers and CVC values are entered into Stripe Elements and are never
+      stored by SeatFlow.
+    </p>
+    <p>
+      The billing address you type for a tax preview is transmitted for that
+      preview; durable storage of the address beyond the payment tax and net
+      record is not confirmed and is not claimed. How payment and address data
+      is handled overall is also described in the
+      <a routerLink="/legal/privacy">privacy notice</a>.
+    </p>
+  </section>
+
+  <section id="final-amount" aria-labelledby="final-amount-heading">
+    <h2 id="final-amount-heading">Which amount is final</h2>
+    <p>
+      A tax preview is informational: it does not lock the final amount. The
+      charge is built from the held seat line items, and the total can still
+      change before confirmation (for example when ticket types are updated),
+      in which case the payment intent is refreshed and checkout shows the new
+      authoritative total. The backend payment record and the provider
+      confirmation decide what was actually charged; an earlier preview never
+      overrides them.
+    </p>
+  </section>
+
+  <section id="refunds" aria-labelledby="refunds-heading">
+    <h2 id="refunds-heading">Refunds and tax</h2>
+    <p>
+      The current refund scope is a full reservation refund, so a successful
+      refund reverses the whole reservation amount including whatever tax
+      portion was recorded for it. There is no separate tax-only or partial
+      refund. The binding eligibility rule and workflow live in the
+      <a routerLink="/legal/refunds">refund and cancellation policy</a>, which
+      takes precedence over this summary.
+    </p>
+  </section>
+
+  <section id="no-advice" aria-labelledby="no-advice-heading">
+    <h2 id="no-advice-heading">No tax advice or invoice promise</h2>
+    <p>
+      SeatFlow is not a tax adviser and does not issue legally valid invoices
+      on this demo. The preview categories above explain implemented behavior;
+      they are not guidance on what tax applies to you and must not be used
+      for accounting or filing. Card details are never stored by SeatFlow, and
+      no internal provider identifiers, secrets, or request schemas are
+      published on this page.
+    </p>
+  </section>
+
+  <section id="related" aria-labelledby="related-heading">
+    <h2 id="related-heading">Related pages</h2>
+    <ul>
+      <li><a routerLink="/legal/refunds">Refund and cancellation policy</a></li>
+      <li><a routerLink="/legal/terms">Terms and Conditions</a></li>
+      <li><a routerLink="/legal/privacy">Privacy Notice</a></li>
+      <li><a routerLink="/support/contact">Contact</a></li>
+      <li><a routerLink="/events">Browse events</a></li>
+    </ul>
+  </section>
+</app-content-page>

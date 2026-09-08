@@ -7,24 +7,29 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { UserContextService } from '../../../core/auth/user-context.service';
 import { CookiesComponent } from './cookies/cookies.component';
 import { PrivacyComponent } from './privacy/privacy.component';
+import { RefundsComponent } from './refunds/refunds.component';
 import { SecurityComponent } from './security/security.component';
+import { TaxComponent } from './tax/tax.component';
 import { TermsComponent } from './terms/terms.component';
 import { NotFoundComponent } from '../not-found/not-found.component';
 
 /**
- * TASK-P16-002 route contract: the four legal pages are public lazy routes
- * with no guards, render through the P16-001 shell components, keep the
- * wildcard 404 last, and introduce no consent banner or placeholder route.
+ * TASK-P16-002 route contract as extended by TASK-P16-003: the six legal pages
+ * are public lazy routes with no guards, render through the P16-001 shell
+ * components, keep the wildcard 404 last, and introduce no consent banner or
+ * P16-004/P16-005 placeholder route.
  */
-describe('Legal routes (TASK-P16-002)', () => {
+describe('Legal routes (TASK-P16-002 + TASK-P16-003)', () => {
   const expected: Array<{ path: string; component: unknown }> = [
     { path: 'legal/terms', component: TermsComponent },
     { path: 'legal/privacy', component: PrivacyComponent },
     { path: 'legal/cookies', component: CookiesComponent },
     { path: 'legal/security', component: SecurityComponent },
+    { path: 'legal/refunds', component: RefundsComponent },
+    { path: 'legal/tax', component: TaxComponent },
   ];
 
-  it('exposes the four legal pages as signed-out lazy routes without guards', async () => {
+  it('exposes the six legal pages as signed-out lazy routes without guards', async () => {
     for (const { path, component } of expected) {
       const route = routes.find((r: Route) => r.path === path);
       expect(route).withContext(`route ${path} exists`).toBeDefined();
@@ -47,11 +52,11 @@ describe('Legal routes (TASK-P16-002)', () => {
     }
   });
 
-  it('adds no consent banner route and no P16-003/P16-004 placeholder route', () => {
+  it('adds no consent banner route and no P16-004/P16-005 placeholder route', () => {
     const paths = routes.map((route: Route) => route.path ?? '');
     expect(paths).not.toContain('legal/consent');
-    expect(paths).not.toContain('legal/tax');
-    expect(paths).not.toContain('legal/refunds');
+    expect(paths).toContain('legal/tax');
+    expect(paths).toContain('legal/refunds');
     expect(paths).not.toContain('support/faq');
     expect(paths).not.toContain('support/contact');
     expect(paths).not.toContain('status');
