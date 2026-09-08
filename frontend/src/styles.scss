@@ -545,3 +545,8 @@ html {
   border-width: 0;
 }
 
+/* P16-001: projected public-content anchors sit below the sticky header. */
+.content-page__body [id] {
+  scroll-margin-top: 5.5rem;
+}
+

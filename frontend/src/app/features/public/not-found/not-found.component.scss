@@ -1,0 +1,126 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.not-found {
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+  padding: 3rem 1rem 4rem;
+  text-align: center;
+  color: var(--color-text-primary);
+}
+
+.not-found__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 1rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.not-found__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.not-found__title:focus {
+  outline: none;
+}
+
+.not-found__title:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+.not-found__lead {
+  margin: 1rem auto 0;
+  max-width: 34rem;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+
+.not-found__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.not-found__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 150ms ease-out,
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.not-found__button:active {
+  transform: scale(0.97);
+}
+
+.not-found__button--primary {
+  background: linear-gradient(to right, var(--color-primary), var(--color-accent-violet));
+  color: #f8fafc;
+  box-shadow: var(--shadow-diffuse);
+}
+
+.not-found__button--secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.not-found__hint {
+  margin: 2rem auto 0;
+  max-width: 30rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 40rem) {
+  .not-found {
+    padding: 4rem 1.5rem 5rem;
+  }
+
+  .not-found__title {
+    font-size: 2.5rem;
+  }
+
+  .not-found__actions {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .not-found *,
+  .not-found *::before,
+  .not-found *::after {
+    animation: none;
+    transition: none;
+  }
+}

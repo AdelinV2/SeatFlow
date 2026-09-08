@@ -1,0 +1,62 @@
+<article class="content-page" aria-labelledby="content-page-title">
+  <header class="content-page__header">
+    @if (eyebrow()) {
+      <p class="content-page__eyebrow">{{ eyebrow() }}</p>
+    }
+    <h1 id="content-page-title" class="content-page__title" tabindex="-1">{{ title() }}</h1>
+    @if (lead()) {
+      <p class="content-page__lead">{{ lead() }}</p>
+    }
+    @if (lastUpdated()) {
+      <p class="content-page__updated">
+        Last updated: <time>{{ lastUpdated() }}</time>
+      </p>
+    }
+  </header>
+
+  @if (hasCallout()) {
+    <aside
+      class="content-page__callout"
+      role="note"
+      [ngClass]="{
+        'content-page__callout--warning': calloutTone() === 'warning',
+        'content-page__callout--info': calloutTone() !== 'warning',
+      }"
+      [attr.aria-label]="calloutHeading()"
+    >
+      <p class="content-page__callout-title">
+        <span class="content-page__callout-icon" aria-hidden="true">{{
+          calloutTone() === 'warning' ? '!' : 'i'
+        }}</span>
+        <strong>{{ calloutHeading() }}</strong>
+      </p>
+      <p class="content-page__callout-message">{{ calloutMessage() }}</p>
+    </aside>
+  }
+
+  <div
+    class="content-page__layout"
+    [ngClass]="{ 'content-page__layout--with-toc': hasToc() }"
+  >
+    @if (hasToc()) {
+      <nav class="content-page__toc" aria-label="On this page">
+        <h2 class="content-page__toc-title">On this page</h2>
+        <ul class="content-page__toc-list">
+          @for (entry of normalizedToc(); track entry.id) {
+            <li
+              class="content-page__toc-item"
+              [ngClass]="{ 'content-page__toc-item--nested': entry.level === 3 }"
+            >
+              <a class="content-page__toc-link" [href]="'#' + entry.id">{{
+                entry.label
+              }}</a>
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+    <div class="content-page__body">
+      <ng-content />
+    </div>
+  </div>
+</article>
