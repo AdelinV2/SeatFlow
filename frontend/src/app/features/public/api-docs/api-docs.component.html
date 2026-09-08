@@ -1,0 +1,82 @@
+<app-content-page
+  eyebrow="Developers"
+  title="API Documentation"
+  lead="A portfolio overview of the SeatFlow API surface: which domains exist, how authentication works at a high level, and which surfaces stay protected."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Overview, not a live console"
+  calloutMessage="This page describes the API at a portfolio level. It is not a live console and does not proxy internal service documentation."
+>
+  <section id="domains" aria-labelledby="domains-heading">
+    <h2 id="domains-heading">API domains</h2>
+    <p>The public API surface is organized around the booking journey:</p>
+    <ul>
+      <li>events and event sessions, including search and detail views;</li>
+      <li>venues and seats for browsing availability;</li>
+      <li>reservations, including temporary holds and pricing preview;</li>
+      <li>payments, including test-mode confirmation and webhooks handled server-side;</li>
+      <li>tickets, including issuance and validation states;</li>
+      <li>user and profile data for signed-in customers;</li>
+      <li>refunds for eligible confirmed reservations, as explained in the <a routerLink="/legal/refunds">refund and cancellation policy</a>;</li>
+      <li>assistant features only where the AI assistant is enabled.</li>
+    </ul>
+    <p>Representative relative paths used by the web client include:</p>
+    <pre class="api-example"><code>GET /api/events?size=1
+GET /api/venues?size=1</code></pre>
+    <p>
+      Paths are shown without any host or port on purpose: the browser calls the
+      deployed gateway for the current origin, never a hardcoded internal address.
+    </p>
+  </section>
+
+  <section id="authentication" aria-labelledby="authentication-heading">
+    <h2 id="authentication-heading">Authentication</h2>
+    <p>
+      The API uses token-based sign-in managed through the configured authentication
+      provider. Browsers attach the session token to API calls automatically; guests use
+      scoped checkout proof for their own reservation only. All role and ownership checks
+      run on the server. Never share tokens, and never place credentials, ticket codes,
+      or payment secrets in documentation examples. How sessions and roles work at a high
+      level is summarized on the <a routerLink="/legal/security">security page</a>.
+    </p>
+  </section>
+
+  <section id="invariants" aria-labelledby="invariants-heading">
+    <h2 id="invariants-heading">Server-authoritative invariants</h2>
+    <ul>
+      <li>Each reservation is limited to 10 seats.</li>
+      <li>Seat holds expire after 15 minutes against the server clock.</li>
+      <li>Seat ownership is decided by the database; browser state is reconciled against it.</li>
+      <li>Role checks for customer, staff, and admin surfaces run on the server.</li>
+      <li>Refund eligibility is decided by the server under the <a routerLink="/legal/refunds">refund and cancellation policy</a>.</li>
+    </ul>
+    <p>
+      Client behavior, including the AI assistant where enabled, cannot bypass these
+      rules. See the <a routerLink="/legal/terms">Terms and Conditions</a> for the
+      product wording.
+    </p>
+  </section>
+
+  <section id="live-docs" aria-labelledby="live-docs-heading">
+    <h2 id="live-docs-heading">Live documentation</h2>
+    <p>
+      No live interactive documentation endpoint is linked from this deployment. Internal
+      addresses, internal ports, and per-service documentation consoles are
+      intentionally not exposed here because they are not part of the public portfolio
+      surface. Authors and reviewers should consult the version-controlled backend
+      service contracts in the repository instead of expecting a public console.
+    </p>
+  </section>
+
+  <section id="protected" aria-labelledby="protected-heading">
+    <h2 id="protected-heading">Protected surfaces</h2>
+    <p>
+      Admin, staff, scanner, operational, and internal endpoints remain protected by
+      authentication and role checks. This page gives no guidance for getting around
+      those checks and lists no administrative or operational internals. For questions about
+      using the public site, see the
+      <a routerLink="/support/faq">frequently asked questions</a> or the
+      <a routerLink="/support/contact">contact page</a>.
+    </p>
+  </section>
+</app-content-page>

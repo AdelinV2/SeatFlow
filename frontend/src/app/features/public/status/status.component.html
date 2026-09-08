@@ -1,0 +1,67 @@
+<app-content-page
+  eyebrow="Operations"
+  title="Platform Status"
+  lead="A lightweight, live view of whether this SeatFlow demo can currently browse events and reach the booking gateway."
+  lastUpdated="2026-09-08"
+  [toc]="toc"
+  calloutTitle="Demo health, not an SLA"
+  calloutMessage="These are best-effort live checks of the portfolio deployment. They carry no uptime promise, no incident history, and no maintenance schedule."
+>
+  <section id="current-status" aria-labelledby="current-status-heading">
+    <h2 id="current-status-heading">Current status</h2>
+    <p>
+      Overall status: <strong>{{ statusLabel() }}</strong>
+      <span class="status-code">({{ status() }})</span>
+    </p>
+    <p>Last checked: <time>{{ lastChecked() | date: 'medium' }}</time></p>
+    <p>
+      <button type="button" (click)="refresh()">Check again</button>
+    </p>
+    @if (status() === 'CHECKING') {
+      <p>Checking the demo deployment now. Results appear without reloading the page.</p>
+    } @else if (status() === 'OPERATIONAL') {
+      <p>All checked capabilities responded on the last check.</p>
+    } @else if (status() === 'DEGRADED') {
+      <p>
+        Some checked capabilities did not respond on the last check. Browsing or booking
+        may be limited until the next successful check.
+      </p>
+    } @else {
+      <p>
+        The checked capabilities did not respond on the last check. Try again shortly; if
+        the problem persists, report it through the
+        <a routerLink="/support/contact">contact page</a> without including passwords,
+        payment secrets, or ticket codes.
+      </p>
+    }
+  </section>
+
+  <section id="capabilities" aria-labelledby="capabilities-heading">
+    <h2 id="capabilities-heading">Capabilities</h2>
+    <ul>
+      <li>
+        Event browsing: <strong>{{ eventBrowsingUp() ? 'Available' : 'Unavailable' }}</strong>
+      </li>
+      <li>
+        Booking gateway: <strong>{{ bookingGatewayUp() ? 'Available' : 'Unavailable' }}</strong>
+      </li>
+    </ul>
+    <p>
+      Only these coarse, user-facing states are published. This page never shows raw
+      service responses, hostnames, dependency topology, versions, stack traces, or
+      secrets.
+    </p>
+  </section>
+
+  <section id="about" aria-labelledby="about-heading">
+    <h2 id="about-heading">About these checks</h2>
+    <p>
+      The page reuses the same lightweight probes as the rest of the application and
+      refreshes them periodically in the background. No incident history, uptime
+      percentage, or maintenance window is published because none is operated for this
+      demo. For booking questions, see the
+      <a routerLink="/support/faq">frequently asked questions</a>; for demo issues, use
+      the <a routerLink="/support/contact">contact page</a>.
+    </p>
+  </section>
+</app-content-page>

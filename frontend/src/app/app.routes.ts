@@ -241,6 +241,29 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/public/legal/tax/tax.component').then((m) => m.TaxComponent),
   },
+  // P16-004: public support/status/API-doc pages (signed-out, lazy-loaded, no guards).
+  {
+    path: 'support/faq',
+    loadComponent: () =>
+      import('./features/public/support/faq/faq.component').then((m) => m.FaqComponent),
+  },
+  {
+    path: 'support/contact',
+    loadComponent: () =>
+      import('./features/public/support/contact/contact.component').then(
+        (m) => m.ContactComponent,
+      ),
+  },
+  {
+    path: 'status',
+    loadComponent: () =>
+      import('./features/public/status/status.component').then((m) => m.StatusComponent),
+  },
+  {
+    path: 'api-docs',
+    loadComponent: () =>
+      import('./features/public/api-docs/api-docs.component').then((m) => m.ApiDocsComponent),
+  },
   {
     path: '**',
     loadComponent: () =>

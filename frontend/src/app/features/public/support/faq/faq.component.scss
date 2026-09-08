@@ -1,0 +1,54 @@
+/* TASK-P16-004: accessible FAQ accordion inside the shared content shell. */
+.faq-item {
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.faq-question-heading {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.faq-question {
+  display: block;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.faq-question:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.faq-question:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.faq-item > div[role='region'] {
+  padding: 0 1rem 1rem;
+}
+
+.faq-item p {
+  margin: 0.5rem 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-question,
+  .faq-item {
+    animation: none;
+    transition: none;
+  }
+}
