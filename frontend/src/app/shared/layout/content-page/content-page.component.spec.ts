@@ -75,6 +75,22 @@ describe('ContentPageComponent', () => {
     expect(hrefs).toEqual(['#overview', '#overview-2', '#contact']);
   });
 
+  it('scrolls within the page when a TOC link is activated instead of navigating away', () => {
+    const target = fixture.nativeElement.querySelector('#overview') as HTMLElement;
+    const scrollSpy = spyOn(target, 'scrollIntoView');
+    const pathBefore = window.location.pathname;
+
+    const firstLink = fixture.nativeElement.querySelector(
+      '.content-page__toc-link',
+    ) as HTMLAnchorElement;
+    firstLink.click();
+
+    expect(scrollSpy).toHaveBeenCalled();
+    expect(window.location.hash).toBe('#overview');
+    expect(window.location.pathname).toBe(pathBefore);
+    history.replaceState(null, '', pathBefore);
+  });
+
   it('exposes keyboard-reachable TOC links with meaningful text', () => {
     const links: HTMLAnchorElement[] = Array.from(
       fixture.nativeElement.querySelectorAll('.content-page__toc-link'),

@@ -14,6 +14,7 @@ import {
   ContentPageCalloutTone,
   ContentPageTocEntry,
 } from './content-page.model';
+import { FragmentScrollDirective } from '../../directives/fragment-scroll.directive';
 
 /**
  * Converts an arbitrary label/id into a URL-safe anchor slug.
@@ -63,7 +64,7 @@ export function toUniqueTocEntries(
 @Component({
   selector: 'app-content-page',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, FragmentScrollDirective],
   templateUrl: './content-page.component.html',
   styleUrl: './content-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
