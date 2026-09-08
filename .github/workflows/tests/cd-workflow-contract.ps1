@@ -10,6 +10,7 @@ $requiredFiles = @(
     'infra/scripts/configure-http-edge.sh',
     'infra/scripts/configure-https-edge.sh',
     'infra/scripts/run-production-migrations.sh',
+    'infra/scripts/start-compose-release.sh',
     'infra/scripts/verify-compose-release.sh',
     'infra/scripts/rollback-compose-release.sh'
 )
@@ -58,6 +59,7 @@ $deployScript = $contents['infra/scripts/deploy-compose-release.sh']
 $httpEdgeScript = $contents['infra/scripts/configure-http-edge.sh']
 $httpsEdgeScript = $contents['infra/scripts/configure-https-edge.sh']
 $migrationScript = $contents['infra/scripts/run-production-migrations.sh']
+$startScript = $contents['infra/scripts/start-compose-release.sh']
 $rollbackScript = $contents['infra/scripts/rollback-compose-release.sh']
 
 Assert-Matches $staging '(?m)^\s*id-token:\s*write\s*$' 'Develop CD must request id-token: write.'
@@ -84,7 +86,10 @@ Assert-Matches $renderScript 'install.+0600' 'Runtime secret files must be mode 
 Assert-Matches $renderScript 'Fresh Prometheus scrape token is missing' 'Runtime rendering must require a freshly refreshed Prometheus token.'
 Assert-Matches $deployScript 'docker compose' 'Deployment must use Docker Compose.'
 Assert-Matches $deployScript 'run-production-migrations\.sh' 'Deployment must run the explicit migration stage.'
-Assert-Matches $deployScript 'rollback-compose-release\.sh' 'Deployment must invoke image rollback on failure.'
+Assert-Matches $deployScript 'start-compose-release\.sh' 'Deployment must use staged production startup.'
+Assert-Matches $deployScript 'migrations-\$\{image_tag\}\.started' 'Deployment must track when forward schema work begins.'
+Assert-Matches $deployScript 'Automatic rollback blocked' 'Deployment must block image rollback after migration work starts.'
+Assert-Matches $deployScript 'rollback-compose-release\.sh' 'Deployment may only invoke image rollback before migration work starts.'
 Assert-Matches $deployScript 'configure-http-edge\.sh' 'Deployment must configure the internal/pre-DNS HTTP edge before rollout verification.'
 Assert-Matches $deployScript 'configure-https-edge\.sh' 'Deployment must attempt HTTPS only after the application rollout is healthy.'
 Assert-Matches $deployScript 'edge_status.+-eq 10' 'Deployment must treat the explicit DNS-not-ready edge status as a deferred cutover, not an application failure.'
@@ -92,16 +97,30 @@ Assert-Matches $httpEdgeScript '127\.0\.0\.1:8080' 'The host HTTP edge must prox
 Assert-Matches $httpsEdgeScript 'metadata\.google\.internal' 'HTTPS cutover must compare DNS against the VM external IP.'
 Assert-Matches $httpsEdgeScript 'exit 10' 'HTTPS cutover must expose a distinct DNS-not-ready status.'
 Assert-Matches $httpsEdgeScript 'certbot certonly' 'HTTPS cutover must provision the certificate only after DNS is ready.'
+
+Assert-Matches $migrationScript 'migrations-\$\{image_tag\}\.started' 'Migration runner must persist a durable started marker before schema work.'
 Assert-Matches $migrationScript 'migrations-\$\{image_tag\}\.done' 'Migrations must be release-idempotent.'
 Assert-Matches $migrationScript 'docker-compose\.prod-health\.yml' 'Migration dependencies must use the same production health override as rollout verification.'
 Assert-Matches $migrationScript 'verify_flyway_history' 'Migration completion must verify Flyway history in PostgreSQL.'
 Assert-Matches $migrationScript 'verify_required_schema' 'Migration completion must verify required service tables in PostgreSQL.'
 Assert-Matches $migrationScript 'Successfully applied \[0-9\]\+ migration' 'Migration completion must require an explicit Flyway applied-migration signal.'
 Assert-Matches $migrationScript 'application_services=\(' 'Migration startup must quiesce application containers on the single production VM.'
+Assert-Matches $migrationScript 'run_migration_stage event-service 3 false' 'P12 migration ordering must stop event-service at additive V3 before contract V4.'
+Assert-Matches $migrationScript 'run_migration_stage reservation-service 7 false' 'P12 migration ordering must stop reservation-service at additive V7 before V8 enforcement.'
+Assert-Matches $migrationScript 'p12_backfill_session_inventory' 'P12 deploy must backfill legacy booking rows before enforcing the contract.'
+Assert-Matches $migrationScript 'legacy_backfill = TRUE' 'P12 backfill must use only the canonical legacy session mapping.'
 if ($migrationScript -match '\|Started \.\*Application') {
     throw 'A generic Spring Started Application log line must never count as migration success.'
 }
-Assert-Matches $rollbackScript 'database schema was not changed' 'Rollback must explicitly preserve forward database state.'
+
+Assert-Matches $startScript 'start_batch 300 api-gateway' 'Gateway must cold-start alone before backend JVM batches.'
+Assert-Matches $startScript 'start_batch 480 user-service seat-map-service event-service' 'Application startup must be CPU-bounded in explicit batches.'
+Assert-Matches $startScript 'start_batch 180 frontend' 'Frontend must start only after gateway readiness is proven.'
+Assert-Matches $startScript 'otel-collector prometheus kafka-exporter grafana tempo loki promtail' 'Observability must start after the customer-facing application.'
+
+Assert-Matches $rollbackScript 'migrations-\$\{runtime_tag\}\.started' 'Rollback must detect a migration-started rollback floor.'
+Assert-Matches $rollbackScript 'Rollback refused' 'Rollback must fail closed after schema work starts.'
+Assert-Matches $rollbackScript 'start-compose-release\.sh' 'Safe image rollback must also use staged startup.'
 
 # Secret-bearing values must never be printed to stdout/stderr. The only allowed
 # matching output statement is the deliberate write into the root-only temporary
@@ -117,6 +136,11 @@ $prodCompose = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docke
 $flywayDisabledCount = ([regex]::Matches($prodCompose, 'SPRING_FLYWAY_ENABLED:\s*"false"')).Count
 if ($flywayDisabledCount -ne 8) {
     throw "Expected Flyway startup to be disabled for exactly eight database-backed services; found $flywayDisabledCount."
+}
+
+$prodHealth = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docker-compose.prod-health.yml') -Raw
+if ($prodHealth -match 'start_period:\s*600s') {
+    throw 'Production health overrides must not restore the old 600-second cold-start grace periods.'
 }
 
 Write-Host 'SeatFlow CD workflow contract checks passed.'

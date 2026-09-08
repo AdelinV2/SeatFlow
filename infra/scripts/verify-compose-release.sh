@@ -24,7 +24,8 @@ required_services=(
   otel-collector prometheus kafka-exporter grafana tempo loki promtail
 )
 
-deadline=$((SECONDS + 600))
+verification_timeout=${SEATFLOW_VERIFY_TIMEOUT_SECONDS:-900}
+deadline=$((SECONDS + verification_timeout))
 while (( SECONDS < deadline )); do
   ready=true
   for service in "${required_services[@]}"; do
@@ -49,7 +50,22 @@ done
 
 if [[ ${ready:-false} != true ]]; then
   "${compose[@]}" ps >&2
-  echo "Compose release did not become healthy before the timeout" >&2
+  echo "Compose release did not become healthy before the ${verification_timeout}s timeout" >&2
+  echo "Unready service diagnostics:" >&2
+  for service in "${required_services[@]}"; do
+    container_id=$("${compose[@]}" ps -q "${service}" || true)
+    if [[ -z ${container_id} ]]; then
+      echo "- ${service}: container missing" >&2
+      continue
+    fi
+    status=$(docker inspect --format '{{.State.Status}}' "${container_id}")
+    health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container_id}")
+    restarts=$(docker inspect --format '{{.RestartCount}}' "${container_id}")
+    if [[ ${status} != running || (${health} != healthy && ${health} != none) || ${restarts} -gt 5 ]]; then
+      echo "- ${service}: status=${status} health=${health} restarts=${restarts}" >&2
+      docker logs --tail 80 "${container_id}" >&2 || true
+    fi
+  done
   exit 1
 fi
 
