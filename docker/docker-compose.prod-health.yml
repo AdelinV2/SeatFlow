@@ -102,7 +102,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 300s
 
   ai-service:
     mem_limit: 768m
@@ -110,7 +110,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_LOGS_EXPORTER: none
     healthcheck:
-      start_period: 600s
+      start_period: 300s
 
   tempo:
     # Tempo can temporarily spike during WAL replay and block compaction. The
