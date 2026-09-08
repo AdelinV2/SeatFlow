@@ -1,5 +1,15 @@
-import { NgClass } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { NgClass, isPlatformBrowser } from '@angular/common';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  input,
+  PLATFORM_ID,
+  viewChild,
+} from '@angular/core';
 import {
   ContentPageCalloutTone,
   ContentPageTocEntry,
@@ -45,6 +55,10 @@ export function toUniqueTocEntries(
  *
  * Body content is projected (`<ng-content />`); there is no `[innerHTML]`
  * path and therefore no sanitization surface.
+ *
+ * On navigation the page title receives focus (same pattern as the 404 page)
+ * so keyboard and screen-reader users land on the new page heading. SSR-safe:
+ * focusing only happens in the browser.
  */
 @Component({
   selector: 'app-content-page',
@@ -54,7 +68,10 @@ export function toUniqueTocEntries(
   styleUrl: './content-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ContentPageComponent {
+export class ContentPageComponent implements AfterViewInit {
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+
   readonly eyebrow = input<string>('');
   readonly title = input.required<string>();
   readonly lead = input<string>('');
@@ -73,4 +90,10 @@ export class ContentPageComponent {
     }
     return this.calloutTone() === 'warning' ? 'Please note' : 'Note';
   });
+
+  ngAfterViewInit(): void {
+    if (isPlatformBrowser(this.platformId)) {
+      this.heading()?.nativeElement.focus({ preventScroll: true });
+    }
+  }
 }

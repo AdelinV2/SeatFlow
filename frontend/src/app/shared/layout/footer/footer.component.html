@@ -18,8 +18,8 @@
           </h2>
         </div>
         <p class="text-sm leading-relaxed text-[var(--color-text-muted)]">
-          Premium live-event ticketing with real-time interactive seat booking, instant digital
-          ticket delivery, and a zero double-booking guarantee.
+          Interactive seat reservation with server-enforced booking rules and digital ticket
+          delivery. Portfolio demo in Stripe Test Mode: no real payments.
         </p>
         <div class="flex items-center gap-2 text-xs font-semibold" [ngClass]="health.statusColor()">
           <span
@@ -66,10 +66,9 @@
         </h2>
         <ul class="space-y-3 text-sm">
           <li><a routerLink="/profile/tickets">My Digital Tickets</a></li>
-          <li><a routerLink="/auth/login">Guest Ticket Lookup</a></li>
           <li><a routerLink="/scanner">Staff Gate Scanner</a></li>
           <li><a routerLink="/support/faq">Help Center & FAQ</a></li>
-          <li><a routerLink="/support/contact">Contact Event Organizers</a></li>
+          <li><a routerLink="/support/contact">Contact Support</a></li>
         </ul>
       </nav>
 
@@ -82,10 +81,10 @@
         </h2>
         <ul class="space-y-3 text-sm">
           <li><a routerLink="/legal/terms">Terms & Conditions</a></li>
-          <li><a routerLink="/legal/privacy">Privacy Policy (GDPR)</a></li>
+          <li><a routerLink="/legal/privacy">Privacy Notice</a></li>
           <li><a routerLink="/legal/tax">Stripe Tax & VAT Policy</a></li>
           <li><a routerLink="/legal/refunds">Refund & Cancellation Policy</a></li>
-          <li><a routerLink="/legal/cookies">Cookie Preferences</a></li>
+          <li><a routerLink="/legal/cookies">Cookies & Storage</a></li>
         </ul>
       </nav>
     </div>
@@ -93,14 +92,12 @@
     <div
       class="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[var(--color-border)] pt-6 text-center text-xs text-[var(--color-text-muted)] sm:flex-row sm:text-left"
     >
-      <p>
-        © {{ currentYear }} SeatFlow Inc. All rights reserved. Powered by Angular 22 & Spring Boot.
-      </p>
-      <div class="flex flex-wrap items-center justify-center gap-4">
+      <p>© {{ currentYear }} SeatFlow — portfolio project. All rights reserved.</p>
+      <nav aria-label="Service and legal information" class="flex flex-wrap items-center justify-center gap-4">
         <a routerLink="/legal/security">Security</a>
         <a routerLink="/status">Status</a>
         <a routerLink="/api-docs">API Docs</a>
-      </div>
+      </nav>
     </div>
   </div>
 </footer>
