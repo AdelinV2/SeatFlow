@@ -13,7 +13,11 @@
       Overall status: <strong>{{ statusLabel() }}</strong>
       <span class="status-code">({{ status() }})</span>
     </p>
-    <p>Last checked: <time>{{ lastChecked() | date: 'medium' }}</time></p>
+    @if (lastChecked()) {
+      <p>Last checked: <time>{{ lastChecked() | date: 'medium' }}</time></p>
+    } @else {
+      <p>Last checked: not yet checked.</p>
+    }
     <p>
       <button type="button" (click)="refresh()">Check again</button>
     </p>
@@ -40,10 +44,20 @@
     <h2 id="capabilities-heading">Capabilities</h2>
     <ul>
       <li>
-        Event browsing: <strong>{{ eventBrowsingUp() ? 'Available' : 'Unavailable' }}</strong>
+        Event browsing:
+        @if (status() === 'CHECKING') {
+          <strong>Checking…</strong>
+        } @else {
+          <strong>{{ eventBrowsingUp() ? 'Available' : 'Unavailable' }}</strong>
+        }
       </li>
       <li>
-        Booking gateway: <strong>{{ bookingGatewayUp() ? 'Available' : 'Unavailable' }}</strong>
+        Booking gateway:
+        @if (status() === 'CHECKING') {
+          <strong>Checking…</strong>
+        } @else {
+          <strong>{{ bookingGatewayUp() ? 'Available' : 'Unavailable' }}</strong>
+        }
       </li>
     </ul>
     <p>

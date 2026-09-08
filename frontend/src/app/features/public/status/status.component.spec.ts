@@ -40,6 +40,15 @@ describe('StatusComponent (TASK-P16-004)', () => {
     }
   });
 
+  it('shows no check time and neutral capabilities before the first probe', () => {
+    health.setStatus('CHECKING');
+    fixture.detectChanges();
+    const text: string = fixture.nativeElement.textContent ?? '';
+    expect(text).toContain('not yet checked');
+    expect(text).toContain('Checking…');
+    expect(text).not.toContain('All Systems Operational');
+  });
+
   it('renders sanitized capabilities with a retry action and contact link', () => {
     const text: string = fixture.nativeElement.textContent ?? '';
     expect(text).toContain('Event browsing');
