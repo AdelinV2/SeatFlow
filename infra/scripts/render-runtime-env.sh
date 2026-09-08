@@ -72,12 +72,40 @@ append_stripe_webhook_secret() {
   unset secret_value
 }
 
+groq_api_key=''
+groq_api_key_available=false
+if groq_api_key=$(fetch_secret groq-api-key 2>/dev/null); then
+  if [[ -z ${groq_api_key} || ${groq_api_key} == *$'\n'* || ${groq_api_key} == *$'\r'* ]]; then
+    echo "Secret groq-api-key is empty or is not a single-line value" >&2
+    exit 1
+  fi
+  groq_api_key_available=true
+fi
+
+# AI is enabled automatically when the production Groq secret is present. An
+# explicit AI_ENABLED=false override keeps the rest of the platform deployable
+# while the provider is disabled or being rotated. Enabling without a key fails
+# closed before Compose can start a partially configured assistant.
+ai_enabled=${AI_ENABLED:-${groq_api_key_available}}
+case ${ai_enabled} in
+  true|false) ;;
+  *)
+    echo "AI_ENABLED must be true or false" >&2
+    exit 2
+    ;;
+esac
+if [[ ${ai_enabled} == true && ${groq_api_key_available} != true ]]; then
+  echo "AI_ENABLED=true requires the groq-api-key Secret Manager version" >&2
+  exit 1
+fi
+
 cat > "${temp_runtime}" <<EOF
 COMPOSE_PROJECT_NAME=seatflow
 POSTGRES_USER=postgres
 DB_USERNAME=seatflow
 REDIS_USERNAME=
 GRAFANA_ADMIN_USER=admin
+AI_ENABLED=${ai_enabled}
 AR_BASE=${region}-docker.pkg.dev/${project_id}/${artifact_repository}
 SEATFLOW_IMAGE_TAG=${image_tag}
 PROMETHEUS_SCRAPE_TOKEN_FILE=${prometheus_token_file}
@@ -97,6 +125,10 @@ append_secret_env STRIPE_API_KEY stripe-api-key
 append_stripe_webhook_secret
 append_secret_env RESEND_API_KEY resend-api-key
 append_secret_env GRAFANA_ADMIN_PASSWORD grafana-admin-password
+if [[ ${ai_enabled} == true ]]; then
+  printf '%s=%s\n' GROQ_API_KEY "${groq_api_key}" >> "${temp_runtime}"
+fi
+unset groq_api_key
 
 if [[ ! -s ${prometheus_token_file} ]]; then
   echo "Fresh Prometheus scrape token is missing; token refresh must run before runtime rendering" >&2
@@ -109,4 +141,3 @@ install -o root -g root -m 0600 "${temp_runtime}" "${runtime_file}"
 unset access_token
 
 echo "Rendered root-owned SeatFlow runtime files"
-

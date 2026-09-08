@@ -1,5 +1,5 @@
 -- Initialization script for SeatFlow multi-database local development.
--- Creates the shared application role and the 7 per-service databases idempotently,
+-- Creates the shared application role and the 8 per-service databases idempotently,
 -- and makes the application role the owner of each database and its public schema
 -- so Flyway can create tables at startup.
 --
@@ -48,6 +48,9 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'seatflow_ticket')\g
 SELECT 'CREATE DATABASE seatflow_notification'
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'seatflow_notification')\gexec
 
+SELECT 'CREATE DATABASE seatflow_analytics'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'seatflow_analytics')\gexec
+
 -- 3. Make the application role own each database and its public schema so that
 --    Flyway (connecting as seatflow) can create and migrate tables.
 \connect seatflow_user
@@ -69,4 +72,7 @@ SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
 
 \connect seatflow_notification
+SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec
+
+\connect seatflow_analytics
 SELECT format('ALTER SCHEMA public OWNER TO %I', :'db_username')\gexec

@@ -126,6 +126,8 @@ SeatFlow is an online event ticketing and seat reservation platform inspired by 
 | **Ticket Service** | `8086` | `seatflow_ticket` | Ticket issuance, ZXing QR codes, PDF generation |
 | **Realtime Service** | `8087` | None (Redis) | WebSocket STOMP server, seat status live broadcasts |
 | **Notification Service**| `8088`| `seatflow_notification`| Async email notifications via Kafka events |
+| **Analytics Service** | `8089` | `seatflow_analytics` | Event-driven admin read model (Stripe Test Mode / Demo) |
+| **AI Service** | `8090` | None required | Spring AI + Groq (OpenAI-compatible); controlled tools; no direct DB access; disabled without key |
 
 ---
 

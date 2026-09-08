@@ -96,6 +96,22 @@ services:
     healthcheck:
       start_period: 240s
 
+  analytics-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    healthcheck:
+      start_period: 600s
+
+  ai-service:
+    mem_limit: 768m
+    environment:
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    healthcheck:
+      start_period: 600s
+
   tempo:
     # Tempo can temporarily spike during WAL replay and block compaction. The
     # production host retains ample memory headroom, so keep this override scoped

@@ -18,7 +18,8 @@ class LogbackConfigurationContractTest {
 
     private static final List<String> SERVICE_NAMES = List.of(
             "api-gateway", "eureka-server", "user-service", "seat-map-service", "event-service",
-            "reservation-service", "payment-service", "ticket-service", "realtime-service", "notification-service"
+            "reservation-service", "payment-service", "ticket-service", "realtime-service", "notification-service",
+            "analytics-service", "ai-service"
     );
 
     @Test

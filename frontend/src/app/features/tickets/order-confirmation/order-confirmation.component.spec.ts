@@ -142,9 +142,4 @@ describe('OrderConfirmationComponent', () => {
     expect(component.isLoading()).toBeFalse();
   });
 
-  it('triggers window.print when printReceipt() is called in browser', () => {
-    spyOn(window, 'print');
-    component.printReceipt();
-    expect(window.print).toHaveBeenCalled();
-  });
 });

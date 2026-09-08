@@ -1,0 +1,57 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:seatflow_analytics}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:analytics-service-v1}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI}
+          audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES}
+          jws-algorithms: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS:ES256,RS256}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+seatflow:
+  observability:
+    service-name: ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    com.seatflow: INFO
+management:
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:0.2}
+  opentelemetry:
+    resource-attributes:
+      "service.name": ${SEATFLOW_SERVICE_NAME:${spring.application.name}}
+      "deployment.environment": ${SEATFLOW_DEPLOYMENT_ENV:prod}
+      "service.version": ${SEATFLOW_VERSION:dev}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://otel-collector:4318/v1/traces}
+  endpoint:
+    health:
+      show-details: never

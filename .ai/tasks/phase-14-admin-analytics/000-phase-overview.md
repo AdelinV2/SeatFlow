@@ -9,79 +9,141 @@
 
 ## 1. Outcome
 
-Add a dedicated event-driven analytics read model and a useful admin dashboard. This phase must demonstrate clean microservice boundaries: no cross-database SQL and no business write path depending on analytics availability.
+Add a dedicated event-driven analytics read model and a portfolio-grade admin dashboard while preserving SeatFlow's microservice boundaries.
+
+Hard phase invariants:
+
+- no cross-database SQL or direct operational-schema reads;
+- no reservation/payment/ticket/event write path depends on analytics availability;
+- analytics is rebuilt from durable domain events and is eventually consistent;
+- duplicate/replayed Kafka events cannot inflate projections;
+- ADMIN authorization is enforced server-side;
+- customer PII is not copied merely for analytics;
+- financial values remain integer minor units, currency-separated, and visibly Stripe Test Mode / Demo data.
 
 ## 2. New Analytics Service
 
 Create `backend/services/analytics-service`:
 
-- Spring Boot service, Eureka client, common modules;
+- Spring Boot service and Eureka client on port `8089`;
 - own PostgreSQL database `seatflow_analytics`;
-- Kafka consumers for relevant domain events;
-- idempotent projection updates;
-- admin-only REST APIs;
-- Actuator/Prometheus/OTel like other services;
-- Docker/Compose/GCP integration using existing patterns.
+- Kafka consumers over canonical reservation/payment/ticket/event topic families;
+- durable `EventEnvelope.eventId` deduplication;
+- query-oriented analytics facts and aggregates;
+- ADMIN-only REST APIs;
+- Actuator/Prometheus/OpenTelemetry/logging consistent with existing services;
+- Docker/Compose/release integration using existing SeatFlow patterns.
 
-Suggested default port: `8089`.
+## 3. Canonical Projection Design
 
-## 3. Projection Design
+Do not copy source-service schemas. Phase 14 uses analytics-owned event-derived facts plus two deliberately different aggregate grains.
 
-Create query-oriented tables rather than copying source-service schemas. Candidate projections:
+### 3.1 Event-derived facts
 
-- `daily_sales_metrics` by date/event/session;
-- `event_session_metrics` with capacity/sold/refunded/scanned/reservation counts;
-- `payment_metrics` success/failure/refund aggregates;
-- `category_or_section_metrics` where events provide sufficient event payload data;
-- processed-event deduplication table keyed by event envelope ID.
+- `analytics_session_facts`
+- `analytics_reservation_facts`
+- `analytics_payment_facts`
+- `analytics_ticket_facts`
+- `processed_events` keyed by canonical event-envelope ID
 
-Do not store customer emails/names just to build aggregate analytics.
+Additional additive fact tables may be introduced only when the **final implemented** Phase 12/13 event shape requires safe delayed correlation, for example a reservation-scoped ticket-revocation fact.
 
-## 4. Event Inputs
+### 3.2 Currency-neutral operational aggregates
 
-Consume existing/current contracts and add payload fields only where justified:
+- `daily_operational_metrics` keyed by `(metric_date, event_id, event_session_id)`
+- `event_session_metrics` keyed by `event_session_id`
 
-- ReservationCreated/Expired/Confirmed or equivalent;
-- PaymentCompleted/Failed/Refunded;
-- TicketCreated/Revoked/Scanned;
-- Event/Session lifecycle changes.
+Reservation/ticket/session counts are not keyed by currency. This prevents one session with RON + EUR financial activity from duplicating the same operational counts.
 
-If historical backfill is needed for demo data, provide an explicit rebuild/backfill command or admin endpoint protected from normal public use. Do not query other databases directly.
+### 3.3 Currency-keyed financial aggregates
 
-## 5. Admin API
+- `daily_revenue_metrics` keyed by `(metric_date, event_id, event_session_id, currency)`
+- `event_session_revenue_metrics` keyed by `(event_session_id, currency)`
+
+Gross/refunded/net revenue is never summed across currencies. Net is derived from exact minor-unit gross minus completed-refund amounts.
+
+Category/section analytics is out of the initial Phase 14 schema unless final canonical events already expose a stable non-PII dimension. Never add a source-service lookup merely to obtain it.
+
+## 4. Event Inputs and Dependency Gate
+
+P14-002/P14-003 must consume the **final implemented** Phase 12/13 contracts rather than assuming roadmap candidate names are exact.
+
+Required semantic families include:
+
+- reservation created/held, confirmed, expired, refunded;
+- payment completed, failed, refunded;
+- ticket issued, revoked, accepted scan;
+- event-session lifecycle metadata.
+
+Before projection implementation, audit final producer class -> `EventEnvelope.eventType` -> topic -> analytics fields.
+
+Rules:
+
+- reuse canonical events rather than creating analytics-only duplicates;
+- add an upstream payload field only when the producer owns/trusts it and no safe analytics-side event-derived correlation path exists;
+- preserve transactional-outbox publication;
+- do not add synchronous analytics callbacks to business services.
+
+## 5. Kafka Processing Contract
+
+The analytics consumer group is stable (`analytics-service-v1`) and follows the repository's existing consumer conventions:
+
+- `auto.offset.reset=earliest` for a new read model;
+- auto-commit disabled;
+- `read_committed` isolation;
+- RECORD acknowledgement;
+- atomic PostgreSQL `processed_events` claim + projection in one local transaction;
+- bounded retry and analytics-specific DLQ for known failures;
+- unknown non-relevant shared-topic events are ignored safely;
+- cross-topic ordering is never assumed.
+
+Crash after DB commit but before durable Kafka offset progression is safe because redelivery sees the processed event ID and becomes a no-op.
+
+## 6. Admin API
 
 Provide ADMIN-only endpoints for:
 
 - global KPI summary;
-- revenue/sales time series;
-- event/session table summaries;
-- conversion and expiration rates;
-- refund rate;
-- scan/attendance count;
-- top events/sessions;
-- optional CSV aggregate export.
+- daily revenue/count time series;
+- paginated event/session summaries;
+- reservation conversion/expiration/refund rates using documented cohorts;
+- scan/attendance metrics;
+- deterministic top sessions/events;
+- bounded filter options;
+- bounded safe CSV export.
 
-All endpoints support bounded date ranges and sensible pagination.
+All endpoints use bounded UTC date ranges. Operational counts and currency-keyed money are queried separately so API joins cannot multiply counts.
 
-## 6. Frontend Dashboard
+## 7. Frontend Dashboard
 
-Extend Admin Portal with:
+Extend Admin Portal with an isolated analytics child feature:
 
 - KPI cards;
-- line/bar charts using a lightweight Angular-compatible chart library or native SVG if already preferred;
-- date range filter;
-- event/session filters;
-- empty/loading/error states;
-- clear `Test Mode` label on revenue/payment numbers;
+- accessible native SVG/CSS charting for Phase 14 instead of adding an arbitrary chart dependency;
+- date/event/session filters;
+- server pagination;
+- independent loading/refresh/empty/error/unavailable states;
+- explicit eventual-consistency/freshness wording;
+- clear persistent `Stripe Test Mode — demo transactions only` disclosure;
 - responsive layout.
 
-Grafana is not embedded as the business dashboard.
+Grafana is not embedded as the product/business dashboard.
 
-## 7. Resilience
+## 8. CSV and Rebuild Safety
 
-Analytics consumer lag or downtime must not block checkout. Projection updates are eventually consistent. Duplicate Kafka events must not inflate counts.
+CSV export is server-side, ADMIN-only, bounded, PII-free, formula-injection protected, and preserves aggregate grain:
 
-## 8. Suggested Atomic Tasks
+- OPERATIONS rows contain currency-neutral counts;
+- REVENUE rows contain currency-specific money/financial counts;
+- exports never silently truncate.
+
+Do **not** add a destructive HTTP rebuild/reset endpoint. Rebuild is an offline operator procedure: stop analytics consumers, clear only analytics-owned read-model state, reset only the analytics consumer group's offsets to retained earliest records, then replay and verify.
+
+Kafka retention limits what can be rebuilt; do not use cross-database reads as an undocumented backfill fallback.
+
+## 9. Task Execution Order
+
+Execute sequentially unless the orchestration workflow proves an isolated parallel stage safe:
 
 1. `001-analytics-service-scaffold-schema-and-compose.md`
 2. `002-idempotent-kafka-projection-consumers.md`
@@ -91,11 +153,26 @@ Analytics consumer lag or downtime must not block checkout. Projection updates a
 6. `006-filters-csv-and-operational-states.md`
 7. `007-projection-idempotency-and-integration-tests.md`
 
-## 9. Definition of Done
+Dependency notes:
 
-- [ ] No analytics query crosses another service's database.
-- [ ] Duplicate events do not double count.
-- [ ] Checkout works if Analytics Service is down.
-- [ ] Admin dashboard shows useful event/session business metrics.
-- [ ] Revenue is clearly demo/Test Mode.
-- [ ] New service participates in observability and deployment patterns.
+- P14-001 can establish infrastructure/schema before P12/P13 code is complete.
+- P14-002 onward must re-audit and bind to the final implemented P12/P13 event contracts before changing producers or writing projection handlers.
+- P14-004 depends on P14-003 aggregate semantics being stable.
+- P14-005 consumes the implemented P14-004 API contract exactly.
+- P14-006 extends P14-004/P14-005; it does not redefine them.
+- P14-007 is the final acceptance gate and must exercise real PostgreSQL/Kafka semantics for the risks that depend on them.
+
+## 10. Definition of Done
+
+- [ ] No analytics query crosses another service's database or synchronously fans out to source services.
+- [ ] Duplicate/replayed events do not double-count facts, counts, attendance, or money.
+- [ ] Cross-topic reordering converges through event-derived reconciliation.
+- [ ] Operational counts cannot be multiplied by multi-currency financial rows.
+- [ ] Gross/refunded/net money is exact, minor-unit, and currency-separated.
+- [ ] Checkout/business services work with analytics stopped.
+- [ ] ADMIN-only API/export authorization is integration-tested.
+- [ ] Dashboard exposes useful event/session metrics with honest eventual-consistency and Test Mode labels.
+- [ ] CSV is bounded, deterministic, PII-free, and spreadsheet-formula safe.
+- [ ] New service participates in existing observability/deployment patterns.
+- [ ] Rebuild from the same retained canonical event set is deterministic within Kafka retention limits.
+- [ ] Phase 14 critical independent review and final QA have no unresolved blocker.

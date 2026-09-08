@@ -46,7 +46,9 @@ class RouteConfigurationTest {
                 .containsEntry("payment-service", URI.create("lb://payment-service"))
                 .containsEntry("ticket-service", URI.create("lb://ticket-service"))
                 .containsEntry("realtime-service", URI.create("lb://realtime-service"))
-                .containsEntry("notification-service", URI.create("lb://notification-service"));
+                .containsEntry("notification-service", URI.create("lb://notification-service"))
+                .containsEntry("analytics-service", URI.create("lb://analytics-service"))
+                .containsEntry("ai-service", URI.create("lb://ai-service"));
     }
 
     @Test
@@ -128,6 +130,25 @@ class RouteConfigurationTest {
     void notificationServiceRoutePredicateMatches() {
         assertRouteMatches("notification-service", "/api/notifications");
         assertRouteMatches("notification-service", "/api/admin/notifications");
+    }
+
+    @Test
+    @DisplayName("Verify analytics-service route predicate matches admin analytics endpoints")
+    void analyticsServiceRoutePredicateMatches() {
+        // Actual TASK-P14-004 controller routes served through /api/admin/analytics/**.
+        assertRouteMatches("analytics-service", "/api/admin/analytics/summary");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/timeseries");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/sessions");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/top");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/events");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/filter-options/sessions");
+        assertRouteMatches("analytics-service", "/api/admin/analytics/export/daily.csv");
+    }
+
+    @Test
+    @DisplayName("Verify ai-service route predicate matches narrow AI surface without shadowing")
+    void aiServiceRoutePredicateMatches() {
+        assertRouteMatches("ai-service", "/api/ai/status");
     }
 
     private void assertRouteMatches(String expectedRouteId, String path) {

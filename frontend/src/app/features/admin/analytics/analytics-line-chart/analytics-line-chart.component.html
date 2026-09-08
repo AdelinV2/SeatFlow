@@ -1,0 +1,112 @@
+<div class="analytics-chart" data-testid="analytics-line-chart">
+  @if (isEmpty()) {
+    <p class="analytics-chart__empty" role="status">No trend data in this period.</p>
+  } @else {
+    <svg
+      class="analytics-chart__svg"
+      [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight"
+      role="img"
+      [attr.aria-label]="chartTitle()"
+      aria-describedby="analytics-chart-desc"
+    >
+      <title>{{ chartTitle() }}</title>
+      <desc id="analytics-chart-desc">{{ chartDescription() }}</desc>
+      @for (tick of yTicks(); track tick.value) {
+        <line
+          [attr.x1]="44"
+          [attr.x2]="704"
+          [attr.y1]="tick.y"
+          [attr.y2]="tick.y"
+          class="analytics-chart__grid"
+        />
+        <text [attr.x]="40" [attr.y]="tick.y + 4" class="analytics-chart__tick" text-anchor="end">
+          {{ tick.value }}
+        </text>
+      }
+      <line
+        [attr.x1]="44"
+        [attr.x2]="704"
+        [attr.y1]="baselineY()"
+        [attr.y2]="baselineY()"
+        class="analytics-chart__baseline"
+      />
+      @for (s of renderSeries(); track s.label; let si = $index) {
+        @if (s.dots.length > 1) {
+          <polyline
+            [attr.points]="s.pointsAttr"
+            class="analytics-chart__line"
+            [attr.data-series]="s.label"
+            fill="none"
+            [attr.stroke-dasharray]="s.dashArray || null"
+          />
+        }
+        @for (d of s.dots; track d.date) {
+          <circle
+            [attr.cx]="d.x"
+            [attr.cy]="d.y"
+            r="3.5"
+            class="analytics-chart__dot"
+            [attr.data-series]="s.label"
+          >
+            <title>{{ d.date }} — {{ s.label }}: {{ formatValue()(d.value, s.currency) }}</title>
+          </circle>
+        }
+      }
+      @for (lbl of xLabels(); track lbl.date) {
+        <text [attr.x]="lbl.x" [attr.y]="chartHeight - 10" class="analytics-chart__tick" text-anchor="middle">
+          {{ lbl.date.slice(5) }}
+        </text>
+      }
+    </svg>
+    <div class="analytics-chart__legend" aria-hidden="false">
+      @for (s of renderSeries(); track s.label) {
+        <span class="analytics-chart__legend-item" [attr.data-series]="s.label">
+          <span class="analytics-chart__swatch" aria-hidden="true"></span>
+          {{ s.label }}
+        </span>
+      }
+    </div>
+    <details class="analytics-chart__data">
+      <summary>Data table equivalent</summary>
+      <div class="analytics-chart__table-wrap">
+        <table>
+          <caption>{{ chartTitle() }}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              @for (s of renderSeries(); track s.label) {
+                <th scope="col">{{ s.label }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of tableRows(); track row.date) {
+              <tr>
+                <th scope="row">{{ row.date }}</th>
+                @for (s of renderSeries(); track s.label) {
+                  <td>{{ formatValue()(s.dots[row.index]?.value ?? 0, s.currency) }}</td>
+                }
+              </tr>
+            }
+            @if (tableRows().length === 0) {
+              <tr>
+                <td colspan="99">No data points.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="analytics-chart__sr-note">
+        Full daily values:
+        @for (s of renderSeries(); track s.label) {
+          <span>
+            {{ s.label }}:
+            @for (d of s.dots; track d.date) {
+              <span>{{ d.date }}={{ formatValue()(d.value, s.currency) }}; </span>
+            }
+          </span>
+        }
+      </p>
+    </details>
+  }
+</div>

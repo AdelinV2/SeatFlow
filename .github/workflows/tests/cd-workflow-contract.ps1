@@ -125,7 +125,7 @@ Assert-Matches $rollbackScript 'start-compose-release\.sh' 'Safe image rollback 
 # Secret-bearing values must never be printed to stdout/stderr. The only allowed
 # matching output statement is the deliberate write into the root-only temporary
 # runtime environment file, which is installed as mode 0600 immediately after.
-$secretOutputPattern = '^\s*(echo|printf)\s+[^\r\n]*(POSTGRES_PASSWORD|DB_PASSWORD|REDIS_PASSWORD|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET|RESEND_API_KEY|GRAFANA_ADMIN_PASSWORD|ACCESS_TOKEN)'
+$secretOutputPattern = '^\s*(echo|printf)\s+[^\r\n]*(POSTGRES_PASSWORD|DB_PASSWORD|REDIS_PASSWORD|STRIPE_API_KEY|STRIPE_WEBHOOK_SECRET|GROQ_API_KEY|RESEND_API_KEY|GRAFANA_ADMIN_PASSWORD|ACCESS_TOKEN)'
 foreach ($line in ($allText -split "`r?`n")) {
     if ($line -match $secretOutputPattern -and $line -notmatch '>>\s*"\$\{temp_runtime\}"\s*$') {
         throw "A secret-bearing variable may be written directly to logs: $line"
@@ -134,8 +134,8 @@ foreach ($line in ($allText -split "`r?`n")) {
 
 $prodCompose = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docker-compose.prod.yml') -Raw
 $flywayDisabledCount = ([regex]::Matches($prodCompose, 'SPRING_FLYWAY_ENABLED:\s*"false"')).Count
-if ($flywayDisabledCount -ne 7) {
-    throw "Expected Flyway startup to be disabled for exactly seven database-backed services; found $flywayDisabledCount."
+if ($flywayDisabledCount -ne 8) {
+    throw "Expected Flyway startup to be disabled for exactly eight database-backed services; found $flywayDisabledCount."
 }
 
 $prodHealth = Get-Content -LiteralPath (Join-Path $repositoryRoot 'docker/docker-compose.prod-health.yml') -Raw

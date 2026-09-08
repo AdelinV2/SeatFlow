@@ -97,6 +97,37 @@ public class GatewayRoutesConfig {
                         .path("/api/notifications/**", "/api/admin/notifications/**")
                         .uri("lb://notification-service"))
 
+                // 9. Analytics Service (ADMIN-only read model; Stripe Test Mode / Demo data).
+                // Placed after notification-service so no broader /api/admin/** matcher swallows it.
+                .route("analytics-service", r -> r
+                        .path("/api/admin/analytics/**")
+                        .uri("lb://analytics-service"))
+
+                // 10. AI writes use the existing distributed gateway limiter before the
+                // service-local AI limiter applies its endpoint-specific/idempotency policy.
+                .route("ai-chat-rate-limited", r -> r
+                        .path("/api/ai/chat")
+                        .and().method(HttpMethod.POST)
+                        .filters(f -> f.requestRateLimiter(config -> config
+                                .setKeyResolver(rateLimitKeyResolver)
+                                .setRateLimiter(redisRateLimiter)
+                                .setStatusCode(HttpStatus.TOO_MANY_REQUESTS)))
+                        .uri("lb://ai-service"))
+                .route("ai-confirm-rate-limited", r -> r
+                        .path("/api/ai/proposals/*/confirm")
+                        .and().method(HttpMethod.POST)
+                        .filters(f -> f.requestRateLimiter(config -> config
+                                .setKeyResolver(rateLimitKeyResolver)
+                                .setRateLimiter(redisRateLimiter)
+                                .setStatusCode(HttpStatus.TOO_MANY_REQUESTS)))
+                        .uri("lb://ai-service"))
+
+                // 11. AI Service (TASK-P15-001: narrow customer AI surface only).
+                // Placed last so no broader matcher shadows it; never use /api/** here.
+                .route("ai-service", r -> r
+                        .path("/api/ai/**")
+                        .uri("lb://ai-service"))
+
                 .build();
     }
 }

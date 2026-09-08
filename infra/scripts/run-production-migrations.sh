@@ -60,6 +60,7 @@ application_services=(
   ticket-service
   realtime-service
   notification-service
+  analytics-service
   frontend
 )
 "${compose[@]}" stop "${application_services[@]}" >/dev/null 2>&1 || true
@@ -101,6 +102,7 @@ declare -A migration_databases=(
   [payment-service]=seatflow_payment
   [ticket-service]=seatflow_ticket
   [notification-service]=seatflow_notification
+  [analytics-service]=seatflow_analytics
 )
 
 psql_scalar() {
@@ -142,6 +144,9 @@ verify_required_schema() {
       ;;
     notification-service)
       sql="SELECT CASE WHEN to_regclass('public.notification_logs') IS NOT NULL THEN 'ok' ELSE 'bad' END;"
+      ;;
+    analytics-service)
+      sql="SELECT CASE WHEN to_regclass('public.processed_events') IS NOT NULL AND to_regclass('public.analytics_session_facts') IS NOT NULL AND to_regclass('public.daily_operational_metrics') IS NOT NULL AND to_regclass('public.daily_revenue_metrics') IS NOT NULL THEN 'ok' ELSE 'bad' END;"
       ;;
     *)
       echo "No migration schema assertion defined for ${service}" >&2
@@ -318,6 +323,7 @@ migration_services=(
   payment-service
   ticket-service
   notification-service
+  analytics-service
 )
 
 for service in "${migration_services[@]}"; do

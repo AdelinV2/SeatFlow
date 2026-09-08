@@ -137,6 +137,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request) {
+        // REV-001 (TASK-P14-004 review): malformed @RequestParam/@PathVariable values
+        // (e.g. ?eventId=not-a-uuid, ?size=abc) fail argument resolution before controller
+        // entry. Without this mapping they fell into the generic 500 catch-all; they are
+        // client errors and must answer 400 with the common shape. The required type is
+        // reported; the raw offending value is deliberately not reflected.
+        String requiredType = ex.getRequiredType() == null
+                ? "a valid value"
+                : ex.getRequiredType().getSimpleName();
+        log.warn("Type mismatch on request [{}]: parameter '{}' requires {}",
+                request.getRequestURI(), ex.getName(), requiredType);
+        ApiErrorResponse response = ApiErrorResponse.of(
+            HttpStatus.BAD_REQUEST.value(),
+            HttpStatus.BAD_REQUEST.getReasonPhrase(),
+            ErrorCode.INVALID_REQUEST.getCode(),
+            "Invalid value for parameter '" + ex.getName() + "': expected " + requiredType,
+            request.getRequestURI(),
+            getCorrelationId()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleNoResourceFound(
             org.springframework.web.servlet.resource.NoResourceFoundException ex, HttpServletRequest request) {

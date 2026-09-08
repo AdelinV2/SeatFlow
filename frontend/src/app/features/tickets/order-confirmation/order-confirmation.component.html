@@ -92,7 +92,7 @@
     }
 
     <!-- Order & Event Breakdown Card (Printable) -->
-    <div id="printable-order-receipt" class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md p-6 sm:p-8 shadow-xl space-y-6">
+    <div class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)]/90 backdrop-blur-md p-6 sm:p-8 shadow-xl space-y-6">
       <!-- Event Header Preview -->
       @if (event(); as ev) {
         <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center pb-6 border-b border-[var(--color-border)]">
@@ -183,9 +183,6 @@
 
     <!-- Clean, Sleek Actions Bar -->
     <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
-      <app-tactile-button variant="secondary" size="md" (clicked)="printReceipt()" class="w-full sm:w-auto">
-        🖨️ Print Receipt
-      </app-tactile-button>
 
       @if (!isGuest()) {
         <a routerLink="/profile/tickets" class="w-full sm:w-auto">

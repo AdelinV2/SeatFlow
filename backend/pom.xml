@@ -28,6 +28,7 @@
         <maven.compiler.release>21</maven.compiler.release>
 
         <spring-cloud.version>2025.1.2</spring-cloud.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <lombok.version>1.18.38</lombok.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
@@ -39,6 +40,10 @@
         <opentelemetry-agent.version>2.12.0</opentelemetry-agent.version>
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+
+        <!-- Surefire live-tag exclusion default (overridable from the CLI:
+             -Dseatflow.excluded.groups= re-includes the "live" tag for opt-in runs) -->
+        <seatflow.excluded.groups>live</seatflow.excluded.groups>
     </properties>
 
     <dependencyManagement>
@@ -48,6 +53,15 @@
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
                 <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring AI BOM (TASK-P15-001: Groq via OpenAI-compatible client) -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -120,6 +134,13 @@
                     <systemPropertyVariables>
                         <spring.profiles.active>test</spring.profiles.active>
                     </systemPropertyVariables>
+                    <!-- Opt-in live provider tests (JUnit tag "live") never run in default CI;
+                         run them explicitly with -Dgroups=live -Dseatflow.excluded.groups= plus
+                         the required env gates (AI_LIVE_SMOKE=true AI_ENABLED=true
+                         GROQ_API_KEY=<secret>). -Dseatflow.excluded.groups= clears this default
+                         exclusion; -Dgroups=live alone selects zero tests because the exclude
+                         wins over the include. -->
+                    <excludedGroups>${seatflow.excluded.groups}</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>
