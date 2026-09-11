@@ -42,6 +42,7 @@ class RouteConfigurationTest {
                 .containsEntry("user-service", URI.create("lb://user-service"))
                 .containsEntry("seat-map-service", URI.create("lb://seat-map-service"))
                 .containsEntry("event-service", URI.create("lb://event-service"))
+                .containsEntry("reservation-seat-availability", URI.create("lb://reservation-service"))
                 .containsEntry("reservation-service", URI.create("lb://reservation-service"))
                 .containsEntry("payment-service", URI.create("lb://payment-service"))
                 .containsEntry("ticket-service", URI.create("lb://ticket-service"))
@@ -75,11 +76,15 @@ class RouteConfigurationTest {
     }
 
     @Test
-    @DisplayName("Verify reservation-service route predicate matches public and admin endpoints")
+    @DisplayName("Verify reservation-service route predicate matches public, admin, and session availability endpoints")
     void reservationServiceRoutePredicateMatches() {
         assertRouteMatches("reservation-service", "/api/reservations");
         assertRouteMatches("reservation-service", "/api/reservations/123");
         assertRouteMatches("reservation-service", "/api/admin/reservations");
+        assertRouteMatches(
+                "reservation-seat-availability",
+                "/api/event-sessions/09a64649-a0f3-4bd5-a8fd-d69251e00000/seats/availability"
+        );
     }
 
     @Test
