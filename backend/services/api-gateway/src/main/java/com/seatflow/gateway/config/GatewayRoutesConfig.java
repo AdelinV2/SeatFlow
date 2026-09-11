@@ -55,6 +55,13 @@ public class GatewayRoutesConfig {
                                 .setStatusCode(HttpStatus.TOO_MANY_REQUESTS)))
                         .uri("lb://reservation-service"))
 
+                // Session-scoped availability is owned by reservation-service, not event-service.
+                // Keep this route narrow so future event-session catalog endpoints are not shadowed.
+                .route("reservation-seat-availability", r -> r
+                        .path("/api/event-sessions/*/seats/availability")
+                        .and().method(HttpMethod.GET)
+                        .uri("lb://reservation-service"))
+
                 // 4. Reservation Service
                 .route("reservation-service", r -> r
                         .path("/api/reservations/**", "/api/admin/reservations/**")
