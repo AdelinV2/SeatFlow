@@ -16,6 +16,12 @@ function Assert-Matches([string]$Text, [string]$Pattern, [string]$Message) {
     }
 }
 
+function Assert-DoesNotMatch([string]$Text, [string]$Pattern, [string]$Message) {
+    if ($Text -match $Pattern) {
+        throw $Message
+    }
+}
+
 $provisionScript = Read-RequiredFile 'infra/scripts/ensure-production-databases.sh'
 $deployScript = Read-RequiredFile 'infra/scripts/deploy-compose-release.sh'
 $startScript = Read-RequiredFile 'infra/scripts/start-compose-release.sh'
@@ -39,8 +45,12 @@ if ($provisionIndex -gt $migrationIndex) {
     throw 'Production databases must be provisioned before Flyway migrations start.'
 }
 
-Assert-Matches $startScript 'start_batch 480 analytics-service ai-service' 'Staged startup must explicitly start analytics-service and ai-service.'
+Assert-Matches $deployScript 'start-compose-release\.sh" "\$\{seatflow_root\}" \|\| return 1' 'A failed staged startup must stop rollout before release verification.'
+Assert-Matches $deployScript 'verify-compose-release\.sh" "\$\{seatflow_root\}" \|\| return 1' 'A failed release verification must propagate from rollout explicitly.'
+
+Assert-Matches $startScript 'start_batch 600 analytics-service ai-service' 'The slow analytics/AI batch must retain a bounded ten-minute readiness window.'
 Assert-Matches $startScript 'start_batch 180 frontend' 'Frontend startup must remain after backend readiness.'
-Assert-Matches $verifyScript '(?s)required_services=\(.*analytics-service ai-service frontend' 'Release verification must continue to require analytics-service and ai-service.'
+Assert-DoesNotMatch $startScript '\|\| \$\{health\} == unhealthy' 'Transient Docker unhealthy states must not abort startup before the bounded timeout.'
+Assert-Matches $verifyScript '(?s)required_services=\(.*analytics-service ai-service frontend' 'Release verification must continue to require analytics-service, ai-service, and frontend.'
 
 Write-Host 'SeatFlow production deploy regression contract checks passed.'
