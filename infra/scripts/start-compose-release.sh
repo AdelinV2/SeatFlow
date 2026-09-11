@@ -41,7 +41,11 @@ wait_for_service() {
         return 0
       fi
 
-      if [[ ${status} == exited || ${status} == dead || ${health} == unhealthy || ${restarts} -gt 5 ]]; then
+      # A health check may turn unhealthy while a CPU-constrained JVM is still
+      # completing a legitimate cold start, then recover without a restart.
+      # Keep waiting until the bounded timeout unless the process actually dies
+      # or enters a restart loop.
+      if [[ ${status} == exited || ${status} == dead || ${restarts} -gt 5 ]]; then
         echo "${service} failed while waiting for readiness (status=${status}, health=${health}, restarts=${restarts})" >&2
         docker logs --tail 120 "${container_id}" >&2 || true
         return 1
@@ -78,24 +82,23 @@ for service in postgres redis kafka eureka-server; do
 done
 
 # Start the gateway alone after its infrastructure dependencies are healthy.
-# With no competing application JVM cold starts this should bind quickly; fail
-# with useful logs instead of hiding behind a 10-minute health start period.
 start_batch 300 api-gateway
 
 # Keep each application batch small enough for the host CPU while still allowing
-# useful parallelism. All database-backed services start with Flyway disabled in
+# useful parallelism. Database-backed services start with Flyway disabled in
 # production because run-production-migrations.sh owns schema changes.
 start_batch 480 user-service seat-map-service event-service
 start_batch 480 reservation-service payment-service ticket-service
 start_batch 480 realtime-service notification-service
-start_batch 480 analytics-service ai-service
+# Analytics has the heaviest observed production cold start; allow a bounded
+# ten-minute window so a recoverable health transition cannot prevent frontend startup.
+start_batch 600 analytics-service ai-service
 
 # Frontend can only become useful after gateway and all backend readiness is proven.
 start_batch 180 frontend
 
 # Observability is intentionally last so it cannot delay the customer-facing
-# application cold start. Agents/exporters tolerate the collector becoming
-# available after the application processes have already started.
+# application cold start.
 "${compose[@]}" up -d --no-deps \
   otel-collector prometheus kafka-exporter grafana tempo loki promtail
 
