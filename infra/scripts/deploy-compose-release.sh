@@ -88,15 +88,18 @@ compose=(docker compose
   -f "${seatflow_root}/docker-compose.prod-health.yml"
   --env-file "${runtime_file}")
 
+# This function is invoked from `if ! rollout`; bash suppresses errexit inside
+# that conditional context. Return explicitly after every failed stage so a
+# startup failure cannot fall through into the final verification step.
 rollout() {
-  "${compose[@]}" config --quiet
-  "${compose[@]}" pull
+  "${compose[@]}" config --quiet || return 1
+  "${compose[@]}" pull || return 1
   "${seatflow_root}/infra/scripts/ensure-production-databases.sh" \
-    "${seatflow_root}"
+    "${seatflow_root}" || return 1
   "${seatflow_root}/infra/scripts/run-production-migrations.sh" \
-    "${seatflow_root}" "${image_tag}"
-  "${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}"
-  "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}"
+    "${seatflow_root}" "${image_tag}" || return 1
+  "${seatflow_root}/infra/scripts/start-compose-release.sh" "${seatflow_root}" || return 1
+  "${seatflow_root}/infra/scripts/verify-compose-release.sh" "${seatflow_root}" || return 1
 }
 
 if ! rollout; then
